@@ -1,15 +1,15 @@
-use crate::hero::hero::Hero;
 use crate::dungeon::dungeon::Dungeon;
+use crate::hero::hero::Hero;
+use crate::save::save::AutoSave;
+use crate::save::save::SaveData;
 use crossterm::{
     event::{self, Event, KeyCode},
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use std::io;
-use tui::{
-    backend::CrosstermBackend,
-    Terminal,
-};
-
+use std::thread;
+use std::time::{Duration, Instant};
+use tui::{Terminal, backend::CrosstermBackend};
 
 pub struct TerminalUI {
     pub terminal: Terminal<CrosstermBackend<std::io::Stdout>>,
@@ -22,17 +22,12 @@ impl TerminalUI {
         crossterm::execute!(stdout, EnterAlternateScreen)?;
         let backend = CrosstermBackend::new(stdout);
         let terminal = Terminal::new(backend)?;
-        
+
         Ok(Self { terminal })
     }
-    pub fn run_game_loop(
-        &mut self,
-        dungeon: &mut Dungeon,
-        hero: &mut Hero,
-        auto_save: &mut AutoSave,
-    ) -> anyhow::Result<()> {
+    pub fn run_game_loop(&mut self, dungeon: &mut Dungeon, hero: &mut Hero) -> anyhow::Result<()> {
         let mut last_frame_time = Instant::now();
-        
+
         loop {
             // 处理输入和游戏逻辑
             if let Event::Key(key) = event::read()? {
@@ -47,20 +42,13 @@ impl TerminalUI {
                     KeyCode::Char('>') => self.descend(dungeon, hero),
                     KeyCode::Char('<') => self.ascend(dungeon, hero),
                     KeyCode::Char('q') => break,
-                    _ => {}
-                    // 其他按键处理...
+                    _ => {} // 其他按键处理...
                 }
             }
-            
-            // 自动保存检查
-            let save_data = SaveData {
-                // 构建保存数据...
-            };
-            auto_save.check_auto_save(&save_data)?;
-            
+
             // 渲染游戏状态
             self.draw(dungeon, hero)?;
-            
+
             // 控制帧率
             let frame_time = Instant::now() - last_frame_time;
             if frame_time < Duration::from_millis(16) {
@@ -68,11 +56,10 @@ impl TerminalUI {
             }
             last_frame_time = Instant::now();
         }
-        
+
         Ok(())
     }
-    
-    
+
     fn draw(&mut self, dungeon: &Dungeon, hero: &Hero) -> anyhow::Result<()> {
         self.terminal.draw(|f| {
             // 绘制地牢地图
@@ -81,15 +68,15 @@ impl TerminalUI {
         })?;
         Ok(())
     }
-    
+
     pub fn show_inventory(&mut self, hero: &Hero) {
         // 实现物品栏显示逻辑
     }
-    
+
     pub fn use_item(&mut self, hero: &mut Hero) {
         // 实现使用物品逻辑
     }
-    
+
     pub fn backend_mut(&mut self) -> &mut CrosstermBackend<io::Stdout> {
         self.terminal.backend_mut()
     }

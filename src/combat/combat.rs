@@ -1,5 +1,5 @@
-use crate::hero::hero::Hero;
 use crate::dungeon::dungeon::Enemy;
+use crate::hero::hero::Hero;
 
 // src/combat.rs
 pub struct Combat;
@@ -9,7 +9,7 @@ impl Combat {
         // 英雄攻击敌人
         let hero_damage = hero.attack - enemy.defense / 2;
         enemy.hp -= hero_damage.max(1);
-        
+
         if enemy.hp > 0 {
             // 敌人反击
             let enemy_damage = enemy.attack - hero.defense / 2;
