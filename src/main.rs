@@ -3,24 +3,23 @@
 
 // src/main.rs
 mod dungeon;
-mod hero;
-mod ui;
-mod save;
 mod error;
+mod hero;
+mod save;
+mod ui;
 
 use anyhow::{Context, Result};
 use crossterm::{
     event::{self, Event, KeyCode},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use std::{
-    fs,
-    io,
+    fs, io,
     path::{Path, PathBuf},
-    time::{SystemTime, Instant},
+    time::{Instant, SystemTime},
 };
-use tui::{backend::CrosstermBackend, Terminal};
+use tui::{Terminal, backend::CrosstermBackend};
 
 use crate::{
     dungeon::Dungeon,
