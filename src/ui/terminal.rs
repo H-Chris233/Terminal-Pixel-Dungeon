@@ -7,9 +7,9 @@ use crossterm::{
 use std::io;
 use tui::{
     backend::CrosstermBackend,
+    layout,
     layout::{Constraint, Layout},
     widgets::{Block, Borders},
-    layout
     Frame, Terminal,
 };
 
@@ -25,11 +25,11 @@ impl TerminalController {
         enable_raw_mode().context("Failed to enable raw mode")?;
         let mut stdout = io::stdout();
         execute!(stdout, EnterAlternateScreen).context("Failed to enter alternate screen")?;
-        
-        
-        Ok(Self { backend: CrosstermBackend::new(stdout),
-                  terminal: Terminal::new(backend).context("Failed to create terminal")?,
-                   })
+
+        Ok(Self {
+            backend: CrosstermBackend::new(stdout),
+            terminal: Terminal::new(backend).context("Failed to create terminal")?,
+        })
     }
 
     /// 恢复终端原始设置（应在程序退出前调用）

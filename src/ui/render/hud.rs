@@ -1,6 +1,7 @@
 //src/ui/render/hud.rs
 use crate::{
-    hero::hero::{Class, Hero},
+    hero::hero::{Hero},
+    hero::class::Class,
     ui::terminal::TerminalController,
 };
 use tui::{

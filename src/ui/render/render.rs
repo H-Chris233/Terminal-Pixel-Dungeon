@@ -106,7 +106,7 @@ impl RenderSystem {
         let block = Block::default()
             .title("Log")
             .borders(Borders::TOP)
-            .border_style(Color::DarkGray);
+            .border_style(Color::DarkGrey);
 
         Paragraph::new(visible_messages)
             .block(block)

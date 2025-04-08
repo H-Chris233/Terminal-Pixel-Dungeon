@@ -11,10 +11,9 @@ use crate::ui::states::common::GameStateID;
 use crate::ui::states::common::StateContext;
 use crate::ui::states::common::StateTransition;
 use crate::{
-    dungeon::{Dungeon, Tile, Visibility},
-    hero::{Hero, HeroAction},
-    items::Item,
-    monsters::Monster,
+    dungeon::dungeon::{Dungeon, Tile, Visibility},
+    hero::hero::{Hero, HeroAction},
+    items::items::Item,
 };
 use crossterm::event::{KeyCode, KeyEvent};
 use std::time::Duration;
