@@ -4,12 +4,12 @@ use crate::save::save::AutoSave;
 use crate::save::save::SaveData;
 use crossterm::{
     event::{self, Event, KeyCode},
-    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use std::io;
 use std::thread;
 use std::time::{Duration, Instant};
-use tui::{Terminal, backend::CrosstermBackend};
+use tui::{backend::CrosstermBackend, Terminal};
 
 pub struct TerminalUI {
     pub terminal: Terminal<CrosstermBackend<std::io::Stdout>>,

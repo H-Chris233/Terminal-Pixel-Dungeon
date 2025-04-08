@@ -1,7 +1,7 @@
+
 #![allow(dead_code)]
 #![allow(unused)]
 
-// src/main.rs
 mod dungeon;
 mod error;
 mod hero;
@@ -12,18 +12,17 @@ use anyhow::{Context, Result};
 use crossterm::{
     event::{self, Event, KeyCode},
     execute,
-    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use std::{
-    fs, io,
-    path::{Path, PathBuf},
-    time::{Instant, SystemTime},
+    io,
+    time::{Duration, Instant, SystemTime},
 };
-use tui::{Terminal, backend::CrosstermBackend};
+use tui::{backend::CrosstermBackend, Terminal};
 
 use crate::{
     dungeon::Dungeon,
-    hero::Hero,
+    hero::{class::Class, Hero},
     save::{AutoSave, SaveData, SaveMetadata, SaveSystem},
     ui::TerminalUI,
 };
@@ -36,61 +35,57 @@ fn main() -> anyhow::Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend).context("Failed to create terminal")?;
 
-    // 2. 初始化存档系统
-    let save_system = SaveSystem::new("saves", 5).context("Failed to initialize save system")?;
+    // 2. 初始化存档系统（每5分钟自动保存）
+    let save_system = SaveSystem::new("saves", 5)?;
+    let mut auto_save = AutoSave::new(save_system, Duration::from_secs(300));
 
-    // 3. 尝试加载存档或创建新游戏
-    let (mut dungeon, mut hero) = match save_system.load_game(0) {
+    // 3. 加载或创建新游戏
+    let (mut dungeon, mut hero) = match auto_save.system.load_game(0) {
         Ok(data) => {
-            println!("Loaded saved game");
+            println!("Loaded saved game (Depth: {})", data.metadata.dungeon_depth);
             (data.dungeon, data.hero)
         }
-        Err(e) => {
-            println!("No save found, creating new game: {}", e);
-            let dungeon = Dungeon::generate(1).context("Failed to generate dungeon")?;
-            let hero = Hero::new(hero::Class::Warrior);
+        Err(_) => {
+            let seed = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)?
+                .as_secs();
+            let dungeon = Dungeon::generate(seed, 1)?;
+            let hero = Hero::new(Class::Warrior);
+            println!("New game started with seed: {}", seed);
             (dungeon, hero)
         }
     };
 
-    // 4. 初始化自动保存
-    let mut auto_save = AutoSave::new(
-        save_system,
-        std::time::Duration::from_secs(300), // 每5分钟自动保存
-    );
+    // 4. 主游戏循环
+    let mut ui = TerminalUI::new()?;
+    let game_result = ui.run_game_loop(&mut dungeon, &mut hero);
 
-    // 5. 初始化UI并运行主游戏循环
-    let mut ui = TerminalUI::new(terminal).context("Failed to initialize UI")?;
-    let game_result = ui.run_game_loop(&mut dungeon, &mut hero, &mut auto_save);
-
-    // 6. 游戏结束处理
+    // 5. 游戏结束处理
     disable_raw_mode().context("Failed to disable raw mode")?;
     execute!(ui.backend_mut(), LeaveAlternateScreen).context("Failed to leave alternate screen")?;
 
-    // 7. 退出前保存游戏状态
-    if let (Ok(()), true) = (game_result, hero.alive) {
+    // 6. 保存游戏状态（如果角色存活）
+    if hero.alive {
         let save_data = SaveData {
             metadata: SaveMetadata {
                 timestamp: SystemTime::now(),
                 dungeon_depth: dungeon.depth,
                 hero_name: hero.name.clone(),
-                hero_class: format!("{:?}", hero.class),
-                play_time: hero.play_time,
+                hero_class: hero.class.to_string(),
+                play_time: hero.play_time + Instant::now().duration_since(hero.start_time),
             },
-            hero,
-            dungeon,
-            game_seed: dungeon.seed.unwrap_or(0),
+            hero: hero.clone(),
+            dungeon: dungeon.clone(),
+            game_seed: dungeon.seed,
         };
-        auto_save.save_system.save_game(0, &save_data)?;
+        auto_save.try_save(&save_data)?;
     }
 
-    // 8. 显示退出消息
-    if let Err(e) = game_result {
-        eprintln!("Game ended with error: {}", e);
-    } else if !hero.alive {
-        println!("Game over! Your hero has died.");
-    } else {
-        println!("Game saved successfully. See you next time!");
+    // 7. 显示退出消息
+    match (game_result, hero.alive) {
+        (Err(e), _) => eprintln!("Game crashed: {}", e),
+        (_, false) => println!("☠️ Game Over! {} died at depth {}", hero.name, dungeon.depth),
+        _ => println!("💾 Game saved at depth {}", dungeon.depth),
     }
 
     Ok(())

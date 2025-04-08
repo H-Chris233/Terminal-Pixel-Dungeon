@@ -1,22 +1,16 @@
-
-use crate::combat::combat::Combat;
+use crate::combat::Combat;
 use crate::dungeon::dungeon::Dungeon;
 use crate::items::items::*;
 use bincode::{Decode, Encode};
+use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 
-/// 英雄职业枚举
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Encode, Decode, Default)]
-pub enum Class {
-    #[default]
-    Warrior, // 战士（高生命值，中等攻击）
-    Mage,    // 法师（低生命值，高攻击，特殊能力）
-    Rogue,   // 盗贼（中等生命值，高暴击率）
-    Huntress,// 女猎手（远程攻击，中等属性）
-}
+use crate::hero::class::class::*;
+use crate::items::items::{Item, ItemKind};
+use crate::items::potion::PotionKind;
 
 /// 英雄角色数据结构
-#[derive(Debug, serde::Serialize, serde::Deserialize, Encode, Decode)]
+#[derive(Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct Hero {
     // 基础属性
     pub class: Class,
@@ -25,18 +19,18 @@ pub struct Hero {
     pub max_hp: i32,
     pub attack: i32,
     pub defense: i32,
-    
+
     // 成长系统
     pub experience: i32,
     pub level: i32,
-    
+
     // 游戏进度
     pub gold: i32,
     pub x: i32,
     pub y: i32,
     pub alive: bool,
     pub inventory: Vec<Item>,
-    
+
     // 时间记录（不序列化）
     #[serde(skip)]
     pub last_update: Option<SystemTime>,
@@ -47,7 +41,7 @@ impl Hero {
     /// 创建新英雄实例
     pub fn new(class: Class) -> Self {
         let mut hero = Self {
-            class: class.clone(),  // 显式克隆避免所有权问题
+            class: class.clone(), // 显式克隆避免所有权问题
             hp: 0,
             max_hp: 0,
             attack: 0,
@@ -57,7 +51,7 @@ impl Hero {
             gold: 0,
             x: 0,
             y: 0,
-            inventory: Vec::with_capacity(10),  // 预分配10个物品槽位
+            inventory: Vec::with_capacity(10), // 预分配10个物品槽位
             name: "Adventurer".to_string(),
             alive: true,
             play_time: 0.0,
@@ -99,23 +93,23 @@ impl Hero {
     pub fn level_up(&mut self) {
         // 确保每次升级都有提升
         self.max_hp += 5;
-        self.hp = self.max_hp;  // 升级时恢复满血
+        self.hp = self.max_hp; // 升级时恢复满血
         self.attack += 2;
         self.defense += 1;
         self.level += 1;
-        
+
         // 职业特定加成
         match self.class {
-            Class::Warrior => self.max_hp += 2,  // 战士额外生命值
-            Class::Mage => self.attack += 1,     // 法师额外攻击
-            Class::Rogue => {},                  // 盗贼特殊能力在战斗逻辑中处理
-            Class::Huntress => self.defense += 1,// 女猎手额外防御
+            Class::Warrior => self.max_hp += 2,   // 战士额外生命值
+            Class::Mage => self.attack += 1,      // 法师额外攻击
+            Class::Rogue => {}                    // 盗贼特殊能力在战斗逻辑中处理
+            Class::Huntress => self.defense += 1, // 女猎手额外防御
         }
     }
 
     /// 移动英雄位置（带边界检查）
-    pub fn move_to(&mut self, dx: i32, dy: i32, dungeon: &mut Dungeon) -> bool {
-        let new_x = self.x.saturating_add(dx);  // 使用饱和运算防止溢出
+    pub fn move_to(&mut self, dx: i32, dy: i32, dungeon: &mut Dungeon) {
+        let new_x = self.x.saturating_add(dx); // 使用饱和运算防止溢出
         let new_y = self.y.saturating_add(dy);
 
         // 检查移动是否有效
@@ -123,9 +117,8 @@ impl Hero {
             self.x = new_x;
             self.y = new_y;
             self.explore_current_tile(dungeon);
-            true
         } else {
-            false
+            self.notify(format!("无法到达！"));
         }
     }
 
@@ -133,49 +126,54 @@ impl Hero {
     fn explore_current_tile(&mut self, dungeon: &mut Dungeon) {
         let level = dungeon.current_level_mut();
 
-        // 敌人遭遇战（优先处理）
+        // 使用 enemy_at 获取可变引用
         if let Some(enemy) = level.enemy_at(self.x, self.y) {
             Combat::engage(self, enemy);
         }
 
-        // 物品拾取
-        if let Some(item) = level.item_at(self.x, self.y) {
-            self.notify(format!("发现物品: {}", item.name()));
-            // 自动拾取逻辑可以在这里添加
+        // 添加物品拾取逻辑（假设有 take_item 方法）
+        if let Some(item) = level.take_item(self.x, self.y) {
+            self.inventory.push(item.clone());
+            self.notify(format!("拾取了物品: {}", item.name()));
         }
     }
 
-    /// 使用物品（完全保留原有变量名）
+    // 调整 use_item 方法避免借用冲突
     pub fn use_item(&mut self, item_index: usize) -> anyhow::Result<()> {
-        // 边界检查（保留原有错误处理风格）
-        if item_index >= self.inventory.len() {
-            return Err(anyhow::anyhow!("物品槽位 {} 为空", item_index));
+        // 先检查是否需要鉴定
+        let needs_identify = match self.inventory.get(item_index) {
+            Some(Item {
+                kind: ItemKind::Potion(p),
+                ..
+            }) => !p.identified,
+            _ => false,
+        };
+
+        if needs_identify {
+            self.identify_item(item_index)?;
         }
 
-        // 获取物品引用（不修改原有变量名）
-        let item = &self.inventory[item_index];
-        
-        // 处理物品效果
+        // 重新获取物品进行效果处理
+        let item = match self.inventory.get(item_index) {
+            Some(item) => item,
+            None => return Err(anyhow::anyhow!("物品槽位 {} 为空", item_index)),
+        };
+
         match &item.kind {
             ItemKind::Potion(potion) => {
-                // 未鉴定药水处理
-                if !potion.identified {
-                    self.identify_item(item_index)?;
-                }
-
-                // 应用效果（保持原有变量名）
-                match potion.kind {
+                let potion_kind = potion.kind.clone();
+                match potion_kind {
                     PotionKind::Healing => {
                         self.hp = (self.hp + 20).min(self.max_hp);
                         self.notify(format!("恢复20点生命值"));
-                    }
+                    } // 其他药水效果...
                     PotionKind::Strength => {
                         self.attack += 3;
                         self.notify(format!("攻击力提升3点"));
                     }
-                    // 其他药水类型...
+                    _ => todo!(), // 其他药水类型...
                 }
-            }
+            } // 其他物品类型处理...
             ItemKind::Weapon(weapon) => {
                 self.notify(format!("装备了 {}", weapon.name));
                 // 武器装备逻辑...
@@ -188,9 +186,10 @@ impl Hero {
                 self.notify(format!("使用了 {} 卷轴", scroll.name));
                 // 卷轴使用逻辑...
             }
+            _ => todo!(),
         }
 
-        // 消耗品使用后移除（保持原有逻辑）
+        // 消耗品移除逻辑保持不变
         if item.is_consumable() {
             self.inventory.remove(item_index);
         }
@@ -200,22 +199,30 @@ impl Hero {
 
     /// 鉴定物品（保持原有参数不变）
     pub fn identify_item(&mut self, item_index: usize) -> anyhow::Result<()> {
-        if let Some(item) = self.inventory.get_mut(item_index) {
+        let potion_kind = {
+            let item = self
+                .inventory
+                .get_mut(item_index)
+                .ok_or_else(|| anyhow::anyhow!("物品不存在"))?;
+
             match &mut item.kind {
                 ItemKind::Potion(potion) => {
                     potion.identified = true;
-                    self.notify(format!("鉴定出药水: {}", potion.kind.to_string()));
+                    potion.kind.clone() // 先获取值再通知
                 }
-                _ => {} // 其他物品类型可能不需要鉴定
+                _ => return Err(anyhow::anyhow!("非药水物品")),
             }
-        }
+        };
+
+        // 分离通知逻辑
+        self.notify(format!("鉴定出药水: {:?}", potion_kind));
         Ok(())
     }
 
     /// 获取经验值（带升级检查）
     pub fn gain_exp(&mut self, exp: i32) {
         self.experience += exp;
-        
+
         // 简单升级公式：每100经验升1级
         while self.experience >= self.level * 100 {
             self.experience -= self.level * 100;

@@ -122,4 +122,8 @@ impl Level {
         // 简化实现
         None
     }
+    pub fn take_item(&self, x: i32, y: i32) -> Option<Item> {
+        //todo
+        None
+    }
 }

@@ -3,7 +3,7 @@ use crate::dungeon::dungeon::Dungeon;
 use crate::error::error::GameError;
 use crate::hero::hero::Hero;
 use anyhow::{Context, Result};
-use bincode::{Decode, Encode, config};
+use bincode::{config, Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
