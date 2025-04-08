@@ -41,7 +41,7 @@ impl DungeonRenderer {
             .title(format!("Depth: {}", dungeon.depth))
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::DarkGray));
-        f.render_widget(block, area);
+        f.render_widget(block.clone(), area);
 
         self.render_visible_area(f, block.inner(area), dungeon, hero);
     }
@@ -222,7 +222,7 @@ impl DungeonRenderer {
             let e2 = 2 * error;
             if e2 > -dy {
                 error -= dy;
-                x_step = (x_step as i16 + x_inc) as u8;
+                x_step = (x_step as i16 + x_inc) as i16;
             }
             if e2 < dx {
                 error += dx;

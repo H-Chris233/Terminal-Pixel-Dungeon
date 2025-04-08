@@ -9,7 +9,6 @@ use super::{
     common::{GameState, GameStateID, StateTransition},
     menu::{GameOverState, MainMenuState, PauseMenuState},
 };
-use crate::ui::states::common::GameState;
 use crate::{
     ui::{
         input::{InputSystem, KeyCode},
@@ -31,41 +30,12 @@ pub struct StateStack {
     transition_target: Option<GameStateID>,
 }
 
-/// 状态共享上下文
-pub struct StateContext {
-    pub terminal: TerminalController,
-    pub input: InputSystem,
-    pub render: RenderSystem,
-    pub audio: AudioSystem,
-    pub should_quit: bool,
-    pub transition_progress: f32,
-}
-
-impl StateContext {
-    pub fn new(
-        terminal: TerminalController,
-        input: InputSystem,
-        render: RenderSystem,
-        audio: AudioSystem,
-    ) -> Self {
-        Self {
-            terminal,
-            input,
-            render,
-            audio,
-            should_quit: false,
-            transition_progress: 0.0,
-        }
-    }
-}
-
 impl StateStack {
     /// 创建新状态堆栈
     pub fn new(
         terminal: TerminalController,
         input: InputSystem,
         render: RenderSystem,
-        audio: AudioSystem,
         initial_state: GameStateID,
     ) -> Self {
         let mut stack = Self {
@@ -94,7 +64,6 @@ impl StateStack {
     fn instant_push(&mut self, state_id: GameStateID) {
         let state: Box<dyn GameState> = match state_id {
             GameStateID::MainMenu => Box::new(MainMenuState::new()),
-            GameStateID::Gameplay => Box::new(GameState::new(1)),
             GameStateID::PauseMenu => Box::new(PauseMenuState::new()),
             GameStateID::GameOver => Box::new(GameOverState::new(0, "Unknown cause")),
             _ => unimplemented!(),
@@ -157,7 +126,7 @@ impl StateStack {
             if state.handle_input(&mut self.context, event) {
                 break;
             }
-            if state.pause_lower_states() {
+            if state.block_lower_states() {
                 break;
             }
         }
@@ -180,7 +149,7 @@ impl StateStack {
                 self.push_state(new_state);
                 break;
             }
-            if state.pause_lower_states() {
+            if state.block_lower_states() {
                 break;
             }
         }
@@ -233,7 +202,6 @@ mod tests {
         let terminal = TerminalController::new();
         let input = InputSystem::new();
         let render = RenderSystem::new();
-        let audio = AudioSystem::new();
         let mut stack = StateStack::new(terminal, input, render, audio, GameStateID::MainMenu);
 
         // 测试状态压栈

@@ -1,3 +1,5 @@
+//src/hero/class/class.rs
+
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 

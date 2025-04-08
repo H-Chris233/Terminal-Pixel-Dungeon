@@ -7,6 +7,7 @@
 
 use super::*;
 use crossterm::event::KeyCode;
+use tui::widgets::Widget;
 use tui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Style},
@@ -33,7 +34,7 @@ impl MainMenuState {
         Self {
             selected_index: 0,
             options: vec!["New Game", "Load Game", "Settings", "Quit"],
-            version: "v1.0.0",
+            version: "v0.0.1",
             blink_timer: 0.0,
         }
     }
@@ -83,11 +84,11 @@ impl GameState for MainMenuState {
                 KeyCode::Enter => {
                     match self.selected_index {
                         0 => {
-                            context.audio.play_sound("confirm.ogg");
+                            //context.audio.play_sound("confirm.ogg");
                             Some(GameStateID::Gameplay)
                         }
                         1 => {
-                            context.audio.play_sound("error.ogg"); // 暂未实现
+                            //context.audio.play_sound("error.ogg"); // 暂未实现
                             None
                         }
                         3 => {
@@ -192,7 +193,7 @@ impl GameState for PauseMenuState {
         if let Some(key) = context.input.match_key(event) {
             match key {
                 KeyCode::Esc => {
-                    context.audio.play_sound("resume.ogg");
+                    //context.audio.play_sound("resume.ogg");
                     Some(GameStateID::Gameplay)
                 }
                 KeyCode::Up => {
@@ -293,11 +294,7 @@ impl GameState for GameOverState {
         context: &mut StateContext,
         event: &crossterm::event::Event,
     ) -> bool {
-        if let Some(KeyCode::Enter) = context.input.match_key(event) {
-            Some(GameStateID::MainMenu)
-        } else {
-            false
-        }
+        context.input.match_key(event, KeyCode::Enter)
     }
 
     fn update(&mut self, _: &mut StateContext, delta_time: f32) -> Option<GameStateID> {

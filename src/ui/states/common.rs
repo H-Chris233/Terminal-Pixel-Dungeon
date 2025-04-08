@@ -155,11 +155,6 @@ pub trait GameState: std::fmt::Debug {
         let _ = context;
     }
 
-    /// 是否应该暂停下层状态的更新
-    fn pause_lower_states(&self) -> bool {
-        true
-    }
-
     /// 是否应该暂停下层状态的渲染
     fn block_lower_states(&self) -> bool {
         true
