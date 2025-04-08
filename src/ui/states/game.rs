@@ -1,4 +1,3 @@
-
 //! 核心游戏状态
 //!
 //! 实现像素地牢的核心游戏循环：
@@ -7,6 +6,10 @@
 //! - 状态驱动渲染
 
 use super::*;
+use crate::ui::states::common;
+use crate::ui::states::common::GameStateID;
+use crate::ui::states::common::StateContext;
+use crate::ui::states::common::StateTransition;
 use crate::{
     dungeon::{Dungeon, Tile, Visibility},
     hero::{Hero, HeroAction},
@@ -22,7 +25,7 @@ pub struct GameState {
     hero: Hero,
     current_level: u8,
     is_paused: bool,
-    turn_counter: u32,      // 回合计数器（用于怪物行动）
+    turn_counter: u32,             // 回合计数器（用于怪物行动）
     action_queue: Vec<HeroAction>, // 行动队列（支持连续输入）
 }
 
@@ -31,7 +34,7 @@ impl GameState {
     pub fn new(starting_level: u8) -> Self {
         let mut dungeon = Dungeon::generate(starting_level);
         let (hero_x, hero_y) = dungeon.find_start_position();
-        
+
         Self {
             dungeon,
             hero: Hero::new(hero_x, hero_y),
@@ -70,8 +73,7 @@ impl GameState {
                 Item::Scroll => {
                     self.hero.read_scroll();
                     self.dungeon.remove_item(self.hero.x, self.hero.y);
-                }
-                // 其他物品类型...
+                } // 其他物品类型...
             }
         }
     }
@@ -99,11 +101,15 @@ impl GameState {
                     // 简单AI：向英雄移动
                     let dx = (self.hero.x as i16 - monster.x as i16).signum() as i8;
                     let dy = (self.hero.y as i16 - monster.y as i16).signum() as i8;
-                    
+
                     let new_x = (monster.x as i16 + dx as i16) as u8;
                     let new_y = (monster.y as i16 + dy as i16) as u8;
-                    
-                    if self.dungeon.get_tile(new_x, new_y).map_or(false, |t| t.is_passable()) {
+
+                    if self
+                        .dungeon
+                        .get_tile(new_x, new_y)
+                        .map_or(false, |t| t.is_passable())
+                    {
                         monster.x = new_x;
                         monster.y = new_y;
                     }
@@ -130,7 +136,7 @@ impl GameState {
     }
 }
 
-impl super::GameState for GameState {
+impl common::GameState for GameState {
     fn id(&self) -> GameStateID {
         if self.is_paused {
             GameStateID::PauseMenu
@@ -139,7 +145,11 @@ impl super::GameState for GameState {
         }
     }
 
-    fn handle_input(&mut self, context: &mut StateContext, event: &crossterm::event::Event) -> bool {
+    fn handle_input(
+        &mut self,
+        context: &mut StateContext,
+        event: &crossterm::event::Event,
+    ) -> bool {
         if let Some(key) = context.input.match_key(event) {
             match key {
                 KeyCode::Esc => {
@@ -209,13 +219,15 @@ impl super::GameState for GameState {
     }
 
     fn render(&mut self, context: &mut StateContext) -> anyhow::Result<()> {
-        context.render.render_game(&mut context.terminal, &self.dungeon, &self.hero)
+        context
+            .render
+            .render_game(&mut context.terminal, &self.dungeon, &self.hero)
     }
 
     fn on_enter(&mut self, context: &mut StateContext) {
         // 初始化视野
         self.dungeon.update_visibility(self.hero.x, self.hero.y);
-        
+
         // 播放背景音乐
         //context.audio.play_music("dungeon_theme.ogg");
     }

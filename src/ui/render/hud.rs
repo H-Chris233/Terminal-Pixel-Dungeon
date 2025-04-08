@@ -1,4 +1,8 @@
-
+//src/ui/render/hud.rs
+use crate::{
+    hero::hero::{Class, Hero},
+    ui::terminal::TerminalController,
+};
 use tui::{
     backend::Backend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -7,24 +11,20 @@ use tui::{
     widgets::{Block, Borders, Gauge, Paragraph},
     Frame,
 };
-use crate::{
-    hero::{Class, Hero},
-    ui::terminal::TerminalController,
-};
 
 /// 像素地牢风格HUD渲染器（含完整动画系统）
 pub struct HudRenderer {
     // 危险状态动画
     danger_flash: bool,
     danger_flash_timer: f32,
-    
+
     // 金币动画
     gold_flash_timer: f32,
     gold_flash_alpha: f32,
-    
+
     // 伤害数字动画
     damage_numbers: Vec<DamageNumber>,
-    
+
     // 经验条动画
     exp_animated_ratio: f32,
     current_exp: u32,
@@ -67,25 +67,25 @@ impl HudRenderer {
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Length(12),  // 等级+职业
-                Constraint::Min(10),     // 血条
-                Constraint::Length(12),  // 金币
-                Constraint::Length(10),  // 深度
+                Constraint::Length(12), // 等级+职业
+                Constraint::Min(10),    // 血条
+                Constraint::Length(12), // 金币
+                Constraint::Length(10), // 深度
             ])
             .split(area);
 
         // 1. 渲染等级和职业
         self.render_level(f, chunks[0], hero);
-        
+
         // 2. 渲染动态血条
         self.render_health(f, chunks[1], hero);
-        
+
         // 3. 渲染金币（带闪光效果）
         self.render_gold(f, chunks[2], hero);
-        
+
         // 4. 渲染深度指示
         self.render_depth(f, chunks[3], hero);
-        
+
         // 5. 渲染浮动伤害数字
         self.render_damage_numbers(f);
     }
@@ -129,13 +129,20 @@ impl HudRenderer {
 
         let text = Spans::from(vec![
             Span::styled(class_icon, Style::default().fg(Color::Red)),
-            Span::styled(format!(" Lv.{}", hero.level), Style::default().fg(Color::Yellow)),
+            Span::styled(
+                format!(" Lv.{}", hero.level),
+                Style::default().fg(Color::Yellow),
+            ),
         ]);
 
-        let block = Block::default()
-            .borders(Borders::NONE);
-        
-        f.render_widget(Paragraph::new(text).block(block).alignment(Alignment::Center), area);
+        let block = Block::default().borders(Borders::NONE);
+
+        f.render_widget(
+            Paragraph::new(text)
+                .block(block)
+                .alignment(Alignment::Center),
+            area,
+        );
     }
 
     fn render_health<B: Backend>(&self, f: &mut Frame<B>, area: Rect, hero: &Hero) {
@@ -166,9 +173,7 @@ impl HudRenderer {
 
     fn render_gold<B: Backend>(&self, f: &mut Frame<B>, area: Rect, hero: &Hero) {
         let gold_style = if self.gold_flash_alpha > 0.0 {
-            Style::default()
-                .fg(Color::LightYellow)
-                .bg(Color::Yellow)
+            Style::default().fg(Color::LightYellow).bg(Color::Yellow)
         } else {
             Style::default().fg(Color::Yellow)
         };
@@ -179,23 +184,41 @@ impl HudRenderer {
         ]);
 
         let block = Block::default().borders(Borders::NONE);
-        f.render_widget(Paragraph::new(text).block(block).alignment(Alignment::Center), area);
+        f.render_widget(
+            Paragraph::new(text)
+                .block(block)
+                .alignment(Alignment::Center),
+            area,
+        );
     }
 
     fn render_depth<B: Backend>(&self, f: &mut Frame<B>, area: Rect, hero: &Hero) {
         let stairs_icon = if hero.on_stairs {
-            Span::styled(">", Style::default().fg(Color::White).add_modifier(Modifier::BOLD))
+            Span::styled(
+                ">",
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            )
         } else {
             Span::raw(" ")
         };
 
         let text = Spans::from(vec![
             stairs_icon,
-            Span::styled(format!(" D.{}", hero.depth), Style::default().fg(Color::Blue)),
+            Span::styled(
+                format!(" D.{}", hero.depth),
+                Style::default().fg(Color::Blue),
+            ),
         ]);
 
         let block = Block::default().borders(Borders::NONE);
-        f.render_widget(Paragraph::new(text).block(block).alignment(Alignment::Center), area);
+        f.render_widget(
+            Paragraph::new(text)
+                .block(block)
+                .alignment(Alignment::Center),
+            area,
+        );
     }
 
     fn render_damage_numbers<B: Backend>(&mut self, f: &mut Frame<B>) {
@@ -204,13 +227,13 @@ impl HudRenderer {
                 Color::Yellow
             } else {
                 Color::Red
-            };
+            }
+            .clone()
+            .set_alpha((num.alpha * 255.0) as u8);
 
             let text = Span::styled(
                 format!("{}", num.value),
-                Style::default()
-                    .fg(color)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(color).add_modifier(Modifier::BOLD),
             );
 
             let pos = (
@@ -218,17 +241,14 @@ impl HudRenderer {
                 num.position.1.saturating_sub(num.y_offset as u16),
             );
 
-            f.render_widget(
-                Paragraph::new(text),
-                Rect::new(pos.0, pos.1, 10, 1),
-            );
+            f.render_widget(Paragraph::new(text), Rect::new(pos.0, pos.1, 10, 1));
         }
     }
 
     fn update_danger_flash(&mut self, delta_time: f32) {
         const FLASH_INTERVAL: f32 = 0.3;
         self.danger_flash_timer += delta_time;
-        
+
         if self.danger_flash_timer >= FLASH_INTERVAL {
             self.danger_flash = !self.danger_flash;
             self.danger_flash_timer = 0.0;
@@ -254,7 +274,7 @@ impl HudRenderer {
     fn update_exp_growth(&mut self, delta_time: f32) {
         let target = self.current_exp as f32 / self.next_level_exp as f32;
         let speed = 2.0 * delta_time;
-        
+
         if (self.exp_animated_ratio - target).abs() > 0.01 {
             self.exp_animated_ratio += (target - self.exp_animated_ratio).signum() * speed;
         } else {

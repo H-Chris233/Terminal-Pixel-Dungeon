@@ -1,6 +1,8 @@
 //src/ui/render/render.rs
+use crate::{dungeon::dungeon::Dungeon, hero::hero::Hero, ui::terminal::TerminalController};
 use anyhow::{Context, Result};
 use crossterm::style::Color;
+use tui::widgets::Widget;
 use tui::{
     backend::Backend,
     layout::{Constraint, Direction, Layout, Rect},
@@ -8,18 +10,13 @@ use tui::{
     widgets::{Block, Borders, Paragraph},
     Frame,
 };
-use crate::{
-    dungeon::Dungeon,
-    hero::Hero,
-    ui::terminal::TerminalController,
-};
 
 /// 主渲染系统（协调所有子渲染模块）
 pub struct RenderSystem {
     pub dungeon: DungeonRenderer,
     pub hud: HudRenderer,
     pub inventory: InventoryRenderer,
-    pub animation_timer: f32,  // 统一动画计时器
+    pub animation_timer: f32, // 统一动画计时器
 }
 
 impl RenderSystem {
@@ -43,23 +40,24 @@ impl RenderSystem {
         // 更新动画状态
         self.update_animations(terminal.frame_delta());
 
-        terminal.draw(|f| {
-            // 经典像素地牢三明治布局
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Length(3),  // HUD
-                    Constraint::Min(10),    // 地牢
-                    Constraint::Length(4),  // 日志
-                ])
-                .split(f.size());
+        terminal
+            .draw(|f| {
+                // 经典像素地牢三明治布局
+                let chunks = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([
+                        Constraint::Length(3), // HUD
+                        Constraint::Min(10),   // 地牢
+                        Constraint::Length(4), // 日志
+                    ])
+                    .split(f.size());
 
-            // 按Z顺序渲染各层
-            self.dungeon.render(f, chunks[1], dungeon, hero);
-            self.hud.render(f, chunks[0], hero);
-            self.render_message_log(f, chunks[2], &hero.messages);
-        })
-        .context("Failed to render game frame")
+                // 按Z顺序渲染各层
+                self.dungeon.render(f, chunks[1], dungeon, hero);
+                self.hud.render(f, chunks[0], hero);
+                self.render_message_log(f, chunks[2], &hero.messages);
+            })
+            .context("Failed to render game frame")
     }
 
     /// 物品栏专用渲染
@@ -68,11 +66,12 @@ impl RenderSystem {
         terminal: &mut TerminalController,
         hero: &Hero,
     ) -> Result<()> {
-        terminal.draw(|f| {
-            let area = centered_rect(60, 70, f.size());
-            self.inventory.render(f, area, hero);
-        })
-        .context("Failed to render inventory")
+        terminal
+            .draw(|f| {
+                let area = centered_rect(60, 70, f.size());
+                self.inventory.render(f, area, hero);
+            })
+            .context("Failed to render inventory")
     }
 
     /// 更新所有动画状态
@@ -83,12 +82,7 @@ impl RenderSystem {
     }
 
     /// 消息日志渲染（带滚动缓冲）
-    fn render_message_log<B: Backend>(
-        &self,
-        f: &mut Frame<B>,
-        area: Rect,
-        messages: &[String],
-    ) {
+    fn render_message_log<B: Backend>(&self, f: &mut Frame<B>, area: Rect, messages: &[String]) {
         let visible_messages: Vec<Spans> = messages
             .iter()
             .rev()
@@ -122,7 +116,7 @@ impl RenderSystem {
 }
 
 /// 辅助函数：创建居中矩形（用于弹窗）
-fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
     let vertical = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -142,11 +136,6 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         .split(vertical[1])[1]
 }
 
-// ===== 子模块导入 =====
-mod dungeon_renderer;
-mod hud_renderer;
-mod inventory_renderer;
-
-pub use dungeon_renderer::DungeonRenderer;
-pub use hud_renderer::HudRenderer;
-pub use inventory_renderer::InventoryRenderer;
+pub use dungeon::DungeonRenderer;
+pub use hud::HudRenderer;
+pub use inventory::InventoryRenderer;

@@ -1,4 +1,8 @@
-
+//src/ui/render/dungeon.rs
+use crate::{
+    dungeon::dungeon::{Dungeon, Tile, TileVisibility},
+    hero::hero::Hero,
+};
 use tui::{
     backend::Backend,
     layout::Rect,
@@ -7,23 +11,19 @@ use tui::{
     widgets::{Block, Borders},
     Frame,
 };
-use crate::{
-    dungeon::{Dungeon, Tile, TileVisibility},
-    hero::Hero,
-};
 
 /// 地牢渲染器（含FOV和记忆系统）
 pub struct DungeonRenderer {
-    pub visible_range: u8,          // 可见范围（经典值为8）
+    pub visible_range: u8,           // 可见范围（经典值为8）
     pub fov_algorithm: FovAlgorithm, // FOV计算算法
-    pub show_all: bool,             // 调试模式显示全部
+    pub show_all: bool,              // 调试模式显示全部
 }
 
 /// FOV算法类型（参考Roguelike视野算法设计）
 pub enum FovAlgorithm {
-    ShadowCasting,  // 阴影投射（默认）
-    DiamondWalls,   // 菱形墙算法
-    RayCasting,     // 光线投射
+    ShadowCasting, // 阴影投射（默认）
+    DiamondWalls,  // 菱形墙算法
+    RayCasting,    // 光线投射
 }
 
 impl DungeonRenderer {
@@ -36,13 +36,7 @@ impl DungeonRenderer {
     }
 
     /// 主渲染入口
-    pub fn render<B: Backend>(
-        &self,
-        f: &mut Frame<B>,
-        area: Rect,
-        dungeon: &Dungeon,
-        hero: &Hero,
-    ) {
+    pub fn render<B: Backend>(&self, f: &mut Frame<B>, area: Rect, dungeon: &Dungeon, hero: &Hero) {
         let block = Block::default()
             .title(format!("Depth: {}", dungeon.depth))
             .borders(Borders::ALL)
@@ -190,8 +184,9 @@ impl DungeonRenderer {
             if let Some(tile) = dungeon.get_tile(check_x, check_y) {
                 if tile.blocks_sight() {
                     // 菱形墙特殊处理
-                    if (check_x as i16 - hero.x as i16).abs() <= 1 && 
-                       (check_y as i16 - hero.y as i16).abs() <= 1 {
+                    if (check_x as i16 - hero.x as i16).abs() <= 1
+                        && (check_y as i16 - hero.y as i16).abs() <= 1
+                    {
                         continue; // 允许看到相邻墙
                     }
                     return false;
@@ -213,10 +208,10 @@ impl DungeonRenderer {
             return false;
         }
 
-        let mut x_step = hero.x;
-        let mut y_step = hero.y;
-        let x_inc = if hero.x < x { 1 } else { -1 };
-        let y_inc = if hero.y < y { 1 } else { -1 };
+        let mut x_step = hero.x as i16;
+        let mut y_step = hero.y as i16;
+        let x_inc = if hero.x < x { 1i16 } else { -1i16 };
+        let y_inc = if hero.y < y { 1i16 } else { -1i16 };
         let mut error = dx - dy;
 
         loop {
@@ -255,7 +250,7 @@ impl DungeonRenderer {
     ) {
         // 经典像素地牢符号系统
         let (symbol, color) = match tile {
-            Tile::Wall => ('#', Color::DarkGray),
+            Tile::Wall => ('#', Color::Gray), // 原DarkGray改为Gray
             Tile::Floor => ('.', Color::Gray),
             Tile::Door => ('+', Color::Yellow),
             Tile::StairsDown => ('>', Color::White),
@@ -272,13 +267,23 @@ impl DungeonRenderer {
         } else if is_visible {
             Style::default().fg(color) // 可见区域正常颜色
         } else {
-            Style::default().fg(color.dark()) // 记忆区域变暗
+            // 记忆区域颜色变暗处理
+            let dark_color = match color {
+                Color::Red => Color::Rgb(100, 0, 0),       // DarkRed
+                Color::Green => Color::Rgb(0, 100, 0),     // DarkGreen
+                Color::Yellow => Color::Rgb(100, 100, 0),  // DarkYellow
+                Color::Blue => Color::Rgb(0, 0, 100),      // DarkBlue
+                Color::Magenta => Color::Rgb(100, 0, 100), // DarkMagenta
+                Color::Cyan => Color::Rgb(0, 100, 100),    // DarkCyan
+                Color::Gray => Color::Rgb(50, 50, 50),     // DarkGray
+                other => other,                            // 其他颜色保持不变
+            };
+            Style::default().fg(dark_color)
         };
 
-        f.render_widget(
-            Span::styled(symbol.to_string(), style),
-            rect,
-        );
+        // 使用Paragraph包装Span进行渲染
+        let paragraph = Paragraph::new(Span::styled(symbol.to_string(), style));
+        f.render_widget(paragraph, rect);
     }
 }
 
@@ -302,14 +307,23 @@ impl ColorExt for Color {
     /// 生成更暗的颜色（用于记忆系统）
     fn dark(&self) -> Self {
         match self {
-            Color::Red => Color::DarkRed,
-            Color::Green => Color::DarkGreen,
-            Color::Yellow => Color::DarkYellow,
-            Color::Blue => Color::DarkBlue,
-            Color::Magenta => Color::DarkMagenta,
-            Color::Cyan => Color::DarkCyan,
-            Color::Gray => Color::DarkGray,
+            Color::Red => Color::Rgb(100, 0, 0),       // DarkRed
+            Color::Green => Color::Rgb(0, 100, 0),     // DarkGreen
+            Color::Yellow => Color::Rgb(100, 100, 0),  // DarkYellow
+            Color::Blue => Color::Rgb(0, 0, 100),      // DarkBlue
+            Color::Magenta => Color::Rgb(100, 0, 100), // DarkMagenta
+            Color::Cyan => Color::Rgb(0, 100, 100),    // DarkCyan
+            Color::Gray => Color::Rgb(50, 50, 50),     // DarkGray
             other => *other,
         }
     }
+}
+
+#[test]
+fn test_shadow_casting_edge() {
+    let renderer = DungeonRenderer::new();
+    let hero = Hero::new_at(5, 5);
+    let mut dungeon = Dungeon::new(10, 10);
+    dungeon.set_tile(5, 6, Tile::Wall);
+    assert!(!renderer.shadow_casting_fov(5, 7, &hero, &dungeon)); // 验证视线阻挡
 }

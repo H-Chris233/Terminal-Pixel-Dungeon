@@ -1,4 +1,3 @@
-
 //! 状态机核心组件
 //!
 //! 实现像素地牢风格的状态管理系统：
@@ -6,16 +5,16 @@
 //! - 严格的状态生命周期控制
 //! - 输入事件优先级路由
 
-use crossterm::event::Event;
-use anyhow::Result;
 use crate::{
     ui::{
-        terminal::TerminalController,
         input::{InputSystem, KeyCode},
         render::RenderSystem,
+        terminal::TerminalController,
     },
     util::math::lerp,
 };
+use anyhow::Result;
+use crossterm::event::Event;
 
 /// 滑动方向（用于过渡动画）
 #[derive(Debug, Clone, Copy)]
@@ -29,10 +28,10 @@ pub enum SlideDirection {
 /// 状态过渡效果（像素地牢经典风格）
 #[derive(Debug)]
 pub enum StateTransition {
-    None,                       // 立即切换
+    None, // 立即切换
     Fade {
-        duration: f32,          // 过渡时长（秒）
-        progress: f32,          // 当前进度 [0.0, 1.0]
+        duration: f32, // 过渡时长（秒）
+        progress: f32, // 当前进度 [0.0, 1.0]
     },
     Slide {
         direction: SlideDirection,
@@ -66,7 +65,9 @@ impl StateTransition {
                 *progress = (*progress + delta_time / *duration).min(1.0);
                 *progress >= 1.0
             }
-            Self::Slide { duration, progress, .. } => {
+            Self::Slide {
+                duration, progress, ..
+            } => {
                 *progress = (*progress + delta_time / *duration).min(1.0);
                 *progress >= 1.0
             }
@@ -94,11 +95,7 @@ pub struct StateContext {
 }
 
 impl StateContext {
-    pub fn new(
-        terminal: TerminalController,
-        input: InputSystem,
-        render: RenderSystem,
-    ) -> Self {
+    pub fn new(terminal: TerminalController, input: InputSystem, render: RenderSystem) -> Self {
         Self {
             terminal,
             input,
@@ -132,46 +129,29 @@ pub trait GameState: std::fmt::Debug {
     fn id(&self) -> GameStateID;
 
     /// 处理输入事件（返回是否消耗该事件）
-    fn handle_input(
-        &mut self,
-        context: &mut StateContext,
-        event: &Event,
-    ) -> bool {
+    fn handle_input(&mut self, context: &mut StateContext, event: &Event) -> bool {
         let _ = context;
         let _ = event;
         false
     }
 
     /// 更新状态逻辑（返回需要切换到的目标状态）
-    fn update(
-        &mut self,
-        context: &mut StateContext,
-        delta_time: f32,
-    ) -> Option<GameStateID> {
+    fn update(&mut self, context: &mut StateContext, delta_time: f32) -> Option<GameStateID> {
         let _ = context;
         let _ = delta_time;
         None
     }
 
     /// 渲染状态界面
-    fn render(
-        &mut self,
-        context: &mut StateContext,
-    ) -> Result<()>;
+    fn render(&mut self, context: &mut StateContext) -> Result<()>;
 
     /// 状态进入时的回调（适合初始化资源）
-    fn on_enter(
-        &mut self,
-        context: &mut StateContext,
-    ) {
+    fn on_enter(&mut self, context: &mut StateContext) {
         let _ = context;
     }
 
     /// 状态退出时的回调（适合清理资源）
-    fn on_exit(
-        &mut self,
-        context: &mut StateContext,
-    ) {
+    fn on_exit(&mut self, context: &mut StateContext) {
         let _ = context;
     }
 
@@ -247,8 +227,12 @@ mod tests {
 
     struct MockState;
     impl GameState for MockState {
-        fn id(&self) -> GameStateID { GameStateID::Gameplay }
-        fn render(&mut self, _: &mut StateContext) -> Result<()> { Ok(()) }
+        fn id(&self) -> GameStateID {
+            GameStateID::Gameplay
+        }
+        fn render(&mut self, _: &mut StateContext) -> Result<()> {
+            Ok(())
+        }
     }
 
     #[test]
