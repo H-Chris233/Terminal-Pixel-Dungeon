@@ -17,7 +17,8 @@ use crate::items::weapon::weapon::*;
 pub struct Item {
     pub kind: ItemKind,
     pub name: String,
-    pub quantity: usize,    // 堆叠数量
+    pub description: String,
+    pub quantity: u32,      // 堆叠数量
     pub cursed: bool,       // 诅咒状态
     pub cursed_known: bool, // 是否已知被诅咒
     pub level: i32,         // 强化等级（+1,+2等）

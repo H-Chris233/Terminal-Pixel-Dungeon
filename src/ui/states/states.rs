@@ -1,4 +1,3 @@
-
 //! 状态堆栈管理器
 //!
 //! 实现像素地牢风格的状态管理系统：
@@ -7,15 +6,15 @@
 //! - 智能输入路由
 
 use super::{
-    game::GameState,
-    menu::{MainMenuState, PauseMenuState, GameOverState},
-    common::{StateTransition, GameStateID, GameState},
+    common::{GameState, GameStateID, StateTransition},
+    menu::{GameOverState, MainMenuState, PauseMenuState},
 };
+use crate::ui::states::common::GameState;
 use crate::{
     ui::{
-        terminal::TerminalController,
         input::{InputSystem, KeyCode},
         render::RenderSystem,
+        terminal::TerminalController,
     },
     util::math::lerp,
 };
@@ -135,7 +134,9 @@ impl StateStack {
             if self.states.iter().any(|s| s.id() == target) {
                 // 如果目标状态已在堆栈中，则弹出到该状态
                 while let Some(state) = self.states.last() {
-                    if state.id() == target { break; }
+                    if state.id() == target {
+                        break;
+                    }
                     self.instant_pop();
                 }
             } else {
@@ -148,7 +149,9 @@ impl StateStack {
 
     /// 处理输入事件（从栈顶向栈底传递）
     pub fn handle_input(&mut self, event: &Event) {
-        if self.transition.is_some() { return; }
+        if self.transition.is_some() {
+            return;
+        }
 
         for state in self.states.iter_mut().rev() {
             if state.handle_input(&mut self.context, event) {
@@ -188,8 +191,7 @@ impl StateStack {
     /// 渲染所有可见状态（从栈底向栈顶渲染）
     pub fn render(&mut self) -> Result<()> {
         // 计算过渡效果进度
-        let transition_progress = self.transition.as_ref()
-            .map_or(0.0, |(t, _)| t.progress());
+        let transition_progress = self.transition.as_ref().map_or(0.0, |(t, _)| t.progress());
 
         // 渲染非阻塞状态
         for (i, state) in self.states.iter_mut().enumerate() {
@@ -202,16 +204,15 @@ impl StateStack {
         if let Some((transition, _)) = &self.transition {
             match transition {
                 StateTransition::Fade { .. } => {
-                    self.context.render.render_fade(
-                        &mut self.context.terminal,
-                        transition_progress
-                    )?;
+                    self.context
+                        .render
+                        .render_fade(&mut self.context.terminal, transition_progress)?;
                 }
                 StateTransition::Slide { direction, .. } => {
                     self.context.render.render_slide(
                         &mut self.context.terminal,
                         *direction,
-                        transition_progress
+                        transition_progress,
                     )?;
                 }
                 _ => {}
@@ -234,12 +235,12 @@ mod tests {
         let render = RenderSystem::new();
         let audio = AudioSystem::new();
         let mut stack = StateStack::new(terminal, input, render, audio, GameStateID::MainMenu);
-        
+
         // 测试状态压栈
         stack.push_state(GameStateID::Gameplay);
         assert_eq!(stack.states.len(), 2);
         assert_eq!(stack.states[1].id(), GameStateID::Gameplay);
-        
+
         // 测试状态弹出
         stack.pop_state();
         assert_eq!(stack.states.len(), 1);

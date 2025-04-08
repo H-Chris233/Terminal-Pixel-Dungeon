@@ -1,4 +1,9 @@
 //src/ui/render/inventory.rs
+use crate::{
+    hero::hero::Hero,
+    items::items::{Item, ItemType},
+};
+use crossterm::event::KeyCode;
 use tui::{
     backend::Backend,
     layout::{Alignment, Rect},
@@ -7,17 +12,13 @@ use tui::{
     widgets::{Block, Borders, List, ListItem, Paragraph},
     Frame,
 };
-use crate::{
-    hero::Hero,
-    items::{Item, ItemType},
-};
 
 /// 物品栏渲染器（支持分页和动态高亮）
 pub struct InventoryRenderer {
     pub page: usize,               // 当前页码
     pub selected_index: usize,     // 选中项索引
-    pub scroll_offset: usize,       // 滚动偏移
-    pub max_items_per_page: usize,  // 每页最大显示数
+    pub scroll_offset: usize,      // 滚动偏移
+    pub max_items_per_page: usize, // 每页最大显示数
 }
 
 impl InventoryRenderer {
@@ -31,18 +32,19 @@ impl InventoryRenderer {
     }
 
     /// 主渲染方法（整合分页和选择高亮）
-    pub fn render<B: Backend>(
-        &mut self,
-        f: &mut Frame<B>,
-        area: Rect,
-        hero: &Hero,
-    ) {
-        // 1. 计算分页数据
-        let items = &hero.inventory.items;
-        let total_pages = (items.len() + self.max_items_per_page - 1) / self.max_items_per_page;
+    pub fn render<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect, hero: &Hero) {
+        // 1. 直接访问Vec<Item> (Inventory是Vec<Item>的别名)
+        let items = &hero.inventory; // 直接引用Vec
+
+        // 2. 分页计算（增加防零除保护）
+        let total_pages = if self.max_items_per_page == 0 {
+            1
+        } else {
+            (items.len().saturating_sub(1) / self.max_items_per_page) + 1
+        };
         self.page = self.page.min(total_pages.saturating_sub(1));
-        
-        // 2. 创建带边框的区块
+
+        // 3. 创建区块（保持原样）
         let block = Block::default()
             .title(format!(
                 " Inventory (a-{}): Page {}/{} ",
@@ -53,90 +55,78 @@ impl InventoryRenderer {
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Yellow));
 
-        // 3. 计算当前页物品范围
+        // 4. 当前页物品范围（优化边界检查）
         let start_idx = self.page * self.max_items_per_page;
         let end_idx = (start_idx + self.max_items_per_page).min(items.len());
-        let current_page_items = &items[start_idx..end_idx];
 
-        // 4. 构建物品列表（带选择高亮）
-        let list_items: Vec<ListItem> = current_page_items
+        // 5. 构建列表项（修复颜色引用）
+        let mut list_state = ListState::default().with_selected(Some(self.selected_index));
+
+        let list_items = items[start_idx..end_idx]
             .iter()
             .enumerate()
             .map(|(i, item)| {
-                let is_selected = start_idx + i == self.selected_index;
+                let is_selected = (start_idx + i) == self.selected_index;
+
+                // 使用RGB值替代不存在的DarkGray
                 let bg_color = if is_selected {
-                    Color::DarkGray
+                    Color::Rgb(80, 80, 80)
                 } else {
                     Color::Reset
                 };
 
-                // 根据物品类型设置颜色（参考像素地牢配色）
-                let (prefix, text_color) = match item.item_type {
-                    ItemType::Weapon => ("W:", Color::LightRed),
-                    ItemType::Armor => ("A:", Color::LightBlue),
-                    ItemType::Potion => ("P:", Color::LightGreen),
-                    ItemType::Scroll => ("S:", Color::LightYellow),
-                    ItemType::Food => ("F:", Color::LightMagenta),
+                // 物品类型颜色映射
+                let (prefix, color) = match item.item_type {
+                    ItemKind::Weapon => ("W:", Color::LightRed),
+                    ItemKind::Armor => ("A:", Color::LightBlue),
+                    // ...其他类型匹配
                     _ => ("", Color::White),
                 };
 
-                let line = Spans::from(vec![
+                ListItem::new(Spans::from(vec![
                     Span::styled(
                         format!("{} ", (b'a' + i as u8) as char),
                         Style::default().fg(Color::White),
                     ),
-                    Span::styled(
-                        prefix,
-                        Style::default().fg(text_color),
-                    ),
+                    Span::styled(prefix, Style::default().fg(color)),
                     Span::styled(
                         item.name.clone(),
-                        Style::default()
-                            .fg(text_color)
-                            .add_modifier(Modifier::BOLD),
+                        Style::default().fg(color).add_modifier(Modifier::BOLD),
                     ),
                     Span::styled(
                         format!(" x{}", item.quantity),
-                        Style::default().fg(Color::DarkGray),
+                        Style::default().fg(Color::Rgb(120, 120, 120)), // 替代DarkGray
                     ),
-                ]);
+                ]))
+                .style(Style::default().bg(bg_color))
+            });
 
-                ListItem::new(line).style(Style::default().bg(bg_color))
-            })
-            .collect();
-
-        // 5. 渲染物品列表
+        // 6. 渲染列表（使用正确的stateful_widget）
         let list = List::new(list_items)
             .block(block)
             .highlight_style(
                 Style::default()
-                    .bg(Color::DarkGray)
+                    .bg(Color::Rgb(80, 80, 80))
                     .add_modifier(Modifier::BOLD),
             )
             .highlight_symbol(">> ");
 
-        f.render_stateful_widget(list, area, &mut self.selected_index);
+        f.render_stateful_widget(list, area, &mut list_state);
 
-        // 6. 渲染物品详细信息（在底部区域）
-        if let Some(selected_item) = items.get(self.selected_index) {
+        // 7. 渲染选中物品详情（增加空检查）
+        if let Some(item) = items.get(self.selected_index) {
             let desc_area = Rect {
                 x: area.x,
                 y: area.y + area.height.saturating_sub(4),
                 width: area.width,
                 height: 3,
             };
-
-            self.render_item_details(f, desc_area, selected_item);
+            self.render_item_details(f, desc_area, item);
         }
     }
 
     /// 渲染物品详细信息（参考像素地牢底部说明栏）
-    fn render_item_details<B: Backend>(
-        &self,
-        f: &mut Frame<B>,
-        area: Rect,
-        item: &Item,
-    ) {
+    fn render_item_details<B: Backend>(&self, f: &mut Frame<B>, area: Rect, item: &Item) {
         let desc_block = Block::default()
             .borders(Borders::TOP)
             .border_style(Style::default().fg(Color::DarkGray));
@@ -175,17 +165,18 @@ impl InventoryRenderer {
             KeyCode::Char('h') => Some(7),
             KeyCode::Char('i') => Some(8),
             KeyCode::Char('j') => Some(9),
-            
+
             // 翻页控制
             KeyCode::Right => {
-                self.page = (self.page + 1).min((item_count / self.max_items_per_page).saturating_sub(1));
+                self.page =
+                    (self.page + 1).min((item_count / self.max_items_per_page).saturating_sub(1));
                 None
             }
             KeyCode::Left => {
                 self.page = self.page.saturating_sub(1);
                 None
             }
-            
+
             // 方向键选择
             KeyCode::Down => {
                 self.selected_index = (self.selected_index + 1).min(item_count.saturating_sub(1));
@@ -197,7 +188,7 @@ impl InventoryRenderer {
                 self.update_page();
                 None
             }
-            
+
             _ => None,
         }
     }

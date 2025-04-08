@@ -1,4 +1,3 @@
-
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use std::time::{Duration, Instant};
 
@@ -16,8 +15,8 @@ pub struct InputConfig {
 impl Default for InputConfig {
     fn default() -> Self {
         Self {
-            repeat_delay: 400,    // 与像素地牢PC版一致
-            repeat_interval: 30,  // 流畅的菜单导航
+            repeat_delay: 400,        // 与像素地牢PC版一致
+            repeat_interval: 30,      // 流畅的菜单导航
             quick_use_threshold: 300, // 快速使用物品阈值
         }
     }
@@ -30,10 +29,10 @@ pub struct InputSystem {
     last_key: Option<KeyEvent>,
     last_key_time: Instant,
     current_modifiers: KeyModifiers,
-    
+
     // 配置
     config: InputConfig,
-    
+
     // 特殊状态
     quick_use_state: Option<Instant>,
     last_processed: Instant,
@@ -88,7 +87,8 @@ impl InputSystem {
             code: KeyCode::Char(c),
             modifiers: KeyModifiers::NONE,
             ..
-        }) = event {
+        }) = event
+        {
             match c {
                 '1'..='9' => Some(*c as usize - '1' as usize),
                 '0' => Some(9),
@@ -109,11 +109,11 @@ impl InputSystem {
             if let Some(last_key) = self.last_key {
                 if *key_event == last_key {
                     let elapsed = now - self.last_key_time;
-                    
+
                     // 超过初始延迟后开始重复
                     if elapsed > Duration::from_millis(self.config.repeat_delay) {
-                        should_repeat = (now - self.last_processed) >= 
-                            Duration::from_millis(self.config.repeat_interval);
+                        should_repeat = (now - self.last_processed)
+                            >= Duration::from_millis(self.config.repeat_interval);
                     }
                 }
             }
@@ -122,7 +122,7 @@ impl InputSystem {
             self.last_key = Some(*key_event);
             self.last_key_time = now;
             self.current_modifiers = key_event.modifiers;
-            
+
             if should_repeat {
                 self.last_processed = now;
             }
@@ -183,7 +183,7 @@ mod tests {
     fn test_basic_input() {
         let mut input = InputSystem::default();
         let event = test_key_event(KeyCode::Char('g'));
-        
+
         assert!(input.match_key(&event, KeyCode::Char('g')));
         assert!(!input.should_repeat(&event)); // 首次按下不重复
     }
@@ -191,9 +191,15 @@ mod tests {
     #[test]
     fn test_quick_slots() {
         let input = InputSystem::default();
-        
-        assert_eq!(input.get_quick_slot(&test_key_event(KeyCode::Char('1'))), Some(0));
-        assert_eq!(input.get_quick_slot(&test_key_event(KeyCode::Char('0'))), Some(9));
+
+        assert_eq!(
+            input.get_quick_slot(&test_key_event(KeyCode::Char('1'))),
+            Some(0)
+        );
+        assert_eq!(
+            input.get_quick_slot(&test_key_event(KeyCode::Char('0'))),
+            Some(9)
+        );
         assert_eq!(input.get_quick_slot(&test_key_event(KeyCode::Up)), None);
     }
 
@@ -201,10 +207,10 @@ mod tests {
     fn test_quick_use() {
         let mut input = InputSystem::default();
         input.begin_quick_use();
-        
+
         // 立即检查不应触发
         assert!(!input.should_quick_use());
-        
+
         // 模拟时间流逝
         input.config.quick_use_threshold = 0;
         assert!(input.should_quick_use());
@@ -214,16 +220,16 @@ mod tests {
     fn test_key_repeat() {
         let mut input = InputSystem {
             config: InputConfig {
-                repeat_delay: 0,  // 立即开始重复
+                repeat_delay: 0, // 立即开始重复
                 repeat_interval: 10,
                 ..Default::default()
             },
             ..Default::default()
         };
-        
+
         let event = test_key_event(KeyCode::Down);
         assert!(!input.should_repeat(&event)); // 首次按下
-        
+
         // 模拟快速重复
         assert!(input.should_repeat(&event));
     }

@@ -1,4 +1,3 @@
-
 //! 菜单系统状态
 //!
 //! 实现像素地牢风格的菜单系统：
@@ -7,12 +6,18 @@
 //! - 状态过渡动画
 
 use super::*;
+use crossterm::event::KeyCode;
 use tui::{
-    layout::{Alignment, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Style},
     text::{Span, Spans},
     widgets::{Block, Borders, Paragraph},
 };
+
+use crate::ui::states::common::GameState;
+use crate::ui::states::common::GameStateID;
+use crate::ui::states::common::StateContext;
+use crate::ui::states::common::StateTransition;
 
 /// 主菜单状态
 #[derive(Debug)]
@@ -27,12 +32,7 @@ impl MainMenuState {
     pub fn new() -> Self {
         Self {
             selected_index: 0,
-            options: vec![
-                "New Game",
-                "Load Game",
-                "Settings",
-                "Quit",
-            ],
+            options: vec!["New Game", "Load Game", "Settings", "Quit"],
             version: "v1.0.0",
             blink_timer: 0.0,
         }
@@ -116,12 +116,12 @@ impl GameState for MainMenuState {
     fn render(&mut self, context: &mut StateContext) -> anyhow::Result<()> {
         context.terminal.draw(|f| {
             let size = f.size();
-            
+
             // 主标题
             let title_block = Paragraph::new(self.render_title())
                 .alignment(Alignment::Center)
                 .block(Block::default().borders(Borders::NONE));
-            
+
             // 版本信息
             let version_block = Paragraph::new(self.version)
                 .alignment(Alignment::Right)
@@ -129,12 +129,13 @@ impl GameState for MainMenuState {
 
             // 菜单选项（带闪烁效果）
             let show_cursor = self.blink_timer < 0.5;
-            let menu_items: Vec<Spans> = self.options
+            let menu_items: Vec<Spans> = self
+                .options
                 .iter()
                 .enumerate()
                 .map(|(i, _)| Spans::from(self.render_options(show_cursor, i)))
                 .collect();
-            
+
             let menu_block = Paragraph::new(menu_items)
                 .alignment(Alignment::Center)
                 .block(Block::default().borders(Borders::NONE));
@@ -143,9 +144,9 @@ impl GameState for MainMenuState {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
-                    Constraint::Length(5),  // 标题
-                    Constraint::Length(8),  // 菜单
-                    Constraint::Min(1),     // 空白
+                    Constraint::Length(5), // 标题
+                    Constraint::Length(8), // 菜单
+                    Constraint::Min(1),    // 空白
                 ])
                 .split(size);
 
@@ -153,7 +154,7 @@ impl GameState for MainMenuState {
             f.render_widget(menu_block, chunks[1]);
             f.render_widget(version_block, size);
         })?;
-        
+
         Ok(())
     }
 
@@ -173,12 +174,7 @@ impl PauseMenuState {
     pub fn new() -> Self {
         Self {
             selected_index: 0,
-            options: vec![
-                "Continue",
-                "Save Game",
-                "Main Menu",
-                "Quit",
-            ],
+            options: vec!["Continue", "Save Game", "Main Menu", "Quit"],
         }
     }
 }
@@ -207,17 +203,15 @@ impl GameState for PauseMenuState {
                     self.selected_index = (self.selected_index + 1).min(self.options.len() - 1);
                     true
                 }
-                KeyCode::Enter => {
-                    match self.selected_index {
-                        0 => Some(GameStateID::Gameplay),
-                        2 => Some(GameStateID::MainMenu),
-                        3 => {
-                            context.request_quit();
-                            None
-                        }
-                        _ => None,
+                KeyCode::Enter => match self.selected_index {
+                    0 => Some(GameStateID::Gameplay),
+                    2 => Some(GameStateID::MainMenu),
+                    3 => {
+                        context.request_quit();
+                        None
                     }
-                }
+                    _ => None,
+                },
                 _ => false,
             }
         } else {
@@ -229,13 +223,14 @@ impl GameState for PauseMenuState {
         context.terminal.draw(|f| {
             let size = f.size();
             let area = centered_rect(50, 50, size);
-            
+
             let block = Block::default()
                 .title("PAUSED")
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Red));
-            
-            let menu: Vec<Spans> = self.options
+
+            let menu: Vec<Spans> = self
+                .options
                 .iter()
                 .enumerate()
                 .map(|(i, text)| {
@@ -245,23 +240,23 @@ impl GameState for PauseMenuState {
                         Style::default().fg(Color::White)
                     };
                     Spans::from(Span::styled(
-                        if i == self.selected_index { 
-                            format!("> {} <", text) 
-                        } else { 
-                            text.to_string() 
-                        }, 
-                        style
+                        if i == self.selected_index {
+                            format!("> {} <", text)
+                        } else {
+                            text.to_string()
+                        },
+                        style,
                     ))
                 })
                 .collect();
-            
+
             let paragraph = Paragraph::new(menu)
                 .block(block)
                 .alignment(Alignment::Center);
-            
+
             f.render_widget(paragraph, area);
         })?;
-        
+
         Ok(())
     }
 
@@ -314,44 +309,38 @@ impl GameState for GameOverState {
         context.terminal.draw(|f| {
             let size = f.size();
             let area = centered_rect(60, 40, size);
-            
+
             let show_prompt = self.blink_timer % 1.0 < 0.5;
             let text = vec![
-                Spans::from(Span::styled(
-                    "YOU DIED!", 
-                    Style::default().fg(Color::Red)
-                )),
+                Spans::from(Span::styled("YOU DIED!", Style::default().fg(Color::Red))),
                 Spans::from(Span::raw("")),
                 Spans::from(Span::styled(
                     &self.cause_of_death,
-                    Style::default().fg(Color::White)
+                    Style::default().fg(Color::White),
                 )),
                 Spans::from(Span::raw("")),
                 Spans::from(Span::styled(
                     format!("Score: {}", self.score),
-                    Style::default().fg(Color::Yellow)
+                    Style::default().fg(Color::Yellow),
                 )),
                 Spans::from(Span::raw("")),
                 Spans::from(if show_prompt {
-                    Span::styled(
-                        "Press ENTER to continue",
-                        Style::default().fg(Color::Gray)
-                    )
+                    Span::styled("Press ENTER to continue", Style::default().fg(Color::Gray))
                 } else {
                     Span::raw("")
                 }),
             ];
-            
+
             let block = Block::default()
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Red));
-            
+
             Paragraph::new(text)
                 .block(block)
                 .alignment(Alignment::Center)
                 .render(f, area);
         })?;
-        
+
         Ok(())
     }
 

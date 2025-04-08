@@ -1,4 +1,3 @@
-
 //! 终端UI导航系统
 //!
 //! 实现像素地牢风格的导航控制：
@@ -7,10 +6,11 @@
 //! - 键盘/手柄输入统一抽象
 
 use super::actions::UIAction;
-use crossterm::event::{Event, KeyCode, KeyModifiers};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use std::time::{Duration, Instant};
 
 /// 导航方向（兼容终端和手柄输入）
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NavDirection {
     Up,    // 上导航
@@ -26,25 +26,61 @@ impl NavDirection {
     pub fn from_event(event: &Event) -> Option<Self> {
         match event {
             // 方向键
-            Event::Key(KeyEvent { code: KeyCode::Up, .. }) => Some(Self::Up),
-            Event::Key(KeyEvent { code: KeyCode::Down, .. }) => Some(Self::Down),
-            Event::Key(KeyEvent { code: KeyCode::Left, .. }) => Some(Self::Left),
-            Event::Key(KeyEvent { code: KeyCode::Right, .. }) => Some(Self::Right),
-            
+            Event::Key(KeyEvent {
+                code: KeyCode::Up, ..
+            }) => Some(Self::Up),
+            Event::Key(KeyEvent {
+                code: KeyCode::Down,
+                ..
+            }) => Some(Self::Down),
+            Event::Key(KeyEvent {
+                code: KeyCode::Left,
+                ..
+            }) => Some(Self::Left),
+            Event::Key(KeyEvent {
+                code: KeyCode::Right,
+                ..
+            }) => Some(Self::Right),
+
             // WASD移动（与游戏内移动一致）
-            Event::Key(KeyEvent { code: KeyCode::Char('w'), modifiers: KeyModifiers::NONE, .. }) => Some(Self::Up),
-            Event::Key(KeyEvent { code: KeyCode::Char('s'), modifiers: KeyModifiers::NONE, .. }) => Some(Self::Down),
-            Event::Key(KeyEvent { code: KeyCode::Char('a'), modifiers: KeyModifiers::NONE, .. }) => Some(Self::Left),
-            Event::Key(KeyEvent { code: KeyCode::Char('d'), modifiers: KeyModifiers::NONE, .. }) => Some(Self::Right),
-            
+            Event::Key(KeyEvent {
+                code: KeyCode::Char('w'),
+                modifiers: KeyModifiers::NONE,
+                ..
+            }) => Some(Self::Up),
+            Event::Key(KeyEvent {
+                code: KeyCode::Char('s'),
+                modifiers: KeyModifiers::NONE,
+                ..
+            }) => Some(Self::Down),
+            Event::Key(KeyEvent {
+                code: KeyCode::Char('a'),
+                modifiers: KeyModifiers::NONE,
+                ..
+            }) => Some(Self::Left),
+            Event::Key(KeyEvent {
+                code: KeyCode::Char('d'),
+                modifiers: KeyModifiers::NONE,
+                ..
+            }) => Some(Self::Right),
+
             // 标签页切换
-            Event::Key(KeyEvent { code: KeyCode::Tab, modifiers: KeyModifiers::SHIFT, .. }) => Some(Self::Prev),
-            Event::Key(KeyEvent { code: KeyCode::Tab, modifiers: KeyModifiers::NONE, .. }) => Some(Self::Next),
-            
+            Event::Key(KeyEvent {
+                code: KeyCode::Tab,
+                modifiers: KeyModifiers::SHIFT,
+                ..
+            }) => Some(Self::Prev),
+            Event::Key(KeyEvent {
+                code: KeyCode::Tab,
+                modifiers: KeyModifiers::NONE,
+                ..
+            }) => Some(Self::Next),
+
             // 数字键快捷导航（如物品栏1-9）
-            Event::Key(KeyEvent { code: KeyCode::Char(c @ '1'..='9'), .. }) => {
-                Some(if c < &'5' { Self::Prev } else { Self::Next })
-            }
+            Event::Key(KeyEvent {
+                code: KeyCode::Char(c @ '1'..='9'),
+                ..
+            }) => Some(if c < &'5' { Self::Prev } else { Self::Next }),
             _ => None,
         }
     }
@@ -80,7 +116,7 @@ impl NavigationState {
             item_count: item_count.max(1), // 确保至少1个项目
             wrap_around: true,
             grid_width: None,
-            last_input_time: Instant::now() - Duration::from_secs(1), // 初始可立即响应
+            last_input_time: Instant::now(),
         }
     }
 
@@ -91,8 +127,10 @@ impl NavigationState {
 
     /// 处理导航输入（带200ms防抖）
     pub fn navigate(&mut self, direction: NavDirection) -> bool {
+        let is_first_input = self.last_input_time == Instant::now();
         let now = Instant::now();
-        if now.duration_since(self.last_input_time) < Duration::from_millis(200) {
+        if !is_first_input && now.duration_since(self.last_input_time) < Duration::from_millis(200)
+        {
             return false;
         }
         self.last_input_time = now;
@@ -101,11 +139,11 @@ impl NavigationState {
             // 垂直导航（考虑网格布局）
             NavDirection::Up => self.move_vertical(-1),
             NavDirection::Down => self.move_vertical(1),
-            
+
             // 水平导航
             NavDirection::Left => self.move_horizontal(-1),
             NavDirection::Right => self.move_horizontal(1),
-            
+
             // 线性导航
             NavDirection::Next => self.move_linear(1),
             NavDirection::Prev => self.move_linear(-1),
@@ -122,14 +160,14 @@ impl NavigationState {
         if let Some(width) = self.grid_width {
             let row = self.current_focus / width;
             let col = self.current_focus % width;
-            
+
             let new_row = if delta > 0 {
                 row + 1
             } else {
                 row.saturating_sub(1)
             };
-            
-            let new_index = new_row * width + col;
+
+            let new_index = new_row.saturating_mul(width).saturating_add(col);
             if new_index < self.item_count {
                 self.current_focus = new_index;
                 return true;
@@ -146,7 +184,7 @@ impl NavigationState {
             } else {
                 self.current_focus.saturating_sub(1)
             };
-            
+
             if new_index < self.item_count && (new_index / width == self.current_focus / width) {
                 self.current_focus = new_index;
                 return true;
@@ -174,7 +212,7 @@ impl NavigationState {
                 self.current_focus
             }
         };
-        
+
         if new_index != self.current_focus {
             self.current_focus = new_index;
             true
@@ -213,19 +251,19 @@ mod tests {
     fn test_grid_navigation() {
         let mut nav = NavigationState::new(8);
         nav.set_grid(4);
-        
+
         // 测试向右移动
         assert!(nav.navigate(NavDirection::Right));
         assert_eq!(nav.current(), 1);
-        
+
         // 测试向下移动
         assert!(nav.navigate(NavDirection::Down));
         assert_eq!(nav.current(), 5);
-        
+
         // 测试边界
         nav.jump_to(7);
         assert!(!nav.navigate(NavDirection::Right)); // 最右列不能右移
-        assert!(nav.navigate(NavDirection::Down));  // 但可以下移（循环）
+        assert!(nav.navigate(NavDirection::Down)); // 但可以下移（循环）
         assert_eq!(nav.current(), 3);
     }
 
@@ -233,8 +271,19 @@ mod tests {
     fn test_key_mapping() {
         let event = Event::Key(KeyEvent::new(KeyCode::Char('w'), KeyModifiers::NONE));
         assert_eq!(NavDirection::from_event(&event), Some(NavDirection::Up));
-        
+
         let tab_event = Event::Key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
-        assert_eq!(NavDirection::from_event(&tab_event), Some(NavDirection::Next));
+        assert_eq!(
+            NavDirection::from_event(&tab_event),
+            Some(NavDirection::Next)
+        );
     }
+}
+
+#[test]
+fn test_single_column_grid() {
+    let mut nav = NavigationState::new(5);
+    nav.set_grid(1); // 单列
+    assert!(nav.navigate(NavDirection::Down));
+    assert_eq!(nav.current(), 1);
 }
