@@ -8,16 +8,8 @@ use crate::hero::hero::*;
 pub enum Class {
     #[default]
     Warrior, // 战士（高生命值，中等攻击）
-    
+
     Mage,     // 法师（低生命值，高攻击，特殊能力）
     Rogue,    // 盗贼（中等生命值，高暴击率）
     Huntress, // 女猎手（远程攻击，中等属性）
 }
-
-
-
-
-
-
-
-

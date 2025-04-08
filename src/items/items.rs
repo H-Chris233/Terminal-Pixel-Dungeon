@@ -6,7 +6,7 @@ use crate::items::food::food::*;
 use crate::items::misc::misc::*;
 use crate::items::potion::potion::*;
 use crate::items::ring::ring::*;
-use crate::items::scoll::scoll::*;
+use crate::items::scroll::scroll::*;
 use crate::items::seed::seed::*;
 use crate::items::stone::stone::*;
 use crate::items::wand::wand::*;
@@ -35,7 +35,7 @@ pub enum ItemKind {
     Ring(Ring),     // 戒指（10种）
     Seed(Seed),     // 种子（8种）
     Stone(Stone),   // 魔法石（6种）
-    Misc(Misc),     // 杂项（钥匙等）
+    Misc(MiscItem), // 杂项（钥匙等）
 }
 
 impl Item {

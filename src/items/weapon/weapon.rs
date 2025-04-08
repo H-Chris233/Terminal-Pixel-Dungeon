@@ -3,7 +3,7 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 /// 武器附魔效果（参考破碎的像素地牢附魔系统）
-#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub enum WeaponEnhance {
     // 常规附魔
     Burning,  // 燃烧：攻击有概率点燃敌人
@@ -16,7 +16,7 @@ pub enum WeaponEnhance {
 }
 
 /// 武器改造方向（参考武器改造系统）
-#[derive(Debug, Encode, Decode, Serialize, Deserialize, Clone, Default)]
+#[derive(PartialEq, Debug, Encode, Decode, Serialize, Deserialize, Clone, Default)]
 pub enum WeaponMod {
     Damage, // 偏向伤害（增加伤害但降低攻速）
     Speed,  // 偏向速度（增加攻速但降低伤害）
@@ -26,7 +26,7 @@ pub enum WeaponMod {
 }
 
 /// 武器数据结构（参考破碎的像素地牢武器属性）
-#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct Weapon {
     pub name: String,                     //名字
     pub tier: usize,                      // 品阶1-5
