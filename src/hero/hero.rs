@@ -1,16 +1,17 @@
-use crate::combat::Combat;
+use crate::combat::combat::Combat;
 use crate::dungeon::dungeon::Dungeon;
-use crate::items::items::*;
+use crate::items::potion::PotionKind;
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
+use std::time::Instant;
 use std::time::SystemTime;
 
 use crate::hero::class::class::*;
 use crate::items::items::{Item, ItemKind};
-use crate::items::potion::PotionKind;
 
 /// 英雄角色数据结构
-#[derive(Debug, Encode, Decode, Serialize, Deserialize)]
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct Hero {
     // 基础属性
     pub class: Class,
@@ -30,11 +31,9 @@ pub struct Hero {
     pub y: i32,
     pub alive: bool,
     pub inventory: Vec<Item>,
-
-    // 时间记录（不序列化）
-    #[serde(skip)]
+    pub start_time: u64,
     pub last_update: Option<SystemTime>,
-    pub play_time: f64,
+    pub play_time: Duration,
 }
 
 impl Hero {
@@ -54,8 +53,12 @@ impl Hero {
             inventory: Vec::with_capacity(10), // 预分配10个物品槽位
             name: "Adventurer".to_string(),
             alive: true,
-            play_time: 0.0,
+            start_time: SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as u64,
             last_update: Some(SystemTime::now()),
+            play_time: Duration::from_secs(0),
         };
 
         // 根据职业初始化属性
@@ -235,7 +238,7 @@ impl Hero {
     pub fn update_play_time(&mut self) {
         if let Some(last) = self.last_update {
             if let Ok(duration) = SystemTime::now().duration_since(last) {
-                self.play_time += duration.as_secs_f64();
+                self.play_time += duration;
             }
         }
         self.last_update = Some(SystemTime::now());
@@ -244,6 +247,16 @@ impl Hero {
     /// 显示消息（保持原有简单实现）
     pub fn notify(&self, message: String) {
         println!("[英雄] {}", message);
+    }
+    pub fn get_start_instant(&self) -> Instant {
+        Instant::now()
+            - Duration::from_millis(
+                SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis() as u64
+                    - self.start_time,
+            )
     }
 }
 

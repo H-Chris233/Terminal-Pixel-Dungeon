@@ -5,6 +5,7 @@ use crate::hero::hero::Hero;
 use anyhow::{Context, Result};
 use bincode::{config, Decode, Encode};
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 use std::{
     fs,
     io::{self, Write},
@@ -152,13 +153,34 @@ impl SaveSystem {
     pub fn save_dir(&self) -> &Path {
         &self.save_dir
     }
+    pub fn max_slots(&self) -> usize {
+        self.max_slots
+    }
+
+    /// 检查指定槽位是否有存档
+    pub fn has_save(&self, slot: usize) -> bool {
+        if slot >= self.max_slots {
+            return false;
+        }
+        let filename = format!("save_{}.sav", slot);
+        self.save_dir.join(filename).exists()
+    }
+
+    /// 获取存档文件路径
+    pub fn save_path(&self, slot: usize) -> Option<PathBuf> {
+        if slot >= self.max_slots {
+            return None;
+        }
+        let filename = format!("save_{}.sav", slot);
+        Some(self.save_dir.join(filename))
+    }
 }
 
 /// 自动保存功能
 pub struct AutoSave {
-    save_system: SaveSystem,
-    interval: std::time::Duration,
-    last_save: Option<SystemTime>,
+    pub save_system: SaveSystem,
+    pub interval: std::time::Duration,
+    pub last_save: Option<SystemTime>,
 }
 
 impl AutoSave {
@@ -185,5 +207,31 @@ impl AutoSave {
         } else {
             Ok(false)
         }
+    }
+    pub fn try_save(&mut self, save_data: &SaveData) -> Result<()> {
+        self.check_auto_save(save_data)?;
+        Ok(())
+    }
+
+    /// 强制立即保存（忽略自动保存间隔）
+    pub fn force_save(&mut self, save_data: &SaveData) -> Result<()> {
+        self.save_system.save_game(0, save_data)?;
+        self.last_save = Some(SystemTime::now());
+        Ok(())
+    }
+
+    /// 获取上次保存时间
+    pub fn last_save_time(&self) -> Option<SystemTime> {
+        self.last_save
+    }
+
+    /// 获取自动保存间隔
+    pub fn save_interval(&self) -> Duration {
+        self.interval
+    }
+
+    /// 设置新的自动保存间隔
+    pub fn set_save_interval(&mut self, interval: Duration) {
+        self.interval = interval;
     }
 }

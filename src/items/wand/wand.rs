@@ -2,7 +2,7 @@ use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 /// 法杖系统（8种法杖，精确还原游戏机制）
-#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct Wand {
     pub kind: WandKind,
     pub level: i32,      // 强化等级（0-3基础，+3上限）
@@ -11,7 +11,7 @@ pub struct Wand {
     pub cursed: bool,    // 是否被诅咒
 }
 
-#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub enum WandKind {
     MagicMissile,   // 魔法飞弹（基础法杖）
     Fireblast,      // 火焰冲击

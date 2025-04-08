@@ -465,6 +465,7 @@ dependencies = [
  "bincode",
  "crossterm 0.29.0",
  "rand",
+ "scopeguard",
  "serde",
  "serde_json",
  "tempfile",

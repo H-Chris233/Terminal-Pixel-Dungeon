@@ -2,7 +2,7 @@ use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 /// 卷轴系统（完整10种）
-#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct Scroll {
     pub name: String,
     pub kind: ScrollKind,
@@ -10,7 +10,7 @@ pub struct Scroll {
     pub exotic: bool, // 是否是异变卷轴
 }
 
-#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub enum ScrollKind {
     Upgrade,       // 强化
     RemoveCurse,   // 祛咒

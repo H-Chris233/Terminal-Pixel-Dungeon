@@ -2,13 +2,13 @@ use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 /// 魔法石系统（6种符文石）
-#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct Stone {
     pub kind: StoneKind,
     pub charges: u8, // 使用次数（部分石头可重复使用）
 }
 
-#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub enum StoneKind {
     Aggression,   // 侵略（吸引敌人）
     Blink,        // 闪烁（短距传送）

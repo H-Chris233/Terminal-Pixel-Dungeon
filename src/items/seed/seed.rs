@@ -3,13 +3,13 @@ use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 /// 种子系统（8种植物种子）
-#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct Seed {
     pub kind: SeedKind,
     pub turns_to_grow: u8, // 生长所需回合数
 }
 
-#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub enum SeedKind {
     Earthroot,  // 地根草（护盾）
     Fadeleaf,   // 消隐叶（传送）

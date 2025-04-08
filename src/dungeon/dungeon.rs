@@ -4,15 +4,15 @@ use bincode::{Decode, Encode};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Encode, Decode, Serialize, Deserialize)]
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct Dungeon {
     pub depth: usize, // 当前层数(1-26)
     pub levels: Vec<Level>,
-    pub seed: Option<u64>,
+    pub seed: u64,
     // 其他地牢属性...
 }
 
-#[derive(Debug, Encode, Decode, Serialize, Deserialize)]
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct Level {
     pub rooms: Vec<Room>,
     pub corridors: Vec<Corridor>,
@@ -22,7 +22,7 @@ pub struct Level {
     pub stairs_up: Vec<(i32, i32)>,
 }
 
-#[derive(Debug, Encode, Decode, Serialize, Deserialize)]
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct Room {
     pub x: i32,
     pub y: i32,
@@ -30,13 +30,13 @@ pub struct Room {
     pub height: i32,
 }
 
-#[derive(Debug, Encode, Decode, Serialize, Deserialize)]
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct Corridor {
     pub start: (i32, i32),
     pub end: (i32, i32),
 }
 
-#[derive(Debug, Encode, Decode, Serialize, Deserialize)]
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct Enemy {
     pub kind: EnemyKind,
     pub hp: i32,
@@ -47,7 +47,7 @@ pub struct Enemy {
     pub y: i32,
 }
 
-#[derive(Debug, Encode, Decode, Serialize, Deserialize)]
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub enum EnemyKind {
     Rat,
     Snake,
@@ -58,21 +58,20 @@ pub enum EnemyKind {
 
 impl Dungeon {
     /// 生成指定深度的地牢
-    pub fn generate(depth: usize) -> anyhow::Result<Self> {
-        let seed = Some(rand::random()); // 生成随机种子
+    pub fn generate(depth: usize, seed: u64) -> anyhow::Result<Self> {
         let mut levels = Vec::with_capacity(depth);
-        for d in 1..=depth {
-            levels.push(Self::generate_level(d)?);
+        for _ in 1..=26 {
+            levels.push(Self::generate_level(seed)?);
         }
         Ok(Self {
-            depth: 1,
+            depth: 26,
             seed,
             levels,
         })
     }
 
     /// 生成单层地牢
-    fn generate_level(depth: usize) -> anyhow::Result<Level> {
+    fn generate_level(seed: u64) -> anyhow::Result<Level> {
         Ok(Level {
             stairs_down: Vec::new(), // 初始化下楼楼梯
             stairs_up: Vec::new(),   // 初始化上楼楼梯
