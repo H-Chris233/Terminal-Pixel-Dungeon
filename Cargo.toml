@@ -1,5 +1,5 @@
 [package]
-name = "Terminal-Pixel-Dungeon"
+name = "terminal_pixel_dungeon"
 version = "0.0.1"
 edition = "2024"
 
