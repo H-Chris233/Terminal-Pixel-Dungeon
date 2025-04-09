@@ -1,9 +1,11 @@
 //src/ui/render/inventory.rs
+use crate::items::items::ItemKind;
 use crate::{
     hero::hero::Hero,
     items::items::{Item, ItemType},
 };
 use crossterm::event::KeyCode;
+use tui::widgets::ListState;
 use tui::{
     backend::Backend,
     layout::{Alignment, Rect},

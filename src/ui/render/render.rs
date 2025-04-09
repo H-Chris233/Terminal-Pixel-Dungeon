@@ -136,6 +136,6 @@ pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         .split(vertical[1])[1]
 }
 
-pub use dungeon::DungeonRenderer;
-pub use hud::HudRenderer;
-pub use inventory::InventoryRenderer;
+pub use super::dungeon::DungeonRenderer;
+pub use super::hud::HudRenderer;
+pub use super::inventory::InventoryRenderer;
