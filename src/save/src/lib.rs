@@ -1,7 +1,7 @@
 // src/save.rs
-use crate::dungeon::dungeon::Dungeon;
-use crate::error::error::GameError;
-use crate::hero::hero::Hero;
+use dungeon::dungeon::Dungeon;
+use error::error::GameError;
+use hero::hero::Hero;
 use anyhow::{Context, Result};
 use bincode::{config, Decode, Encode};
 use serde::{Deserialize, Serialize};
