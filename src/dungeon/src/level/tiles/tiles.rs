@@ -19,7 +19,7 @@ pub struct TileInfo {
     pub is_visible: bool,
 }
 
-#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub enum TerrainType {
     Floor,
     Wall,

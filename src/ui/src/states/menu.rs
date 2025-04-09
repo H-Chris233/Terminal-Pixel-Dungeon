@@ -16,10 +16,10 @@ use tui::{
     widgets::{Block, Borders, Paragraph},
 };
 
-use crate::ui::states::common::GameState;
-use crate::ui::states::common::GameStateID;
-use crate::ui::states::common::StateContext;
-use crate::ui::states::common::StateTransition;
+use crate::states::common::GameState;
+use crate::states::common::GameStateID;
+use crate::states::common::StateContext;
+use crate::states::common::StateTransition;
 
 /// 计算居中矩形
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
