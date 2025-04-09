@@ -9,6 +9,7 @@ use super::*;
 use crossterm::event::KeyCode;
 use tui::widgets::Widget;
 use tui::{
+    buffer::Buffer,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Style},
     text::{Span, Spans},
@@ -19,6 +20,27 @@ use crate::ui::states::common::GameState;
 use crate::ui::states::common::GameStateID;
 use crate::ui::states::common::StateContext;
 use crate::ui::states::common::StateTransition;
+
+/// 计算居中矩形
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
+}
 
 /// 主菜单状态
 #[derive(Debug)]
@@ -34,13 +56,13 @@ impl MainMenuState {
         Self {
             selected_index: 0,
             options: vec!["New Game", "Load Game", "Settings", "Quit"],
-            version: "v0.0.1",
+            version: "v0.1.0",
             blink_timer: 0.0,
         }
     }
 
     /// 渲染标题艺术字（像素风格）
-    fn render_title(&self) -> Spans {
+    fn render_title(&self) -> Spans<'static> {
         Spans::from(vec![
             Span::styled("PIXEL ", Style::default().fg(Color::Red)),
             Span::styled("DUNGEON", Style::default().fg(Color::White)),
@@ -48,7 +70,7 @@ impl MainMenuState {
     }
 
     /// 渲染菜单选项
-    fn render_options(&self, selected: bool, idx: usize) -> Span {
+    fn render_options(&self, selected: bool, idx: usize) -> Span<'static> {
         let option = self.options[idx];
         if idx == self.selected_index && selected {
             Span::styled(
@@ -70,42 +92,35 @@ impl GameState for MainMenuState {
         &mut self,
         context: &mut StateContext,
         event: &crossterm::event::Event,
-    ) -> bool {
-        if let Some(key) = context.input.match_key(event) {
-            match key {
+    ) -> Option<GameStateID> {
+        if let crossterm::event::Event::Key(key) = event {
+            match key.code {
                 KeyCode::Up => {
                     self.selected_index = self.selected_index.saturating_sub(1);
-                    true
+                    None
                 }
                 KeyCode::Down => {
                     self.selected_index = (self.selected_index + 1).min(self.options.len() - 1);
-                    true
+                    None
                 }
-                KeyCode::Enter => {
-                    match self.selected_index {
-                        0 => {
-                            //context.audio.play_sound("confirm.ogg");
-                            Some(GameStateID::Gameplay)
-                        }
-                        1 => {
-                            //context.audio.play_sound("error.ogg"); // 暂未实现
-                            None
-                        }
-                        3 => {
-                            context.request_quit();
-                            None
-                        }
-                        _ => None,
+                KeyCode::Enter => match self.selected_index {
+                    0 => Some(GameStateID::Gameplay),
+                    1 => None, // 加载游戏
+                    2 => Some(GameStateID::Settings),
+                    3 => {
+                        context.request_quit();
+                        None
                     }
-                }
-                _ => false,
+                    _ => None,
+                },
+                _ => None,
             }
         } else {
-            false
+            None
         }
     }
 
-    fn update(&mut self, context: &mut StateContext, delta_time: f32) -> Option<GameStateID> {
+    fn update(&mut self, _context: &mut StateContext, delta_time: f32) -> Option<GameStateID> {
         // 光标闪烁动画
         self.blink_timer += delta_time;
         if self.blink_timer > 1.0 {
@@ -144,6 +159,7 @@ impl GameState for MainMenuState {
             // 布局
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
+                .margin(2)
                 .constraints([
                     Constraint::Length(5), // 标题
                     Constraint::Length(8), // 菜单
@@ -160,7 +176,7 @@ impl GameState for MainMenuState {
     }
 
     fn enter_transition(&self) -> Option<StateTransition> {
-        Some(StateTransition::fade(0.8))
+        Some(StateTransition::fade(0.5))
     }
 }
 
@@ -169,6 +185,7 @@ impl GameState for MainMenuState {
 pub struct PauseMenuState {
     selected_index: usize,
     options: Vec<&'static str>,
+    blink_timer: f32,
 }
 
 impl PauseMenuState {
@@ -176,6 +193,7 @@ impl PauseMenuState {
         Self {
             selected_index: 0,
             options: vec!["Continue", "Save Game", "Main Menu", "Quit"],
+            blink_timer: 0.0,
         }
     }
 }
@@ -189,23 +207,21 @@ impl GameState for PauseMenuState {
         &mut self,
         context: &mut StateContext,
         event: &crossterm::event::Event,
-    ) -> bool {
-        if let Some(key) = context.input.match_key(event) {
-            match key {
-                KeyCode::Esc => {
-                    //context.audio.play_sound("resume.ogg");
-                    Some(GameStateID::Gameplay)
-                }
+    ) -> Option<GameStateID> {
+        if let crossterm::event::Event::Key(key) = event {
+            match key.code {
+                KeyCode::Esc => Some(GameStateID::Gameplay),
                 KeyCode::Up => {
                     self.selected_index = self.selected_index.saturating_sub(1);
-                    true
+                    None
                 }
                 KeyCode::Down => {
                     self.selected_index = (self.selected_index + 1).min(self.options.len() - 1);
-                    true
+                    None
                 }
                 KeyCode::Enter => match self.selected_index {
                     0 => Some(GameStateID::Gameplay),
+                    1 => None, // 保存游戏
                     2 => Some(GameStateID::MainMenu),
                     3 => {
                         context.request_quit();
@@ -213,11 +229,19 @@ impl GameState for PauseMenuState {
                     }
                     _ => None,
                 },
-                _ => false,
+                _ => None,
             }
         } else {
-            false
+            None
         }
+    }
+
+    fn update(&mut self, _context: &mut StateContext, delta_time: f32) -> Option<GameStateID> {
+        self.blink_timer += delta_time;
+        if self.blink_timer > 1.0 {
+            self.blink_timer = 0.0;
+        }
+        None
     }
 
     fn render(&mut self, context: &mut StateContext) -> anyhow::Result<()> {
@@ -230,21 +254,22 @@ impl GameState for PauseMenuState {
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Red));
 
+            let show_cursor = self.blink_timer < 0.5;
             let menu: Vec<Spans> = self
                 .options
                 .iter()
                 .enumerate()
                 .map(|(i, text)| {
-                    let style = if i == self.selected_index {
+                    let style = if i == self.selected_index && show_cursor {
                         Style::default().fg(Color::Yellow)
                     } else {
                         Style::default().fg(Color::White)
                     };
                     Spans::from(Span::styled(
-                        if i == self.selected_index {
+                        if i == self.selected_index && show_cursor {
                             format!("> {} <", text)
                         } else {
-                            text.to_string()
+                            format!("  {}  ", text)
                         },
                         style,
                     ))
@@ -263,6 +288,10 @@ impl GameState for PauseMenuState {
 
     fn block_lower_states(&self) -> bool {
         true
+    }
+
+    fn enter_transition(&self) -> Option<StateTransition> {
+        Some(StateTransition::fade(0.3))
     }
 }
 
@@ -293,8 +322,16 @@ impl GameState for GameOverState {
         &mut self,
         context: &mut StateContext,
         event: &crossterm::event::Event,
-    ) -> bool {
-        context.input.match_key(event, KeyCode::Enter)
+    ) -> Option<GameStateID> {
+        if let crossterm::event::Event::Key(key) = event {
+            if key.code == KeyCode::Enter {
+                Some(GameStateID::MainMenu)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 
     fn update(&mut self, _: &mut StateContext, delta_time: f32) -> Option<GameStateID> {
@@ -309,7 +346,12 @@ impl GameState for GameOverState {
 
             let show_prompt = self.blink_timer % 1.0 < 0.5;
             let text = vec![
-                Spans::from(Span::styled("YOU DIED!", Style::default().fg(Color::Red))),
+                Spans::from(Span::styled(
+                    "YOU DIED!",
+                    Style::default()
+                        .fg(Color::Red)
+                        .add_modifier(tui::style::Modifier::BOLD),
+                )),
                 Spans::from(Span::raw("")),
                 Spans::from(Span::styled(
                     &self.cause_of_death,
@@ -330,12 +372,14 @@ impl GameState for GameOverState {
 
             let block = Block::default()
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Red));
+                .border_style(Style::default().fg(Color::Red))
+                .style(Style::default().bg(Color::Black));
 
-            Paragraph::new(text)
+            let paragraph = Paragraph::new(text)
                 .block(block)
-                .alignment(Alignment::Center)
-                .render(f, area);
+                .alignment(Alignment::Center);
+
+            f.render_widget(paragraph, area);
         })?;
 
         Ok(())

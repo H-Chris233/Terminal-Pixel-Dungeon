@@ -21,6 +21,8 @@ use anyhow::Result;
 use crossterm::event::Event;
 use std::time::{Duration, Instant};
 
+use crate::ui::states::common::StateContext;
+
 /// 状态堆栈管理器
 pub struct StateStack {
     states: Vec<Box<dyn GameState>>,
@@ -40,7 +42,7 @@ impl StateStack {
     ) -> Self {
         let mut stack = Self {
             states: Vec::with_capacity(3), // 预分配3层状态
-            context: StateContext::new(terminal, input, render, audio),
+            context: StateContext::new(terminal, input, render),
             transition: None,
             transition_start: None,
             transition_target: None,
@@ -62,7 +64,7 @@ impl StateStack {
 
     /// 立即压入状态（无过渡）
     fn instant_push(&mut self, state_id: GameStateID) {
-        let state: Box<dyn GameState> = match state_id {
+        let mut state: Box<dyn GameState> = match state_id {
             GameStateID::MainMenu => Box::new(MainMenuState::new()),
             GameStateID::PauseMenu => Box::new(PauseMenuState::new()),
             GameStateID::GameOver => Box::new(GameOverState::new(0, "Unknown cause")),
@@ -202,7 +204,7 @@ mod tests {
         let terminal = TerminalController::new();
         let input = InputSystem::new();
         let render = RenderSystem::new();
-        let mut stack = StateStack::new(terminal, input, render, audio, GameStateID::MainMenu);
+        let mut stack = StateStack::new(terminal, input, render, GameStateID::MainMenu);
 
         // 测试状态压栈
         stack.push_state(GameStateID::Gameplay);

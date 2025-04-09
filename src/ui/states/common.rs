@@ -8,7 +8,7 @@
 use crate::{
     ui::{
         input::{InputSystem, KeyCode},
-        render::RenderSystem,
+        render::render::RenderSystem,
         terminal::TerminalController,
     },
     util::math::lerp,
@@ -121,6 +121,7 @@ pub enum GameStateID {
     Shop,
     GameOver,
     Victory,
+    Settings,
 }
 
 /// 基础状态特征

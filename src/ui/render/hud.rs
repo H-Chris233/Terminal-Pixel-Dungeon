@@ -1,9 +1,5 @@
 //src/ui/render/hud.rs
-use crate::{
-    hero::hero::{Hero},
-    hero::class::Class,
-    ui::terminal::TerminalController,
-};
+use crate::{hero::class::Class, hero::hero::Hero, ui::terminal::TerminalController};
 use tui::{
     backend::Backend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
