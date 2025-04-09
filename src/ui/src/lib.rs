@@ -1,7 +1,13 @@
-use crate::dungeon::dungeon::Dungeon;
-use crate::hero::hero::Hero;
-use crate::save::save::AutoSave;
-use crate::save::save::SaveData;
+
+pub mod input;
+pub mod render;
+pub mod states;
+pub mod terminal;
+
+use dungeon::dungeon::Dungeon;
+use hero::hero::Hero;
+use save::save::AutoSave;
+use save::save::SaveData;
 use crossterm::{
     event::{self, Event, KeyCode},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
