@@ -10,8 +10,8 @@ use std::collections::HashSet;
 
 pub mod level;
 
-use crate::level::level::Level;
-use crate::level::tiles::tiles::{TerrainType, TileInfo};
+use crate::level::Level;
+use crate::level::tiles::{TerrainType, TileInfo};
 use items::Item;
 
 

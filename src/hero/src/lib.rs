@@ -1,18 +1,21 @@
 //src/hero/hero.rs
-use crate::dungeon::dungeon::Dungeon;
-use crate::items::potion::PotionKind;
+#![allow(dead_code)]
+#![allow(unused)]
+
 use bincode::{Decode, Encode};
+use dungeon::Dungeon;
+use items::potion::PotionKind;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use std::time::Instant;
 use std::time::SystemTime;
 
-use crate::class::class::*;
-use items::items::{Item, ItemKind};
+use crate::class::*;
+use combat::Combat;
+use items::{Item, ItemKind};
 
 pub mod bag;
 pub mod class;
-
 
 /// 英雄角色数据结构
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
@@ -147,56 +150,40 @@ impl Hero {
 
     // 调整 use_item 方法避免借用冲突
     pub fn use_item(&mut self, item_index: usize) -> anyhow::Result<()> {
-        // 先检查是否需要鉴定
-        let needs_identify = match self.inventory.get(item_index) {
-            Some(Item {
-                kind: ItemKind::Potion(p),
-                ..
-            }) => !p.identified,
-            _ => false,
-        };
+        // 检查物品是否存在
+        let item = self
+            .inventory
+            .get(item_index)
+            .ok_or_else(|| anyhow::anyhow!("物品槽位 {} 为空", item_index))?;
 
-        if needs_identify {
+        // 如果需要鉴定，先进行鉴定
+        if item.needs_identify() {
             self.identify_item(item_index)?;
         }
 
-        // 重新获取物品进行效果处理
-        let item = match self.inventory.get(item_index) {
-            Some(item) => item,
-            None => return Err(anyhow::anyhow!("物品槽位 {} 为空", item_index)),
-        };
+        // 重新获取物品引用（因为前面的借用已经结束）
+        let item = self.inventory.get(item_index).unwrap(); // 安全：前面已检查存在
 
         match &item.kind {
             ItemKind::Potion(potion) => {
-                let potion_kind = potion.kind.clone();
-                match potion_kind {
-                    PotionKind::Healing => {
-                        self.hp = (self.hp + 20).min(self.max_hp);
-                        self.notify(format!("恢复20点生命值"));
-                    } // 其他药水效果...
-                    PotionKind::Strength => {
-                        self.attack += 3;
-                        self.notify(format!("攻击力提升3点"));
-                    }
-                    _ => todo!(), // 其他药水类型...
-                }
-            } // 其他物品类型处理...
+                self.use_potion(&potion.kind)?;
+            }
             ItemKind::Weapon(weapon) => {
-                self.notify(format!("装备了 {}", weapon.name));
-                // 武器装备逻辑...
+                self.equip_weapon(weapon)?;
             }
             ItemKind::Armor(armor) => {
-                self.notify(format!("穿上了 {}", armor.name));
-                // 护甲装备逻辑...
+                self.equip_armor(armor)?;
             }
             ItemKind::Scroll(scroll) => {
-                self.notify(format!("使用了 {} 卷轴", scroll.name));
-                // 卷轴使用逻辑...
+                self.use_scroll(scroll)?;
             }
-            _ => todo!(),
+            ItemKind::Ring(ring) => {
+                self.equip_ring(ring)?;
+            }
+            _ => return Err(anyhow::anyhow!("无法使用此类型物品")),
         }
 
-        // 消耗品移除逻辑保持不变
+        // 如果是消耗品则移除
         if item.is_consumable() {
             self.inventory.remove(item_index);
         }
@@ -204,25 +191,36 @@ impl Hero {
         Ok(())
     }
 
-    /// 鉴定物品（保持原有参数不变）
+    /// 鉴定物品（支持多种可鉴定物品）
     pub fn identify_item(&mut self, item_index: usize) -> anyhow::Result<()> {
-        let potion_kind = {
-            let item = self
-                .inventory
-                .get_mut(item_index)
-                .ok_or_else(|| anyhow::anyhow!("物品不存在"))?;
+        let item = self
+            .inventory
+            .get_mut(item_index)
+            .ok_or_else(|| anyhow::anyhow!("物品槽位 {} 为空", item_index))?;
 
-            match &mut item.kind {
-                ItemKind::Potion(potion) => {
-                    potion.identified = true;
-                    potion.kind.clone() // 先获取值再通知
-                }
-                _ => return Err(anyhow::anyhow!("非药水物品")),
+        // 获取鉴定前的名称（用于通知）
+        let prev_name = item.name();
+
+        match &mut item.kind {
+            ItemKind::Potion(potion) => {
+                potion.identified = true;
+                self.notify(format!("鉴定出药水: {}", potion.kind.name()));
             }
-        };
+            ItemKind::Scroll(scroll) => {
+                scroll.identified = true;
+                self.notify(format!("鉴定出卷轴: {}", scroll.kind.name()));
+            }
+            ItemKind::Weapon(weapon) => {
+                weapon.identified = true;
+                self.notify(format!("鉴定出武器: {}", weapon.name));
+            }
+            ItemKind::Armor(armor) => {
+                armor.identified = true;
+                self.notify(format!("鉴定出护甲: {}", armor.name()));
+            }
+            _ => return Err(anyhow::anyhow!("该物品不需要鉴定")),
+        }
 
-        // 分离通知逻辑
-        self.notify(format!("鉴定出药水: {:?}", potion_kind));
         Ok(())
     }
 
