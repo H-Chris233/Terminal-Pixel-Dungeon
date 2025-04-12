@@ -1,135 +1,155 @@
-//src/hero/bag/inventory.rs
+// src/hero/src/bag/inventory.rs
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::cmp::Ordering;
 use thiserror::Error;
+
+use items::ItemTrait;
 
 /// 库存系统错误类型
 #[derive(Debug, Error, PartialEq)]
 pub enum InventoryError {
     #[error("背包已满")]
     Full,
-    #[error("物品堆叠已达上限")]
-    StackLimit,
     #[error("物品不可堆叠")]
     NotStackable,
     #[error("未知物品类型")]
     UnknownItemType,
+    #[error("无效索引")]
+    InvalidIndex,
 }
 
-/// 物品特性约束（根据游戏机制扩展）
-pub trait ItemTrait: Eq + std::hash::Hash + Clone + Serialize {
-    /// 是否可堆叠（药水/卷轴可堆叠，武器不可）
-    fn is_stackable(&self) -> bool;
-
-    /// 最大堆叠数量（默认10，参考游戏设定）
-    fn max_stack(&self) -> u32 {
-        20
-    }
-
-    /// 终端显示名称（用于TUI渲染）
-    fn display_name(&self) -> &'static str;
-
-    /// 物品分类（用于自动整理）
-    fn category(&self) -> ItemCategory;
-}
-
-/// 物品分类（影响背包整理逻辑）
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum ItemCategory {
-    Weapon,
-    Armor,
-    Potion,
-    Scroll,
-    Food,
-    Ring,
-    // ...其他分类
-}
-
-/// 通用库存系统（严格遵循游戏机制）
+/// 通用库存系统（优化实现）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Inventory<T: ItemTrait> {
-    slots: HashMap<T, u32>, // 物品->数量映射
-    capacity: usize,        // 最大槽位数
-    total_items: usize,     // 当前物品总数（含堆叠）
+    slots: Vec<InventorySlot<T>>, // 使用独立槽位设计
+    capacity: usize,
+}
+
+/// 库存槽位（支持单物品或多数量）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+enum InventorySlot<T: ItemTrait> {
+    Single(T),         // 不可堆叠物品
+    Stackable(T, u32), // 可堆叠物品（类型+数量）
 }
 
 impl<T: ItemTrait> Inventory<T> {
-    /// 创建新库存（参考游戏初始背包容量）
+    /// 创建新库存
     pub fn new(capacity: usize) -> Self {
         Self {
-            slots: HashMap::with_capacity(capacity),
+            slots: Vec::with_capacity(capacity),
             capacity,
-            total_items: 0,
         }
     }
 
-    /// 添加物品（智能堆叠处理）
+    /// 添加物品（自动处理堆叠逻辑）
     pub fn add(&mut self, item: T) -> Result<(), InventoryError> {
-        // 检查基础容量
-        if self.slots.len() >= self.capacity && !self.slots.contains_key(&item) {
+        if self.slots.len() >= self.capacity {
             return Err(InventoryError::Full);
         }
 
-        // 处理堆叠逻辑
-        if let Some(count) = self.slots.get_mut(&item) {
-            if !item.is_stackable() {
-                return Err(InventoryError::NotStackable);
+        if item.is_stackable() {
+            // 尝试合并到现有堆叠
+            for slot in &mut self.slots {
+                if let InventorySlot::Stackable(existing, count) = slot {
+                    if existing == &item {
+                        *count += 1;
+                        return Ok(());
+                    }
+                }
             }
-            if *count >= item.max_stack() {
-                return Err(InventoryError::StackLimit);
-            }
-            *count += 1;
+            // 新建堆叠
+            self.slots.push(InventorySlot::Stackable(item, 1));
         } else {
-            self.slots.insert(item.clone(), 1);
+            // 添加单物品
+            self.slots.push(InventorySlot::Single(item));
         }
-
-        self.total_items += 1;
         Ok(())
     }
 
-    /// 移除物品（保持游戏内物品消失效果）
-    pub fn remove(&mut self, item: &T) -> Result<(), InventoryError> {
-        match self.slots.get_mut(item) {
-            Some(count) => {
-                *count -= 1;
-                if *count == 0 {
-                    self.slots.remove(item);
-                }
-                self.total_items -= 1;
-                Ok(())
+    /// 添加并排序物品
+    pub fn add_sorted<F>(&mut self, item: T, compare: F) -> Result<(), InventoryError>
+    where
+        F: FnMut(&T, &T) -> Ordering,
+    {
+        self.add(item)?;
+        self.sort_by(compare);
+        Ok(())
+    }
+
+    /// 移除物品（按索引）
+    pub fn remove(&mut self, index: usize) -> Result<T, InventoryError> {
+        if index >= self.slots.len() {
+            return Err(InventoryError::InvalidIndex);
+        }
+
+        match self.slots.remove(index) {
+            InventorySlot::Single(item) => Ok(item),
+            InventorySlot::Stackable(item, 1) => Ok(item),
+            InventorySlot::Stackable(item, count) => {
+                self.slots
+                    .insert(index, InventorySlot::Stackable(item.clone(), count - 1));
+                Ok(item)
             }
-            None => Err(InventoryError::UnknownItemType),
         }
     }
 
-    /// 获取物品数量（用于TUI状态栏显示）
-    pub fn count(&self, item: &T) -> u32 {
-        self.slots.get(item).copied().unwrap_or(0)
-    }
-
-    /// 背包整理（按游戏内分类排序）
+    /// 整理背包（按分类和排序值）
     pub fn organize(&mut self) {
-        let mut items: Vec<_> = self.slots.drain().collect();
-        items.sort_by(|(a, _), (b, _)| {
-            a.category()
+        self.slots.sort_by(|a, b| match (a, b) {
+            (InventorySlot::Single(a), InventorySlot::Single(b))
+            | (InventorySlot::Stackable(a, _), InventorySlot::Stackable(b, _)) => a
+                .category()
                 .cmp(&b.category())
-                .then_with(|| a.display_name().cmp(b.display_name()))
+                .then_with(|| b.sort_value().cmp(&a.sort_value())),
+            _ => Ordering::Equal,
         });
-        self.slots = items.into_iter().collect();
     }
 
-    /// 终端渲染格式（支持颜色代码）
-    pub fn render(&self) -> Vec<String> {
+    /// 自定义排序
+    pub fn sort_by<F>(&mut self, mut compare: F)
+    where
+        F: FnMut(&T, &T) -> Ordering,
+    {
+        self.slots.sort_by(|a, b| match (a, b) {
+            (InventorySlot::Single(a), InventorySlot::Single(b))
+            | (InventorySlot::Stackable(a, _), InventorySlot::Stackable(b, _)) => compare(a, b),
+            _ => Ordering::Equal,
+        });
+    }
+
+    /// 查找物品索引
+    pub fn find<P>(&self, predicate: P) -> Option<usize>
+    where
+        P: Fn(&T) -> bool,
+    {
+        self.slots.iter().position(|slot| match slot {
+            InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => predicate(item),
+        })
+    }
+
+    /// 获取所有物品（用于UI渲染）
+    pub fn items(&self) -> Vec<(&T, u32)> {
         self.slots
             .iter()
-            .map(|(item, count)| {
-                format!(
-                    "[{}] {} x{}",
-                    item.category().symbol(), // 分类符号
-                    item.display_name(),
-                    count
-                )
+            .map(|slot| match slot {
+                InventorySlot::Single(item) => (item, 1),
+                InventorySlot::Stackable(item, count) => (item, *count),
             })
             .collect()
+    }
+
+    /// 当前物品数量
+    pub fn len(&self) -> usize {
+        self.slots.len()
+    }
+
+    /// 检查是否为空
+    pub fn is_empty(&self) -> bool {
+        self.slots.is_empty()
+    }
+
+    /// 获取容量
+    pub fn capacity(&self) -> usize {
+        self.capacity
     }
 }

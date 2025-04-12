@@ -1,3 +1,6 @@
+//src/ui/src/lib.rs
+#![allow(dead_code)]
+#![allow(unused)]
 
 pub mod input;
 pub mod render;
