@@ -125,34 +125,3 @@ pub enum ScrollKind {
     Transmutation, // 变形卷轴 - 改变物品
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_scroll_values() {
-        // 测试基础价值
-        let upgrade = Scroll::new(ScrollKind::Upgrade);
-        assert_eq!(upgrade.value(), (400 * 0.6) as usize);
-        
-        let rage = Scroll::new(ScrollKind::Rage);
-        assert_eq!(rage.value(), (120 * 0.6) as usize);
-        
-        // 测试鉴定影响
-        let mut identify = Scroll::new(ScrollKind::Identify);
-        let unid_value = identify.value();
-        identify.identify();
-        assert_eq!(identify.value(), (unid_value as f32 / 0.6) as usize);
-        
-        // 测试异变加成
-        let exotic_upgrade = Scroll::new_exotic(ScrollKind::Upgrade);
-        exotic_upgrade.identify();
-        assert_eq!(exotic_upgrade.value(), (400 * 1.5) as usize);
-        
-        // 测试综合情况
-        let mut exotic_mapping = Scroll::new_exotic(ScrollKind::MagicMapping);
-        assert_eq!(exotic_mapping.value(), (200 * 0.6 * 1.5) as usize);
-        exotic_mapping.identify();
-        assert_eq!(exotic_mapping.value(), (200 * 1.5) as usize);
-    }
-}

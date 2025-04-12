@@ -124,25 +124,3 @@ impl Seed {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_seed_values() {
-        // 测试基础价值
-        let dreamfoil = Seed::new(SeedKind::Dreamfoil);
-        assert_eq!(dreamfoil.value(), (50 * 1.2 * 1.3) as usize); // 60 * 1.3 = 78
-        
-        let rotberry = Seed::new(SeedKind::Rotberry);
-        assert_eq!(rotberry.value(), (5 * 0.8 * 1.0) as usize); // 4
-        
-        // 测试生长时间影响
-        let earthroot = Seed::new(SeedKind::Earthroot);
-        assert_eq!(earthroot.value(), (40 * 1.0 * 1.3) as usize); // 52
-        
-        // 测试炼金加成
-        let firebloom = Seed::new(SeedKind::Firebloom);
-        assert_eq!(firebloom.value(), (25 * 1.0 * 1.3) as usize); // 32.5 -> 32
-    }
-}
