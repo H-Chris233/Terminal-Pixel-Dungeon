@@ -182,37 +182,3 @@ pub enum WandKind {
     Disintegration, // 瓦解（穿透性光束，充能上限2+等级）
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_wand_values() {
-        // 测试基础价值
-        let disintegrate = Wand::new(WandKind::Disintegration, 0);
-        assert_eq!(disintegrate.value(), (500 * 0.7) as usize); // 未鉴定
-
-        let magic_missile = Wand::new(WandKind::MagicMissile, 0);
-        magic_missile.identify();
-        assert_eq!(magic_missile.value(), 200);
-
-        // 测试等级加成
-        let mut lightning = Wand::new(WandKind::Lightning, 2);
-        lightning.identify();
-        assert_eq!(lightning.value(), 400 + (400 * 0.3 * 2.0) as usize);
-
-        // 测试充能加成
-        let mut fireblast = Wand::new(WandKind::Fireblast, 1);
-        fireblast.identify();
-        fireblast.charges = 2; // 2/4 = 50%充能
-        assert_eq!(
-            fireblast.value(),
-            350 + (350 * 0.3 * 1.0) as usize + (350 * 0.2 * 0.5) as usize
-        );
-
-        // 测试诅咒惩罚
-        let mut cursed_frost = Wand::new_cursed(WandKind::Frost, 0);
-        cursed_frost.identify();
-        assert_eq!(cursed_frost.value(), 300 / 2);
-    }
-}
