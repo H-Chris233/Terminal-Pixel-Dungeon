@@ -1,3 +1,4 @@
+//src/items/src/ring.rs
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
@@ -47,6 +48,33 @@ impl Ring {
             RingKind::Energy => 800,         // 能量之戒
             RingKind::Force => 700,          // 力量之戒
             RingKind::Furor => 600,          // 狂怒之戒
+        }
+    }
+    
+    /// 随机生成新戒指（5%概率为诅咒戒指）
+    pub fn random_new() -> Self {
+        use rand::Rng;
+        let mut rng = rand::rng();
+        
+        let kinds = [
+            RingKind::Accuracy,
+            RingKind::Elements,
+            RingKind::Energy,
+            RingKind::Evasion,
+            RingKind::Force,
+            RingKind::Furor,
+            RingKind::Haste,
+            RingKind::Might,
+            RingKind::Sharpshooting,
+            RingKind::Wealth,
+        ];
+        let kind = kinds[rng.random_range(0..kinds.len())].clone();
+        let level = rng.random_range(0..=3);
+        
+        if rng.random_bool(0.05) {
+            Ring::new_cursed(kind, level)
+        } else {
+            Ring::new(kind, level)
         }
     }
 
@@ -130,7 +158,7 @@ impl Ring {
 }
 
 /// 戒指类型枚举
-#[derive(Eq, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Copy, Eq, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub enum RingKind {
     Accuracy,      // 提升命中率
     Elements,      // 元素抗性
@@ -160,5 +188,23 @@ impl RingKind {
             RingKind::Might => 0.7,
             _ => 1.0,
         }
+    }
+}
+
+impl Default for Ring {
+    fn default() -> Self {
+        Ring {
+            kind: RingKind::Accuracy,  // 默认选择精准之戒（基础类型）
+            level: 0,                 // 默认等级0
+            cursed: false,            // 默认未诅咒
+            identified: false,        // 默认未鉴定
+            base_value: 1000,         // 精准之戒的基础价值
+        }
+    }
+}
+
+impl Default for RingKind {
+    fn default() -> Self {
+        RingKind::Accuracy  // 默认精准之戒类型
     }
 }

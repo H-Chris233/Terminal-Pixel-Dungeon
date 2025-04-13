@@ -1,3 +1,4 @@
+//src/items/src/food.rs
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -14,7 +15,7 @@ pub struct Food {
 }
 
 /// 食物类型（3种基础类型+特殊类型）
-#[derive(Eq, Hash, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Copy, Eq, Hash, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub enum FoodKind {
     Ration,          // 干粮 - 标准食物
     Pasty,           // 肉馅饼（可分割）
@@ -50,6 +51,36 @@ impl Food {
             FoodKind::MysteryMeat => "生肉".to_string(),
             FoodKind::FrozenCarpaccio => "冰冻肉片".to_string(),
         }
+    }
+    
+    /// 随机生成新食物
+    pub fn random_new() -> Self {
+        use rand::Rng;
+        let mut rng = rand::rng();
+        
+        let kinds = [
+            FoodKind::Ration,
+            FoodKind::Pasty,
+            FoodKind::MysteryMeat,
+            FoodKind::FrozenCarpaccio,
+        ];
+        let kind = kinds[rng.random_range(0..kinds.len())];
+        
+        let mut food = Food::new(kind);
+        
+        // 如果是神秘肉，有30%概率已烹饪
+        if let FoodKind::MysteryMeat = kind {
+            if rng.random_bool(0.3) {
+                food.cook();
+            }
+        }
+        
+        // 10%概率被污染
+        if rng.random_bool(0.1) {
+            food.contaminated = true;
+        }
+        
+        food
     }
 
     /// 计算食物基础价值（考虑类型、状态和数量）
@@ -175,6 +206,19 @@ impl fmt::Display for Food {
         write!(f, "{}{}", name, quantity)
     }
 }
+
+impl Default for Food {
+    fn default() -> Self {
+        Food {
+            kind: FoodKind::Ration,  // 默认类型：干粮
+            energy: 350,             // 标准饱食度
+            quantity: 1,             // 单个物品
+            cooked: false,           // 未烹饪（对干粮无意义）
+            contaminated: false,     // 未污染
+        }
+    }
+}
+
 
 #[cfg(test)]
 mod tests {

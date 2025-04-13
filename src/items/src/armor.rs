@@ -1,3 +1,4 @@
+//src/items/src/armor.rs
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -48,6 +49,40 @@ impl Armor {
             str_requirement,
             base_value, // 初始化基础价值
         }
+    }
+    
+    /// 随机生成新护甲（随机品阶、刻印和诅咒状态）
+    pub fn random_new() -> Self {
+        use rand::Rng;
+        let mut rng = rand::rng();
+        
+        let tier = rng.random_range(1..=5);
+        let mut armor = Armor::new(tier);
+        
+        // 20%概率有刻印
+        if rng.random_bool(0.2) {
+            let glyphs = [
+                ArmorGlyph::Affection,
+                ArmorGlyph::AntiEntropy,
+                ArmorGlyph::Brimstone,
+                ArmorGlyph::Camouflage,
+                ArmorGlyph::Flow,
+                ArmorGlyph::Obfuscation,
+                ArmorGlyph::Potential,
+                ArmorGlyph::Repulsion,
+                ArmorGlyph::Stone,
+                ArmorGlyph::Thorns,
+            ];
+            let glyph = glyphs[rng.random_range(0..glyphs.len())].clone();
+            armor.inscribe(glyph);
+        }
+        
+        // 10%概率被诅咒
+        if rng.random_bool(0.1) {
+            armor.curse();
+        }
+        
+        armor
     }
 
     /// 获取基础价值（根据品阶）
@@ -242,5 +277,21 @@ impl fmt::Display for ArmorGlyph {
             ArmorGlyph::Thorns => "荆棘",
         };
         write!(f, "{}", name)
+    }
+}
+
+
+impl Default for Armor {
+    fn default() -> Self {
+        Armor {
+            tier: 1,                // Default to lowest tier
+            defense: Self::base_defense(1),
+            upgrade_level: 0,
+            glyph: None,
+            cursed: false,
+            cursed_known: false,
+            str_requirement: Self::base_str_requirement(1),
+            base_value: Self::base_value(1),
+        }
     }
 }

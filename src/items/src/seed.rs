@@ -1,3 +1,4 @@
+//src/items/src/seed.rs
 use crate::potion::PotionKind;
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
@@ -9,7 +10,7 @@ pub struct Seed {
     pub turns_to_grow: u8, // 生长所需回合数
 }
 
-#[derive(Eq, Hash, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Copy, Eq, Hash, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub enum SeedKind {
     Earthroot,  // 地根草（护盾）
     Fadeleaf,   // 消隐叶（传送）
@@ -38,6 +39,26 @@ impl Seed {
             kind,
             turns_to_grow,
         }
+    }
+    
+    /// 随机生成新种子
+    pub fn random_new() -> Self {
+        use rand::Rng;
+        let mut rng = rand::rng();
+        
+        let kinds = [
+            SeedKind::Earthroot,
+            SeedKind::Fadeleaf,
+            SeedKind::Firebloom,
+            SeedKind::Icecap,
+            SeedKind::Sorrowmoss,
+            SeedKind::Dreamfoil,
+            SeedKind::Stormvine,
+            SeedKind::Rotberry,
+        ];
+        let kind = kinds[rng.random_range(0..kinds.len())];
+        
+        Seed::new(kind)
     }
 
     /// 获取种子名称（用于UI显示）
@@ -124,3 +145,17 @@ impl Seed {
     }
 }
 
+impl Default for Seed {
+    fn default() -> Self {
+        Seed {
+            kind: SeedKind::Earthroot,  // 默认选择地根草（基础类型）
+            turns_to_grow: 10,         // 标准生长时间
+        }
+    }
+}
+
+impl Default for SeedKind {
+    fn default() -> Self {
+        SeedKind::Earthroot  // 默认地根草类型
+    }
+}

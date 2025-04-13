@@ -38,6 +38,13 @@ pub enum EnemyKind {
     Golem,
 }
 
+// 为 EnemyKind 实现 Default
+impl Default for EnemyKind {
+    fn default() -> Self {
+        EnemyKind::Rat // 或其他合理的默认值
+    }
+}
+
 /// 敌人当前状态
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize, PartialEq)]
 pub enum EnemyState {

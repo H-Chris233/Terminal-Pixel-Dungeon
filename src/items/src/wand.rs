@@ -1,3 +1,4 @@
+//src/items/src/wand.rs
 //! 法杖系统模块
 //!
 //! 实现了破碎的像素地牢中的8种法杖逻辑
@@ -39,6 +40,31 @@ impl Wand {
             max_charges,
             cursed: false,
             identified: false,
+        }
+    }
+    
+    /// 随机生成新法杖（5%概率为诅咒法杖）
+    pub fn random_new() -> Self {
+        use rand::Rng;
+        let mut rng = rand::rng();
+        
+        let kinds = [
+            WandKind::MagicMissile,
+            WandKind::Fireblast,
+            WandKind::Frost,
+            WandKind::Lightning,
+            WandKind::Corruption,
+            WandKind::LivingEarth,
+            WandKind::Regrowth,
+            WandKind::Disintegration,
+        ];
+        let kind = kinds[rng.random_range(0..kinds.len())];
+        let level = rng.random_range(0..=2);
+        
+        if rng.random_bool(0.05) {
+            Wand::new_cursed(kind, level)
+        } else {
+            Wand::new(kind, level)
         }
     }
 
@@ -170,7 +196,7 @@ impl Wand {
 }
 
 /// 法杖种类枚举（8种）
-#[derive(PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Copy, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub enum WandKind {
     MagicMissile,   // 魔法飞弹（基础法杖）
     Fireblast,      // 火焰冲击（范围伤害）
@@ -182,3 +208,21 @@ pub enum WandKind {
     Disintegration, // 瓦解（穿透性光束，充能上限2+等级）
 }
 
+impl Default for Wand {
+    fn default() -> Self {
+        Wand {
+            kind: WandKind::MagicMissile,  // 默认选择魔法飞弹法杖（基础类型）
+            level: 0,                     // 默认等级0
+            charges: 3,                   // 基础充能3
+            max_charges: 3,               // 最大充能3
+            cursed: false,                // 默认未诅咒
+            identified: false,            // 默认未鉴定
+        }
+    }
+}
+
+impl Default for WandKind {
+    fn default() -> Self {
+        WandKind::MagicMissile  // 默认魔法飞弹法杖类型
+    }
+}
