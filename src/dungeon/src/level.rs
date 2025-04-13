@@ -203,85 +203,55 @@ impl Level {
     
     /// 放置敌人和物品
     fn place_entities(rng: &mut impl Rng, rooms: &[Room]) -> (Vec<Enemy>, Vec<Item>) {
-        let mut enemies = Vec::new();
-        let mut items = Vec::new();
-        
-        // 跳过第一个房间(玩家出生点)
-        for (i, room) in rooms.iter().enumerate().skip(1) {
-            // 放置1-3个敌人
-            let enemy_count = rng.random_range(1..=3);
-            for _ in 0..enemy_count {
-                let (x, y) = room.random_point(rng);
-                
-                // 根据深度决定敌人类型
-                let kind = match i {
-                    0..=2 => EnemyKind::Rat,
-                    3..=5 => EnemyKind::Snake,
-                    6..=8 => EnemyKind::Gnoll,
-                    _ => EnemyKind::default(),
-                };
-                
-                enemies.push(Enemy::new(kind, x, y));
-            }
+    let mut enemies = Vec::new();
+    let mut items = Vec::new();
+    
+    // 跳过第一个房间(玩家出生点)
+    for (i, room) in rooms.iter().enumerate().skip(1) {
+        // 放置1-3个敌人
+        let enemy_count = rng.random_range(1..=3);
+        for _ in 0..enemy_count {
+            let (x, y) = room.random_point(rng);
             
-            // 50%几率放置物品
-            if rng.random_bool(0.1) {
-                let (x, y) = room.random_point(rng);
-                
-                // 创建物品实例
-                let item = match rng.random_range(0..10) {
-                    0 => Item::new(
-                        ItemKind::Weapon(Weapon::new("短剑", "一把普通的短剑", 1, 6)),
-                        "一把锋利的短剑"
-                    ),
-                    1 => Item::new(
-                        ItemKind::Armor(Armor::new("皮甲", "一件轻便的皮甲", 2)),
-                        "提供基本防护的皮甲"
-                    ),
-                    2 => Item::new(
-                        ItemKind::Potion(Potion::new("治疗药水", "恢复生命值")),
-                        "红色发光的液体"
-                    ),
-                    3 => Item::new(
-                        ItemKind::Scroll(Scroll::new("鉴定卷轴", "鉴定物品")),
-                        "写满神秘符号的羊皮纸"
-                    ),
-                    4 => Item::new(
-                        ItemKind::Food(Food::new("口粮", "恢复饱食度", 100)),
-                        "干燥但能填饱肚子"
-                    ),
-                    5 => Item::new(
-                        ItemKind::Wand(Wand::new("火焰魔杖", "发射火球", 10)),
-                        "杖头微微发烫"
-                    ),
-                    6 => Item::new(
-                        ItemKind::Ring(Ring::new("力量戒指", "增加力量", 1)),
-                        "镶嵌着小宝石"
-                    ),
-                    7 => Item::new(
-                        ItemKind::Seed(Seed::new("火焰草种子", "种植火焰草")),
-                        "微微发热的种子"
-                    ),
-                    8 => Item::new(
-                        ItemKind::Stone(Stone::new("传送石", "随机传送")),
-                        "表面有漩涡状纹路"
-                    ),
-                    _ => Item::new(
-                        ItemKind::Misc(MiscItem::new("金币", "货币")),
-                        "闪闪发光的金币"
-                    ),
-                };
-                
-                // 设置物品位置
-                let mut item = item;
-                item.x = x;
-                item.y = y;
-                items.push(item);
-            }
+            // 根据深度决定敌人类型
+            let kind = match i {
+                0..=2 => EnemyKind::Rat,
+                3..=5 => EnemyKind::Snake,
+                6..=8 => EnemyKind::Gnoll,
+                _ => EnemyKind::default(),
+            };
+            
+            enemies.push(Enemy::new(kind, x, y));
         }
         
-        (enemies, items)
+        // 10%几率放置物品
+        if rng.random_bool(0.1) {
+            let (x, y) = room.random_point(rng);
+            
+            // 创建随机物品
+            let item = match rng.random_range(0..10) {
+                0 => Item::new(ItemKind::Weapon(Weapon::random_new())),
+                1 => Item::new(ItemKind::Armor(Armor::random_new())),
+                2 => Item::new(ItemKind::Potion(Potion::random_new())),
+                3 => Item::new(ItemKind::Scroll(Scroll::random_new())),
+                4 => Item::new(ItemKind::Food(Food::random_new())),
+                5 => Item::new(ItemKind::Wand(Wand::random_new())),
+                6 => Item::new(ItemKind::Ring(Ring::random_new())),
+                7 => Item::new(ItemKind::Seed(Seed::random_new())),
+                8 => Item::new(ItemKind::Stone(Stone::random_new())),
+                _ => Item::new(ItemKind::Misc(MiscItem::random_new())),
+            };
+            
+            // 设置物品位置
+            let mut item = item;
+            item.x = x;
+            item.y = y;
+            items.push(item);
+        }
     }
+    
+    (enemies, items)
+}
 
     /// 获取指定位置的瓦片(可变引用)
     pub fn get_tile_mut(&mut self, x: i32, y: i32) -> Option<&mut Tile> {

@@ -66,7 +66,7 @@ pub enum ItemKind {
 }
 
 impl Item {
-    pub fn new(kind: ItemKind, description: &str) -> Self {
+    pub fn new(kind: ItemKind) -> Self {
         let name = match &kind {
             ItemKind::Weapon(w) => w.name.clone(),
             ItemKind::Armor(a) => a.name().clone(),
@@ -83,7 +83,7 @@ impl Item {
         Self {
             kind,
             name,
-            description: description.to_string(),
+            description: "...".to_string(),
             quantity: 1,
             x: -1,
             y: -1,
