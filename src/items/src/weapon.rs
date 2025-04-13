@@ -1,3 +1,4 @@
+//src/items/src/weapon.rs
 use crate::weapon::kind::*;
 use bincode::{Decode, Encode};
 use rand::Rng;
@@ -74,6 +75,46 @@ impl Weapon {
             kind,
             base_value: Self::base_value_for_tier(tier), // 根据品阶设置基础价值
         }
+    }
+    
+    /// 随机生成新武器（5%概率为诅咒武器）
+    pub fn random_new() -> Self {
+        use rand::Rng;
+        let mut rng = rand::rng();
+        
+        let tier = rng.random_range(1..=5);
+        let kinds = [
+            WeaponKind::Sword,
+            WeaponKind::Dagger,
+            WeaponKind::Greataxe,
+            WeaponKind::Spear,
+            WeaponKind::Mace,
+            WeaponKind::Whip,
+        ];
+        let kind = kinds[rng.random_range(0..kinds.len())];
+        
+        let mut weapon = Weapon::new(tier, kind);
+        
+        // 10%概率有附魔
+        if rng.random_bool(0.1) {
+            weapon.add_random_enhancement();
+        }
+        
+        // 随机改造方向
+        let mods = [
+            WeaponMod::Damage,
+            WeaponMod::Speed,
+            WeaponMod::Accuracy,
+            WeaponMod::Balanced,
+        ];
+        weapon.modifier = mods[rng.random_range(0..mods.len())].clone();
+        
+        // 5%概率被诅咒
+        if rng.random_bool(0.05) {
+            weapon.cursed = true;
+        }
+        
+        weapon
     }
 
     /// 根据品阶获取基础价值
@@ -200,7 +241,7 @@ impl Weapon {
 }
 
 /// 武器类型枚举（还原Shattered PD的武器分类）
-#[derive(PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Copy, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub enum WeaponKind {
     Sword,    // 剑类：平衡型
     Dagger,   // 匕首：高速低伤（+25%攻速）
@@ -256,5 +297,36 @@ impl fmt::Display for Tier {
                 Tier::Five => "V",
             }
         )
+    }
+}
+
+impl Default for Weapon {
+    fn default() -> Self {
+        Weapon {
+            name: "短剑".to_string(),
+            tier: Tier::One,              // 一阶武器
+            damage: (1, 6),              // 基础伤害1-6
+            hit_chance: 0.8,             // 80%命中率
+            str_requirement: 10,         // 力量需求10
+            enchanted: None,             // 默认无附魔
+            modifier: WeaponMod::Balanced, // 平衡改造
+            upgrade_level: 0,            // 未强化
+            cursed: false,               // 未诅咒
+            identified: false,           // 未鉴定
+            kind: WeaponKind::Sword,     // 剑类武器
+            base_value: 300,             // 一阶武器基础价值
+        }
+    }
+}
+
+impl Default for WeaponKind {
+    fn default() -> Self {
+        WeaponKind::Sword  // 默认剑类武器
+    }
+}
+
+impl Default for Tier {
+    fn default() -> Self {
+        Tier::One  // 默认一阶
     }
 }

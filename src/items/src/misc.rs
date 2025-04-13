@@ -1,10 +1,9 @@
-// src/items/misc/misc.rs
-
+//src/items/src/misc.rs
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 /// 杂项物品类型，参考破碎的像素地牢游戏逻辑
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Encode, Decode)]
+#[derive(Copy, Debug, Clone, PartialEq, Serialize, Deserialize, Encode, Decode)]
 pub enum MiscKind {
     /// 金币 - 游戏中的通用货币
     Gold(usize),
@@ -17,7 +16,7 @@ pub enum MiscKind {
     /// 火把
     Torch,
     /// 其他未分类物品
-    Other(String),
+    Other,
 }
 
 /// 杂项物品结构体
@@ -40,7 +39,7 @@ impl MiscItem {
             MiscKind::Bomb => 100,
             MiscKind::Honeypot => 60,
             MiscKind::Torch => 50,
-            MiscKind::Other(_) => 10,
+            MiscKind::Other => 10,
         };
 
         MiscItem {
@@ -48,6 +47,36 @@ impl MiscItem {
             quantity: 1,
             price,
         }
+    }
+    
+    /// 随机生成新杂项物品
+    pub fn random_new() -> Self {
+        use rand::Rng;
+        let mut rng = rand::rng();
+        
+        let kinds = [
+            MiscKind::Key,
+            MiscKind::Bomb,
+            MiscKind::Honeypot,
+            MiscKind::Torch,
+            MiscKind::Other,
+        ];
+        let kind = kinds[rng.random_range(0..kinds.len())].clone();
+        
+        let mut item = MiscItem::new(kind);
+        
+        // 如果是金币，随机生成数量
+        if let MiscKind::Gold(_) = item.kind {
+            let amount = rng.random_range(1..=100);
+            item.kind = MiscKind::Gold(amount);
+        }
+        
+        // 可堆叠物品随机数量
+        if matches!(item.kind, MiscKind::Bomb | MiscKind::Honeypot | MiscKind::Torch) {
+            item.quantity = rng.random_range(1..=3);
+        }
+        
+        item
     }
 
     pub fn value(&self) -> usize {
@@ -76,7 +105,7 @@ impl MiscItem {
             MiscKind::Bomb => "炸弹",
             MiscKind::Torch => "火把",
             MiscKind::Honeypot => "蜂巢罐",
-            MiscKind::Other(ref name) => name.as_str(),
+            MiscKind::Other => "神秘碎片",
         }
     }
 
@@ -88,5 +117,15 @@ impl MiscItem {
         }
 
         name
+    }
+}
+
+impl Default for MiscItem {
+    fn default() -> Self {
+        MiscItem {
+            kind: MiscKind::Gold(1),  // 默认类型：1金币（最小单位）
+            quantity: 1,             // 单个物品
+            price: 1,                // 1金币价值为1
+        }
     }
 }

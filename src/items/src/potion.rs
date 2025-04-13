@@ -1,3 +1,4 @@
+//src/items/src/potion.rs
 use bincode::{Decode, Encode};
 use rand::prelude::IndexedRandom;
 use rand::seq::SliceRandom;
@@ -17,7 +18,7 @@ pub struct Potion {
 
 impl Potion {
     /// 创建一个新的未鉴定的随机药水
-    pub fn new_random() -> Self {
+    pub fn random_new() -> Self {
         let mut rng = rand::rng();
 
         // 随机分配药水类型和颜色（确保不重复）
@@ -257,5 +258,21 @@ impl fmt::Display for Potion {
 impl fmt::Display for PotionKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.name())
+    }
+}
+
+impl Default for Potion {
+    fn default() -> Self {
+        Potion {
+            kind: PotionKind::Healing,  // 默认类型：治疗药水（最基础类型）
+            identified: false,         // 默认未鉴定
+            color: PotionColor::Red,   // 治疗药水的标准颜色
+        }
+    }
+}
+
+impl Default for PotionKind {
+    fn default() -> Self {
+        PotionKind::Healing  // 默认治疗药水类型
     }
 }

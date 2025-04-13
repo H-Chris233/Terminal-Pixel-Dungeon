@@ -1,3 +1,4 @@
+//src/items/src/scroll.rs
 //! 卷轴系统模块
 //!
 //! 实现了破碎的像素地牢(SPD)中的10种卷轴逻辑
@@ -5,6 +6,8 @@
 
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
+use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
 
 /// 卷轴系统（完整10种）
 #[derive(Eq, Hash, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
@@ -33,6 +36,21 @@ impl Scroll {
             kind,
             identified: false,
             exotic: true,
+        }
+    }
+    
+    /// 随机生成新卷轴（10%概率为异变卷轴）
+    pub fn random_new() -> Self {
+        use rand::Rng;
+        let mut rng = rand::rng();
+        
+        let kinds = ScrollKind::iter().collect::<Vec<_>>();
+        let kind = kinds[rng.random_range(0..kinds.len())].clone();
+        
+        if rng.random_bool(0.1) {
+            Scroll::new_exotic(kind)
+        } else {
+            Scroll::new(kind)
         }
     }
     
@@ -111,7 +129,7 @@ impl Scroll {
 }
 
 /// 卷轴种类（对应SPD中的10种卷轴）
-#[derive(Eq, Hash, PartialEq, Debug, Copy, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Eq, Hash, PartialEq, Debug, Copy, Clone, Encode, Decode, Serialize, Deserialize, EnumIter)]
 pub enum ScrollKind {
     Upgrade,       // 强化卷轴 - 强化装备
     RemoveCurse,   // 祛咒卷轴 - 解除装备诅咒
@@ -125,3 +143,18 @@ pub enum ScrollKind {
     Transmutation, // 变形卷轴 - 改变物品
 }
 
+impl Default for Scroll {
+    fn default() -> Self {
+        Scroll {
+            kind: ScrollKind::Identify,  // 默认选择鉴定卷轴（基础类型）
+            identified: false,          // 默认未鉴定
+            exotic: false,              // 默认非异变卷轴
+        }
+    }
+}
+
+impl Default for ScrollKind {
+    fn default() -> Self {
+        ScrollKind::Identify  // 默认鉴定卷轴类型
+    }
+}

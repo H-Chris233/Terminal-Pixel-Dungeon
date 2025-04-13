@@ -1,3 +1,4 @@
+//src/items/src/stone.rs
 //! 魔法石系统模块
 //!
 //! 实现了与卷轴系统对应的10种魔法石
@@ -44,6 +45,28 @@ impl Stone {
             base_value
         }
     }
+    
+    /// 随机生成新魔法石
+    pub fn random_new() -> Self {
+        use rand::Rng;
+        let mut rng = rand::rng();
+        
+        let kinds = [
+            StoneKind::Upgrade,
+            StoneKind::RemoveCurse,
+            StoneKind::Identify,
+            StoneKind::MagicMapping,
+            StoneKind::MirrorImage,
+            StoneKind::Teleportation,
+            StoneKind::Lullaby,
+            StoneKind::Rage,
+            StoneKind::Recharging,
+            StoneKind::Transmutation,
+        ];
+        let kind = kinds[rng.random_range(0..kinds.len())];
+        
+        Stone::new(kind)
+    }
 
     /// 获取魔法石名称
     pub fn name(&self) -> String {
@@ -88,7 +111,7 @@ impl Stone {
 }
 
 /// 魔法石种类枚举（10种对应卷轴）
-#[derive(Eq, Hash, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Copy, Eq, Hash, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub enum StoneKind {
     Upgrade,       // 对应强化卷轴
     RemoveCurse,   // 对应祛咒卷轴
@@ -100,6 +123,21 @@ pub enum StoneKind {
     Rage,          // 对应狂暴卷轴
     Recharging,    // 对应充能卷轴
     Transmutation, // 对应变形卷轴
+}
+
+impl Default for Stone {
+    fn default() -> Self {
+        Stone {
+            kind: StoneKind::Identify,  // 默认选择鉴定之石（基础类型）
+            used: false,               // 默认未使用
+        }
+    }
+}
+
+impl Default for StoneKind {
+    fn default() -> Self {
+        StoneKind::Identify  // 默认鉴定之石类型
+    }
 }
 
 #[cfg(test)]

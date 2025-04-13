@@ -57,8 +57,8 @@ impl Dungeon {
         self.depth > 1 && self.current_level().stair_up == (x, y)
     }
 
-    pub fn remove_item(&mut self, x: i32, y: i32) -> Option<Item> {
-        self.current_level_mut().remove_item(x, y)
+    pub fn take_item(&mut self, x: i32, y: i32) -> Option<Item> {
+        self.current_level_mut().take_item(x, y)
     }
 
     pub fn get_item(&self, x: i32, y: i32) -> Option<Item> {
@@ -78,6 +78,7 @@ impl Dungeon {
                 .map(|t| t.info.terrain_type)
                 .unwrap_or(TerrainType::Wall),
             is_visible: level.visible_tiles.contains(&(x, y)),
+            explored: false,
         }
     }
 
