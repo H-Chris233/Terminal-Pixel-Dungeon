@@ -11,7 +11,7 @@ use std::time::Instant;
 use std::time::SystemTime;
 
 use crate::class::*;
-use combat::Combat;
+use combat::enemy::*;
 use items::{Item, ItemKind};
 
 pub mod bag;
@@ -193,36 +193,36 @@ impl Hero {
 
     /// 鉴定物品（支持多种可鉴定物品）
     pub fn identify_item(&mut self, item_index: usize) -> anyhow::Result<()> {
+    let notification = {
         let item = self
             .inventory
             .get_mut(item_index)
             .ok_or_else(|| anyhow::anyhow!("物品槽位 {} 为空", item_index))?;
 
-        // 获取鉴定前的名称（用于通知）
-        let prev_name = item.name();
-
         match &mut item.kind {
             ItemKind::Potion(potion) => {
                 potion.identified = true;
-                self.notify(format!("鉴定出药水: {}", potion.kind.name()));
+                format!("鉴定出药水: {}", potion.name())
             }
             ItemKind::Scroll(scroll) => {
                 scroll.identified = true;
-                self.notify(format!("鉴定出卷轴: {}", scroll.kind.name()));
+                format!("鉴定出卷轴: {}", scroll.name())
             }
             ItemKind::Weapon(weapon) => {
                 weapon.identified = true;
-                self.notify(format!("鉴定出武器: {}", weapon.name));
+                format!("鉴定出武器: {}", weapon.name)
             }
             ItemKind::Armor(armor) => {
                 armor.identified = true;
-                self.notify(format!("鉴定出护甲: {}", armor.name()));
+                format!("鉴定出护甲: {}", armor.name())
             }
             _ => return Err(anyhow::anyhow!("该物品不需要鉴定")),
         }
+    };
 
-        Ok(())
-    }
+    self.notify(notification);
+    Ok(())
+}
 
     /// 获取经验值（带升级检查）
     pub fn gain_exp(&mut self, exp: i32) {

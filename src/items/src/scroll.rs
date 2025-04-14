@@ -55,7 +55,7 @@ impl Scroll {
     }
     
     /// 计算卷轴价值（考虑类型、鉴定状态和异变状态）
-    pub fn value(&self) -> usize {
+    pub fn value(&self) -> u32 {
         // 基础价值
         let base_value = match self.kind {
             ScrollKind::Upgrade => 400,       // 强化装备最有价值
@@ -72,14 +72,14 @@ impl Scroll {
 
         // 状态修正
         let mut value = if !self.identified {
-            (base_value as f32 * 0.6) as usize  // 未鉴定卷轴价值降低40%
+            (base_value as f32 * 0.6) as u32  // 未鉴定卷轴价值降低40%
         } else {
             base_value
         };
 
         // 异变卷轴加成（价值提升50%）
         if self.exotic {
-            value = (value as f32 * 1.5) as usize;
+            value = (value as f32 * 1.5) as u32;
         }
 
         value

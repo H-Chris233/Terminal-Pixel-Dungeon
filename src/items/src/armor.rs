@@ -1,5 +1,6 @@
 //src/items/src/armor.rs
 use bincode::{Decode, Encode};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use tui::style::Color;
@@ -7,14 +8,15 @@ use tui::style::Color;
 /// 护甲数据（精确还原游戏机制）
 #[derive(PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct Armor {
-    pub tier: usize,               // 品阶1-5
+    pub tier: u32,               // 品阶1-5
     pub defense: i32,              // 基础防御
     pub upgrade_level: u8,         // 强化等级（非负）
     pub glyph: Option<ArmorGlyph>, // 护甲刻印
     pub cursed: bool,              // 是否被诅咒
     pub cursed_known: bool,        // 是否已鉴定出诅咒状态
-    pub str_requirement: i32,      // 力量需求
-    pub base_value: usize,
+    pub str_requirement: u8,      // 力量需求
+    pub base_value: u32,         // 基础价值
+    pub identified: bool,          // 是否已鉴定
 }
 
 /// 护甲刻印类型（全部10种）
@@ -34,10 +36,10 @@ pub enum ArmorGlyph {
 
 impl Armor {
     /// 创建新护甲
-    pub fn new(tier: usize) -> Self {
+    pub fn new(tier: u32) -> Self {
         let defense = Self::base_defense(tier);
         let str_requirement = Self::base_str_requirement(tier);
-        let base_value = Self::base_value(tier); // 新增基础价值计算
+        let base_value = Self::base_value(tier);
 
         Armor {
             tier,
@@ -47,20 +49,24 @@ impl Armor {
             cursed: false,
             cursed_known: false,
             str_requirement,
-            base_value, // 初始化基础价值
+            base_value,
+            identified: false,
         }
+    }
+    
+    pub fn identify(&mut self) {
+        self.identified = true;
+        self.cursed_known = true; // 鉴定同时会揭示诅咒状态
     }
     
     /// 随机生成新护甲（随机品阶、刻印和诅咒状态）
     pub fn random_new() -> Self {
-        use rand::Rng;
         let mut rng = rand::rng();
-        
         let tier = rng.random_range(1..=5);
         let mut armor = Armor::new(tier);
         
-        // 20%概率有刻印
-        if rng.random_bool(0.2) {
+        // 15%概率有刻印（原版概率）
+        if rng.random_bool(0.15) {
             let glyphs = [
                 ArmorGlyph::Affection,
                 ArmorGlyph::AntiEntropy,
@@ -77,8 +83,8 @@ impl Armor {
             armor.inscribe(glyph);
         }
         
-        // 10%概率被诅咒
-        if rng.random_bool(0.1) {
+        // 15%概率被诅咒（原版概率）
+        if rng.random_bool(0.15) {
             armor.curse();
         }
         
@@ -86,34 +92,34 @@ impl Armor {
     }
 
     /// 获取基础价值（根据品阶）
-    fn base_value(tier: usize) -> usize {
+    fn base_value(tier: u32) -> u32 {
         match tier {
-            1 => 150,  // 布甲
-            2 => 300,  // 皮甲
-            3 => 600,  // 锁甲
-            4 => 1200, // 鳞甲
-            5 => 2400, // 板甲
+            1 => 100,  // 布甲
+            2 => 250,  // 皮甲
+            3 => 500,  // 锁甲
+            4 => 1000, // 鳞甲
+            5 => 2000, // 板甲
             _ => 0,
         }
     }
 
     /// 计算护甲完整价值（考虑品阶、等级、刻印和诅咒状态）
-    pub fn value(&self) -> usize {
+    pub fn value(&self) -> u32 {
         let mut value = self.base_value;
 
-        // 等级加成（每级+20%基础价值）
+        // 等级加成（每级+50%基础价值，原版机制）
         if self.upgrade_level > 0 {
-            value += (self.base_value as f32 * 0.2 * self.upgrade_level as f32) as usize;
+            value += (self.base_value as f32 * 0.5 * self.upgrade_level as f32) as u32;
         }
 
         // 刻印加成（不同类型有不同加成）
         if let Some(glyph) = &self.glyph {
             value = match glyph {
-                ArmorGlyph::Thorns => (value as f32 * 1.3) as usize, // 荆棘 +30%
-                ArmorGlyph::Repulsion => (value as f32 * 1.25) as usize, // 排斥 +25%
-                ArmorGlyph::Affection => (value as f32 * 1.2) as usize, // 魅惑 +20%
-                ArmorGlyph::Potential => (value as f32 * 1.15) as usize, // 潜能 +15%
-                _ => (value as f32 * 1.1) as usize,                  // 其他刻印 +10%
+                ArmorGlyph::Thorns => (value as f32 * 1.5) as u32,    // 荆棘 +50%
+                ArmorGlyph::Repulsion => (value as f32 * 1.4) as u32, // 排斥 +40%
+                ArmorGlyph::Affection => (value as f32 * 1.3) as u32, // 魅惑 +30%
+                ArmorGlyph::Potential => (value as f32 * 1.25) as u32,// 潜能 +25%
+                _ => (value as f32 * 1.2) as u32,                     // 其他刻印 +20%
             };
         }
 
@@ -126,7 +132,7 @@ impl Armor {
     }
 
     /// 获取基础防御值（根据游戏平衡数据）
-    fn base_defense(tier: usize) -> i32 {
+    fn base_defense(tier: u32) -> i32 {
         match tier {
             1 => 2,  // 布甲
             2 => 5,  // 皮甲
@@ -137,7 +143,7 @@ impl Armor {
         }
     }
 
-    fn base_str_requirement(tier: usize) -> i32 {
+    fn base_str_requirement(tier: u32) -> u8 {
         match tier {
             1 => 10, // 布甲
             2 => 12, // 皮甲
@@ -162,15 +168,19 @@ impl Armor {
 
     /// 获取完整名称（包含等级和刻印）
     pub fn name(&self) -> String {
-        let level_str = if self.upgrade_level > 0 {
+        let level_str = if self.identified && self.upgrade_level > 0 {
             format!("+{}", self.upgrade_level)
         } else {
             String::new()
         };
 
-        let glyph_str = match &self.glyph {
-            Some(g) => format!(" [{}]", g),
-            None => String::new(),
+        let glyph_str = if self.identified {
+            match &self.glyph {
+                Some(g) => format!(" [{}]", g),
+                None => String::new(),
+            }
+        } else {
+            String::new()
         };
 
         let cursed_str = if self.cursed_known && self.cursed {
@@ -216,7 +226,9 @@ impl Armor {
     /// 升级护甲（参考游戏升级机制）
     pub fn upgrade(&mut self) {
         self.upgrade_level += 1;
-        // 升级不会自动解除诅咒
+        self.cursed = false;
+        self.cursed_known = false;
+        // 升级会自动解除诅咒
     }
 
     /// 添加/改变刻印（不会自动解除诅咒）
@@ -244,6 +256,10 @@ impl Armor {
 
     /// 触发刻印效果（简化版）
     pub fn trigger_glyph(&self) -> Option<GlyphEffect> {
+        if !self.identified {
+            return None;
+        }
+        
         self.glyph.as_ref().map(|glyph| match glyph {
             ArmorGlyph::Thorns => GlyphEffect::ReflectDamage(1 + self.upgrade_level as i32 / 3),
             ArmorGlyph::Repulsion => GlyphEffect::Knockback(2),
@@ -280,11 +296,10 @@ impl fmt::Display for ArmorGlyph {
     }
 }
 
-
 impl Default for Armor {
     fn default() -> Self {
         Armor {
-            tier: 1,                // Default to lowest tier
+            tier: 1,
             defense: Self::base_defense(1),
             upgrade_level: 0,
             glyph: None,
@@ -292,6 +307,63 @@ impl Default for Armor {
             cursed_known: false,
             str_requirement: Self::base_str_requirement(1),
             base_value: Self::base_value(1),
+            identified: false,
         }
+    }
+}
+
+impl fmt::Display for Armor {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // 基础信息
+        let mut info = format!(
+            "{} - 防御: {}",
+            self.name(),
+            self.effective_defense()
+        );
+
+        // 添加力量需求
+        info.push_str(&format!("\n力量需求: {}", self.str_requirement));
+
+        // 添加价值信息
+        info.push_str(&format!("\n价值: {} 金币", self.value()));
+
+        // 添加鉴定状态
+        info.push_str(&format!(
+            "\n鉴定状态: {}",
+            if self.identified { "已鉴定" } else { "未鉴定" }
+        ));
+
+        // 添加诅咒状态（如果已知）
+        if self.cursed_known {
+            info.push_str(&format!(
+                "\n诅咒状态: {}",
+                if self.cursed { "已诅咒" } else { "未诅咒" }
+            ));
+        }
+
+        // 添加刻印描述（如果已鉴定且有刻印）
+        if self.identified {
+            if let Some(glyph) = &self.glyph {
+                info.push_str(&format!("\n刻印效果: {}", glyph_description(glyph)));
+            }
+        }
+
+        write!(f, "{}", info)
+    }
+}
+
+/// 辅助函数：生成刻印效果的详细描述
+fn glyph_description(glyph: &ArmorGlyph) -> String {
+    match glyph {
+        ArmorGlyph::Affection => "受到攻击时有概率魅惑敌人".to_string(),
+        ArmorGlyph::AntiEntropy => "免疫燃烧和冰冻效果".to_string(),
+        ArmorGlyph::Brimstone => "免疫燃烧，受到火焰攻击时恢复生命".to_string(),
+        ArmorGlyph::Camouflage => "静止时获得隐身效果".to_string(),
+        ArmorGlyph::Flow => "被击退距离翻倍但不受伤害".to_string(),
+        ArmorGlyph::Obfuscation => "降低敌人的命中率".to_string(),
+        ArmorGlyph::Potential => "充能速度提升".to_string(),
+        ArmorGlyph::Repulsion => "击退攻击者".to_string(),
+        ArmorGlyph::Stone => "免疫毒气和瘫痪效果".to_string(),
+        ArmorGlyph::Thorns => "反弹部分近战伤害".to_string(),
     }
 }

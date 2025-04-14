@@ -4,7 +4,8 @@
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use rand::Rng;
-
+use rand::prelude::IndexedRandom;
+use rand::distr::Uniform;
 
 /// 敌人实体，包含战斗属性和位置信息
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
@@ -22,10 +23,11 @@ pub struct Enemy {
     pub detection_range: i32,
     pub symbol: char,       // 敌人显示字符
     pub color: (u8, u8, u8), // 敌人显示颜色(RGB)
+    pub is_surprised: bool,  // 是否处于惊讶状态(影响第一回合攻击)
 }
 
 /// 敌人种类，影响基础属性和行为
-#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize, PartialEq)]
 pub enum EnemyKind {
     Rat,
     Snake,
@@ -38,10 +40,9 @@ pub enum EnemyKind {
     Golem,
 }
 
-// 为 EnemyKind 实现 Default
 impl Default for EnemyKind {
     fn default() -> Self {
-        EnemyKind::Rat // 或其他合理的默认值
+        EnemyKind::Rat
     }
 }
 
@@ -56,15 +57,16 @@ pub enum EnemyState {
     Passive,
 }
 
-/// 掉落物品类型(简化版)
+/// 掉落物品类型
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub enum DropItem {
     Gold(i32),
     HealthPotion,
-    Weapon,
-    Armor,
-    Scroll,
-    // 其他掉落物...
+    Weapon(String),  // 武器类型
+    Armor(String),   // 护甲类型
+    Scroll(String),  // 卷轴类型
+    Key,             // 钥匙
+    Artifact,        // 神器
 }
 
 impl Enemy {
@@ -96,12 +98,15 @@ impl Enemy {
             detection_range: detection,
             symbol,
             color,
+            is_surprised: false,
         }
     }
     
     /// 受到伤害
-    pub fn take_damage(&mut self, amount: i32) {
-        self.hp = (self.hp - amount).max(0);
+    pub fn take_damage(&mut self, amount: i32) -> bool {
+        let actual_damage = (amount - self.defense).max(1);
+        self.hp = (self.hp - actual_damage).max(0);
+        self.is_alive()
     }
     
     /// 是否存活
@@ -112,29 +117,33 @@ impl Enemy {
     /// 重置敌人状态
     pub fn reset(&mut self) {
         self.state = EnemyState::Idle;
+        self.is_surprised = false;
     }
     
     /// 状态转换方法
     pub fn set_state(&mut self, new_state: EnemyState) {
+        if new_state == EnemyState::Hostile {
+            self.is_surprised = true;
+        }
         self.state = new_state;
     }
     
     /// 转换为敌对状态
     pub fn make_hostile(&mut self) {
-        self.state = EnemyState::Hostile;
+        self.set_state(EnemyState::Hostile);
     }
     
     /// 转换为逃跑状态
     pub fn start_fleeing(&mut self) {
-        self.state = EnemyState::Fleeing;
+        self.set_state(EnemyState::Fleeing);
     }
     
     /// 转换为警戒状态
     pub fn alert(&mut self) {
-        self.state = EnemyState::Alert;
+        self.set_state(EnemyState::Alert);
     }
     
-    /// 使用A*寻路算法计算下一步移动方向
+    /// 使用改进的寻路算法计算下一步移动方向
     pub fn calculate_move(&self, target_x: i32, target_y: i32, obstacles: &[(i32, i32)]) -> Option<(i32, i32)> {
         // 简单实现：优先减少x或y距离
         let dx = (target_x - self.x).signum();
@@ -153,6 +162,16 @@ impl Enemy {
             } else if !obstacles.contains(&(self.x, self.y + dy)) {
                 Some((0, dy))
             } else {
+                // 随机选择一个方向尝试
+                let mut rng = rand::rng();
+                let directions = [(1, 0), (-1, 0), (0, 1), (0, -1)];
+                for dir in directions.choose_multiple(&mut rng, 4) {
+                    let test_x = self.x + dir.0;
+                    let test_y = self.y + dir.1;
+                    if !obstacles.contains(&(test_x, test_y)) {
+                        return Some(*dir);
+                    }
+                }
                 None
             }
         }
@@ -162,55 +181,82 @@ impl Enemy {
     pub fn perform_move(&mut self, dx: i32, dy: i32) {
         self.x += dx;
         self.y += dy;
+        self.is_surprised = false; // 移动后不再处于惊讶状态
     }
     
     /// 敌人死亡时掉落物品
     pub fn drop_items(&self) -> Vec<DropItem> {
-        let mut drops = Vec::new();
-        
-        // 基础掉落：金币
-        let gold_amount = match self.kind {
-            EnemyKind::Rat => 1..5,
-            EnemyKind::Snake => 2..6,
-            EnemyKind::Gnoll => 3..8,
-            EnemyKind::Crab => 2..7,
-            EnemyKind::Bat => 1..4,
-            EnemyKind::Scorpion => 4..10,
-            EnemyKind::Guard => 5..12,
-            EnemyKind::Warlock => 8..15,
-            EnemyKind::Golem => 10..20,
-        };
-        
-        drops.push(DropItem::Gold(rand::rng().random_range(gold_amount)));
-        
-        // 稀有掉落
-        let rare_drop_chance = match self.kind {
-            EnemyKind::Rat => 0.05,
-            EnemyKind::Snake => 0.08,
-            EnemyKind::Gnoll => 0.1,
-            EnemyKind::Crab => 0.07,
-            EnemyKind::Bat => 0.15,  // 蝙蝠有更高几率掉血瓶
-            EnemyKind::Scorpion => 0.12,
-            EnemyKind::Guard => 0.2,
-            EnemyKind::Warlock => 0.25,
-            EnemyKind::Golem => 0.3,
-        };
-        
-        if rand::random::<f32>() < rare_drop_chance {
-            drops.push(match rand::random::<u8>() % 5 {
-                0 => DropItem::HealthPotion,
-                1 => DropItem::Weapon,
-                2 => DropItem::Armor,
-                3 => DropItem::Scroll,
-                _ => DropItem::Gold(5), // 额外金币
-            });
+    let mut drops = Vec::new();
+    let mut rng = rand::rng();
+    
+    // 基础掉落：金币
+    let gold_amount = match self.kind {
+        EnemyKind::Rat => rng.random_range(1..5),
+        EnemyKind::Snake => rng.random_range(2..6),
+        EnemyKind::Gnoll => rng.random_range(3..8),
+        EnemyKind::Crab => rng.random_range(2..7),
+        EnemyKind::Bat => rng.random_range(1..4),
+        EnemyKind::Scorpion => rng.random_range(4..10),
+        EnemyKind::Guard => rng.random_range(5..12),
+        EnemyKind::Warlock => rng.random_range(8..15),
+        EnemyKind::Golem => rng.random_range(10..20),
+    };
+    
+    drops.push(DropItem::Gold(gold_amount));
+    
+    // 稀有掉落
+    let rare_drop_chance = match self.kind {
+        EnemyKind::Rat => 0.05,
+        EnemyKind::Snake => 0.08,
+        EnemyKind::Gnoll => 0.1,
+        EnemyKind::Crab => 0.07,
+        EnemyKind::Bat => 0.15,
+        EnemyKind::Scorpion => 0.12,
+        EnemyKind::Guard => 0.2,
+        EnemyKind::Warlock => 0.25,
+        EnemyKind::Golem => 0.3,
+    };
+    
+    if rng.random::<f32>() < rare_drop_chance {
+        drops.push(match rng.random_range(0..6) {
+            0 => DropItem::HealthPotion,
+            1 => DropItem::Weapon("Dagger".to_string()),
+            2 => DropItem::Armor("Leather".to_string()),
+            3 => DropItem::Scroll("Identify".to_string()),
+            4 => DropItem::Key,
+            _ => DropItem::Gold(5),
+        });
+    }
+    
+    // 特殊敌人掉落
+    match self.kind {
+        EnemyKind::Guard => {
+            if rng.random::<f32>() < 0.1 {
+                drops.push(DropItem::Key);
+            }
+        },
+        EnemyKind::Warlock => {
+            if rng.random::<f32>() < 0.15 {
+                drops.push(DropItem::Scroll("Magic Mapping".to_string()));
+            }
+        },
+        _ => {}
+    }
+    
+    drops
+}
+    
+    /// 计算攻击伤害(考虑惊讶状态)
+    pub fn calculate_attack(&self) -> i32 {
+        let base_damage = self.attack;
+        if self.is_surprised {
+            base_damage / 2  // 惊讶状态下伤害减半
+        } else {
+            base_damage
         }
-        
-        drops
     }
 }
 
-// 测试模块
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -234,8 +280,27 @@ mod tests {
         
         enemy.make_hostile();
         assert_eq!(enemy.state, EnemyState::Hostile);
+        assert!(enemy.is_surprised);
         
         enemy.start_fleeing();
         assert_eq!(enemy.state, EnemyState::Fleeing);
+    }
+    
+    #[test]
+    fn test_damage_calculation() {
+        let mut enemy = Enemy::new(EnemyKind::Guard, 0, 0);
+        let alive = enemy.take_damage(15);
+        assert!(alive);
+        assert_eq!(enemy.hp, 30 - (15 - 10).max(1));
+        
+        let alive = enemy.take_damage(50);
+        assert!(!alive);
+    }
+    
+    #[test]
+    fn test_drop_items() {
+        let enemy = Enemy::new(EnemyKind::Warlock, 0, 0);
+        let drops = enemy.drop_items();
+        assert!(!drops.is_empty());
     }
 }

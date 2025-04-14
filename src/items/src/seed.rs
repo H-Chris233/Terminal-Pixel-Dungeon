@@ -76,7 +76,7 @@ impl Seed {
     }
     
     /// 计算种子价值（考虑类型、生长时间和可炼金性）
-    pub fn value(&self) -> usize {
+    pub fn value(&self) -> u32 {
         // 基础价值
         let base_value = match self.kind {
             SeedKind::Dreamfoil => 50,   // 幻梦草（净化效果）最有价值
@@ -99,7 +99,7 @@ impl Seed {
         // 可炼金性加成（能制作药水的种子更值钱）
         let alchemy_bonus = if self.to_potion().is_some() { 1.3 } else { 1.0 };
 
-        (base_value as f32 * growth_factor * alchemy_bonus) as usize
+        (base_value as f32 * growth_factor * alchemy_bonus) as u32
     }
     
     /// 获取种子颜色（用于UI显示）

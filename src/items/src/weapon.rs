@@ -37,7 +37,7 @@ pub enum WeaponMod {
 pub struct Weapon {
     pub name: String,                     // 武器名称
     pub tier: Tier,                       // 品阶1-5
-    pub damage: (usize, usize),           // 基础伤害范围(min,max)
+    pub damage: (u32, u32),           // 基础伤害范围(min,max)
     pub hit_chance: f32,                  // 基础命中率(0.0-1.0)
     pub str_requirement: u8,              // 力量需求
     pub enchanted: Option<WeaponEnhance>, // 附魔效果
@@ -46,12 +46,12 @@ pub struct Weapon {
     pub cursed: bool,                     // 是否被诅咒
     pub identified: bool,                 // 是否已鉴定
     pub kind: WeaponKind,
-    pub base_value: usize,
+    pub base_value: u32,
 }
 
 impl Weapon {
     /// 创建新武器（根据品阶初始化基础属性）
-    pub fn new(tier: usize, kind: WeaponKind) -> Self {
+    pub fn new(tier: u32, kind: WeaponKind) -> Self {
         let (damage, str_req, name) = match tier {
             1 => ((1, 6), 10, "短剑"),     // 一阶武器
             2 => ((3, 12), 13, "长剑"),    // 二阶武器
@@ -63,7 +63,7 @@ impl Weapon {
 
         Self {
             name: name.to_string(),
-            tier: Tier::from_usize(tier),
+            tier: Tier::from_u32(tier),
             damage,
             hit_chance: 0.8,
             str_requirement: str_req,
@@ -118,7 +118,7 @@ impl Weapon {
     }
 
     /// 根据品阶获取基础价值
-    fn base_value_for_tier(tier: usize) -> usize {
+    fn base_value_for_tier(tier: u32) -> u32 {
         match tier {
             1 => 300,  // 一阶武器
             2 => 600,  // 二阶武器
@@ -130,33 +130,33 @@ impl Weapon {
     }
 
     /// 获取武器完整价值（考虑品阶、等级、附魔和改造）
-    pub fn value(&self) -> usize {
+    pub fn value(&self) -> u32 {
         let mut value = self.base_value;
 
         // 等级加成（每级+25%基础价值）
         if self.upgrade_level > 0 {
-            value += (self.base_value as f32 * 0.25 * self.upgrade_level as f32) as usize;
+            value += (self.base_value as f32 * 0.25 * self.upgrade_level as f32) as u32;
         }
 
         // 附魔加成（不同类型有不同加成）
         if let Some(enhance) = &self.enchanted {
             value = match enhance {
-                WeaponEnhance::Burning => (value as f32 * 1.2) as usize,
-                WeaponEnhance::Stunning => (value as f32 * 1.3) as usize,
-                WeaponEnhance::Vampiric => (value as f32 * 1.4) as usize,
-                WeaponEnhance::Lucky => (value as f32 * 1.25) as usize,
-                WeaponEnhance::Projecting => (value as f32 * 1.15) as usize,
-                WeaponEnhance::Grim => (value as f32 * 1.5) as usize,
-                WeaponEnhance::Chilling => (value as f32 * 1.1) as usize,
+                WeaponEnhance::Burning => (value as f32 * 1.2) as u32,
+                WeaponEnhance::Stunning => (value as f32 * 1.3) as u32,
+                WeaponEnhance::Vampiric => (value as f32 * 1.4) as u32,
+                WeaponEnhance::Lucky => (value as f32 * 1.25) as u32,
+                WeaponEnhance::Projecting => (value as f32 * 1.15) as u32,
+                WeaponEnhance::Grim => (value as f32 * 1.5) as u32,
+                WeaponEnhance::Chilling => (value as f32 * 1.1) as u32,
             };
         }
 
         // 改造加成
         value = match self.modifier {
-            WeaponMod::Damage => (value as f32 * 1.1) as usize,
-            WeaponMod::Speed => (value as f32 * 1.05) as usize,
-            WeaponMod::Accuracy => (value as f32 * 1.15) as usize,
-            WeaponMod::Balanced => (value as f32 * 1.2) as usize,
+            WeaponMod::Damage => (value as f32 * 1.1) as u32,
+            WeaponMod::Speed => (value as f32 * 1.05) as u32,
+            WeaponMod::Accuracy => (value as f32 * 1.15) as u32,
+            WeaponMod::Balanced => (value as f32 * 1.2) as u32,
         };
 
         // 诅咒惩罚（价值减半）
@@ -185,28 +185,28 @@ impl Weapon {
     }
 
     /// 计算实际伤害（还原力量加成和诅咒惩罚）
-    pub fn calculate_damage(&self, user_str: u8) -> usize {
+    pub fn calculate_damage(&self, user_str: u8) -> u32 {
         let str_diff = user_str as i32 - self.str_requirement as i32;
         let mut damage = rand::rng().random_range(self.damage.0..=self.damage.1);
 
         // 力量修正（每点差异影响5%伤害）
         if str_diff > 0 {
-            damage += (damage as f32 * 0.05 * str_diff as f32) as usize;
+            damage += (damage as f32 * 0.05 * str_diff as f32) as u32;
         } else if str_diff < 0 {
-            damage = (damage as f32 * (0.9f32).powi(-str_diff)) as usize;
+            damage = (damage as f32 * (0.9f32).powi(-str_diff)) as u32;
         }
 
         // 改造修正
         damage = match self.modifier {
-            WeaponMod::Damage => (damage as f32 * 1.3) as usize,
-            WeaponMod::Speed => (damage as f32 * 0.8) as usize,
+            WeaponMod::Damage => (damage as f32 * 1.3) as u32,
+            WeaponMod::Speed => (damage as f32 * 0.8) as u32,
             WeaponMod::Accuracy => damage,
-            WeaponMod::Balanced => (damage as f32 * 1.1) as usize,
+            WeaponMod::Balanced => (damage as f32 * 1.1) as u32,
         };
 
         // 诅咒惩罚（降低30%伤害）
         if self.cursed {
-            damage = (damage as f32 * 0.7) as usize;
+            damage = (damage as f32 * 0.7) as u32;
         }
 
         damage.max(1)
@@ -262,7 +262,7 @@ pub enum Tier {
 }
 
 impl Tier {
-    pub fn from_usize(value: usize) -> Self {
+    pub fn from_u32(value: u32) -> Self {
         match value {
             1 => Tier::One,
             2 => Tier::Two,
@@ -273,7 +273,7 @@ impl Tier {
         }
     }
 
-    pub fn to_usize(&self) -> usize {
+    pub fn to_u32(&self) -> u32 {
         match self {
             Tier::One => 1,
             Tier::Two => 2,
@@ -328,5 +328,100 @@ impl Default for WeaponKind {
 impl Default for Tier {
     fn default() -> Self {
         Tier::One  // 默认一阶
+    }
+}
+
+impl fmt::Display for Weapon {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // 基础信息
+        let mut info = format!(
+            "{} ({}阶) - 伤害: {}-{}",
+            self.name,
+            self.tier.to_u32(),
+            self.damage.0,
+            self.damage.1
+        );
+
+        // 添加强化等级（如果已强化）
+        if self.upgrade_level > 0 {
+            info.push_str(&format!(" (+{})", self.upgrade_level));
+        }
+
+        // 添加武器类型
+        info.push_str(&format!("\n类型: {}", self.kind));
+
+        // 添加命中率
+        info.push_str(&format!("\n命中率: {:.0}%", self.hit_chance * 100.0));
+
+        // 添加力量需求
+        info.push_str(&format!("\n力量需求: {}", self.str_requirement));
+
+        // 添加改造方向
+        info.push_str(&format!("\n改造方向: {}", self.modifier));
+
+        // 添加附魔效果（如果已鉴定且有附魔）
+        if self.identified {
+            if let Some(enhance) = &self.enchanted {
+                info.push_str(&format!("\n附魔效果: {}", enhance));
+            }
+        }
+
+        // 添加价值信息
+        info.push_str(&format!("\n价值: {} 金币", self.value()));
+
+        // 添加鉴定状态
+        info.push_str(&format!(
+            "\n鉴定状态: {}",
+            if self.identified { "已鉴定" } else { "未鉴定" }
+        ));
+
+        // 添加诅咒状态
+        info.push_str(&format!(
+            "\n诅咒状态: {}",
+            if self.cursed { "已诅咒" } else { "未诅咒" }
+        ));
+
+        write!(f, "{}", info)
+    }
+}
+
+impl fmt::Display for WeaponKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = match self {
+            WeaponKind::Sword => "剑类",
+            WeaponKind::Dagger => "匕首",
+            WeaponKind::Greataxe => "巨斧",
+            WeaponKind::Spear => "长矛",
+            WeaponKind::Mace => "钉锤",
+            WeaponKind::Whip => "长鞭",
+        };
+        write!(f, "{}", name)
+    }
+}
+
+impl fmt::Display for WeaponMod {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = match self {
+            WeaponMod::Damage => "伤害强化",
+            WeaponMod::Speed => "速度强化",
+            WeaponMod::Accuracy => "精准强化",
+            WeaponMod::Balanced => "平衡改造",
+        };
+        write!(f, "{}", name)
+    }
+}
+
+impl fmt::Display for WeaponEnhance {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = match self {
+            WeaponEnhance::Burning => "燃烧",
+            WeaponEnhance::Stunning => "击晕",
+            WeaponEnhance::Vampiric => "吸血",
+            WeaponEnhance::Lucky => "幸运",
+            WeaponEnhance::Projecting => "投射",
+            WeaponEnhance::Grim => "致命",
+            WeaponEnhance::Chilling => "冰冻",
+        };
+        write!(f, "{}", name)
     }
 }
