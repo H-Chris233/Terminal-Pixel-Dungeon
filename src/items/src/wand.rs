@@ -76,7 +76,7 @@ impl Wand {
     }
 
     /// 计算法杖价值（考虑类型、等级、充能和诅咒状态）
-    pub fn value(&self) -> usize {
+    pub fn value(&self) -> u32 {
         // 基础价值
         let base_value = match self.kind {
             WandKind::Disintegration => 500, // 瓦解法杖最有价值
@@ -91,14 +91,14 @@ impl Wand {
 
         // 等级加成（每级+30%基础价值）
         let level_bonus = if self.level > 0 {
-            (base_value as f32 * 0.3 * self.level as f32) as usize
+            (base_value as f32 * 0.3 * self.level as f32) as u32
         } else {
             0
         };
 
         // 充能加成（当前充能比例影响价值）
         let charge_ratio = self.charges as f32 / self.max_charges as f32;
-        let charge_bonus = (base_value as f32 * 0.2 * charge_ratio) as usize;
+        let charge_bonus = (base_value as f32 * 0.2 * charge_ratio) as u32;
 
         // 计算总价值
         let mut value = base_value + level_bonus + charge_bonus;
@@ -110,7 +110,7 @@ impl Wand {
 
         // 未鉴定惩罚（价值降低30%）
         if !self.identified {
-            value = (value as f32 * 0.7) as usize;
+            value = (value as f32 * 0.7) as u32;
         }
 
         value
@@ -145,7 +145,7 @@ impl Wand {
     }
 
     /// 获取基础伤害值（考虑诅咒状态）
-    pub fn base_damage(&self) -> usize {
+    pub fn base_damage(&self) -> u32 {
         let damage = match self.kind {
             WandKind::MagicMissile => 1 + self.level,
             WandKind::Fireblast => 4 + self.level * 2,
@@ -158,7 +158,7 @@ impl Wand {
         };
 
         if self.cursed {
-            (damage as f32 * 0.7).floor() as usize // 诅咒效果降低30%
+            (damage as f32 * 0.7).floor() as u32 // 诅咒效果降低30%
         } else {
             damage.into()
         }

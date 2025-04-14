@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Copy, Debug, Clone, PartialEq, Serialize, Deserialize, Encode, Decode)]
 pub enum MiscKind {
     /// 金币 - 游戏中的通用货币
-    Gold(usize),
+    Gold(u32),
     /// 钥匙 - 用于打开上锁的门和箱子
     Key,
     /// 炸弹 - 可以炸开墙壁或造成范围伤害
@@ -27,7 +27,7 @@ pub struct MiscItem {
     /// 物品数量(对于可堆叠物品)
     pub quantity: u32,
     /// 物品价格(基础值)
-    price: usize,
+    price: u32,
 }
 
 impl MiscItem {
@@ -79,7 +79,7 @@ impl MiscItem {
         item
     }
 
-    pub fn value(&self) -> usize {
+    pub fn value(&self) -> u32 {
         self.price
     }
 

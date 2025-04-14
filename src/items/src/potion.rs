@@ -49,7 +49,7 @@ impl Potion {
     }
 
     /// 计算药水价值（考虑类型、鉴定状态和炼金属性）
-    pub fn value(&self) -> usize {
+    pub fn value(&self) -> u32 {
         // 基础价值
         let base_value = match self.kind {
             PotionKind::Strength => 500,   // 力量药水最有价值
@@ -68,7 +68,7 @@ impl Potion {
 
         // 状态修正
         let mut value = if !self.identified {
-            (base_value as f32 * 0.5) as usize // 未鉴定药水价值减半
+            (base_value as f32 * 0.5) as u32 // 未鉴定药水价值减半
         } else {
             base_value
         };

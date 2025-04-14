@@ -113,19 +113,22 @@ impl Item {
             ItemKind::Potion(_) | ItemKind::Scroll(_) | ItemKind::Food(_)
         )
     }
-
-    /// 物品是否已鉴定
-    pub fn is_identified(&self) -> bool {
+    
+    /// 判断物品是否需要鉴定（精确匹配游戏机制）
+    pub fn needs_identify(&self) -> bool {
         match &self.kind {
-            ItemKind::Potion(p) => p.identified,
-            ItemKind::Scroll(s) => s.identified,
-            ItemKind::Ring(_) => true, // 戒指需要装备才知效果
-            _ => todo!(),              // 其他物品默认已鉴定
+            ItemKind::Potion(p) => !p.identified,
+            ItemKind::Scroll(s) => !s.identified,
+            ItemKind::Ring(r) => !r.identified,
+            ItemKind::Wand(w) => !w.identified,
+            ItemKind::Weapon(w) => !w.identified,
+            ItemKind::Armor(a) => !a.identified,
+            _ => false, // 其他物品默认不需要鉴定
         }
     }
 
     /// 获取物品价值（用于商店系统）
-    pub fn value(&self) -> usize {
+    pub fn value(&self) -> u32 {
         match &self.kind {
             ItemKind::Weapon(w) => w.value(),
             ItemKind::Armor(a) => a.value(),
@@ -137,6 +140,49 @@ impl Item {
             ItemKind::Seed(s) => s.value(),
             ItemKind::Stone(s) => s.value(),
             ItemKind::Misc(m) => m.value(),
+        }
+    }
+}
+
+impl Default for Item {
+    fn default() -> Self {
+        Self {
+            kind: ItemKind::Misc(MiscItem::new(MiscKind::Torch)), // 默认使用火炬作为占位物品
+            name: "Default Item".to_string(),
+            description: "Default item description".to_string(),
+            quantity: 1,
+            x: -1,
+            y: -1,
+        }
+    }
+}
+
+impl From<Weapon> for Item {
+    fn from(weapon: Weapon) -> Self {
+        Item {
+            kind: ItemKind::Weapon(weapon),
+            // 其他必要的字段
+            ..Default::default()
+        }
+    }
+}
+
+impl From<Armor> for Item {
+    fn from(armor: Armor) -> Self {
+        Item {
+            kind: ItemKind::Armor(armor),
+            // 其他必要的字段
+            ..Default::default()
+        }
+    }
+}
+
+impl From<Ring> for Item {
+    fn from(ring: Ring) -> Self {
+        Item {
+            kind: ItemKind::Ring(ring),
+            // 其他必要的字段
+            ..Default::default()
         }
     }
 }

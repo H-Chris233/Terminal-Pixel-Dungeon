@@ -23,7 +23,7 @@ impl Stone {
     }
     
     /// 计算魔法石价值（考虑类型和使用状态）
-    pub fn value(&self) -> usize {
+    pub fn value(&self) -> u32 {
         // 基础价值（约为对应卷轴价值的60%）
         let base_value = match self.kind {
             StoneKind::Upgrade => 240,       // 强化卷轴400*0.6
@@ -40,7 +40,7 @@ impl Stone {
 
         // 使用状态修正（使用后价值降为10%）
         if self.used {
-            (base_value as f32 * 0.1) as usize
+            (base_value as f32 * 0.1) as u32
         } else {
             base_value
         }

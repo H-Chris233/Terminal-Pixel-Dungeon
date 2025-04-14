@@ -84,7 +84,7 @@ impl Food {
     }
 
     /// 计算食物基础价值（考虑类型、状态和数量）
-    pub fn value(&self) -> usize {
+    pub fn value(&self) -> u32 {
         // 基础价值
         let base_value = match self.kind {
             FoodKind::Ration => 50,
@@ -96,13 +96,13 @@ impl Food {
 
         // 状态修正
         let mut value = if self.contaminated {
-            (base_value as f32 * 0.6) as usize // 污染食物价值降低40%
+            (base_value as f32 * 0.6) as u32 // 污染食物价值降低40%
         } else {
             base_value
         };
 
         // 数量加成（线性增长）
-        value * self.quantity as usize
+        value * self.quantity as u32
     }
 
     /// 获取食物颜色（整合污染状态）

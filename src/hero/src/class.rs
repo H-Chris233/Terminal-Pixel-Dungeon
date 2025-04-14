@@ -73,43 +73,27 @@ impl Class {
         match self {
             Class::Warrior => vec![
                 Item::new(
-                    ItemKind::Weapon(Weapon::new(1, WeaponKind::Sword)), // 第1级武器
-                    "战士的初始武器",
-                ),
+                    ItemKind::Weapon(Weapon::new(1, WeaponKind::Sword))),
                 Item::new(
-                    ItemKind::Armor(Armor::new(3)), // 链甲(第3级)
-                    "战士的初始护甲",
-                ),
+                    ItemKind::Armor(Armor::new(3))),
             ],
             Class::Mage => vec![
                 Item::new(
-                    ItemKind::Weapon(Weapon::new(1, WeaponKind::Sword)), // 第1级武器
-                    "法师的初始武器",
-                ),
+                    ItemKind::Weapon(Weapon::new(1, WeaponKind::Sword))),
                 Item::new(
-                    ItemKind::Armor(Armor::new(1)), // 布甲(第1级)
-                    "法师的初始护甲",
-                ),
+                    ItemKind::Armor(Armor::new(1))),
             ],
             Class::Rogue => vec![
                 Item::new(
-                    ItemKind::Weapon(Weapon::new(1, WeaponKind::Dagger)), // 第1级武器
-                    "盗贼的初始武器",
-                ),
+                    ItemKind::Weapon(Weapon::new(1, WeaponKind::Dagger))),
                 Item::new(
-                    ItemKind::Armor(Armor::new(2)), // 皮甲(第2级)
-                    "盗贼的初始护甲",
-                ),
+                    ItemKind::Armor(Armor::new(2))),
             ],
             Class::Huntress => vec![
                 Item::new(
-                    ItemKind::Weapon(Weapon::new(1, WeaponKind::Sword)), // 第1级武器
-                    "女猎手的初始武器",
-                ),
+                    ItemKind::Weapon(Weapon::new(1, WeaponKind::Sword))),
                 Item::new(
-                    ItemKind::Armor(Armor::new(2)), // 皮甲(第2级)
-                    "女猎手的初始护甲",
-                ),
+                    ItemKind::Armor(Armor::new(2))),
             ],
         }
     }
