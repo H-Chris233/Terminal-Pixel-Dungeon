@@ -7,6 +7,9 @@ use rand::Rng;
 use rand::prelude::IndexedRandom;
 use rand::distr::Uniform;
 
+use items::Weapon;
+
+
 /// 敌人实体，包含战斗属性和位置信息
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct Enemy {
@@ -21,9 +24,11 @@ pub struct Enemy {
     pub state: EnemyState,
     pub attack_range: i32,
     pub detection_range: i32,
-    pub symbol: char,       // 敌人显示字符
-    pub color: (u8, u8, u8), // 敌人显示颜色(RGB)
-    pub is_surprised: bool,  // 是否处于惊讶状态(影响第一回合攻击)
+    pub symbol: char,
+    pub color: (u8, u8, u8),
+    pub is_surprised: bool,
+    pub weapon: Option<Weapon>,
+    pub crit_bonus: f32,
 }
 
 /// 敌人种类，影响基础属性和行为
@@ -99,6 +104,8 @@ impl Enemy {
             symbol,
             color,
             is_surprised: false,
+            weapon: None,
+            crit_bonus: 0.0,
         }
     }
     
@@ -246,15 +253,120 @@ impl Enemy {
     drops
 }
     
-    /// 计算攻击伤害(考虑惊讶状态)
+    /// 获取攻击力（考虑武器加成）
+    pub fn attack_power(&self) -> i32 {
+        let base = self.attack;
+        self.weapon.as_ref().map_or(base, |w| base + w.damage_bonus())
+    }
+
+    /// 获取防御力
+    pub fn defense(&self) -> i32 {
+        self.defense
+    }
+
+    /// 获取经验值
+    pub fn experience_value(&self) -> i32 {
+        self.exp_value
+    }
+
+    /// 获取命中率（考虑武器加成）
+    pub fn accuracy(&self) -> i32 {
+        let base = match self.kind {
+            EnemyKind::Rat => 8,
+            EnemyKind::Snake => 10,
+            EnemyKind::Gnoll => 12,
+            EnemyKind::Crab => 9,
+            EnemyKind::Bat => 15,
+            EnemyKind::Scorpion => 13,
+            EnemyKind::Guard => 14,
+            EnemyKind::Warlock => 16,
+            EnemyKind::Golem => 10,
+        };
+        self.weapon.as_ref().map_or(base, |w| base + w.accuracy_bonus())
+    }
+
+    /// 获取闪避率
+    pub fn evasion(&self) -> i32 {
+        match self.kind {
+            EnemyKind::Rat => 6,
+            EnemyKind::Snake => 12,
+            EnemyKind::Gnoll => 8,
+            EnemyKind::Crab => 5,
+            EnemyKind::Bat => 18,
+            EnemyKind::Scorpion => 10,
+            EnemyKind::Guard => 9,
+            EnemyKind::Warlock => 14,
+            EnemyKind::Golem => 4,
+        }
+    }
+
+    /// 获取暴击加成
+    pub fn crit_bonus(&self) -> f32 {
+        self.crit_bonus
+    }
+
+    /// 设置武器
+    pub fn with_weapon(mut self, weapon: Weapon) -> Self {
+        self.weapon = Some(weapon);
+        self
+    }
+
+    /// 设置暴击加成
+    pub fn with_crit_bonus(mut self, bonus: f32) -> Self {
+        self.crit_bonus = bonus;
+        self
+    }
+
+    /// 获取武器引用
+    pub fn weapon(&self) -> Option<&Weapon> {
+        self.weapon.as_ref()
+    }
+
+    /// 获取敌人名称
+    pub fn name(&self) -> &str {
+        match self.kind {
+            EnemyKind::Rat => "Rat",
+            EnemyKind::Snake => "Snake",
+            EnemyKind::Gnoll => "Gnoll",
+            EnemyKind::Crab => "Crab",
+            EnemyKind::Bat => "Bat",
+            EnemyKind::Scorpion => "Scorpion",
+            EnemyKind::Guard => "Guard",
+            EnemyKind::Warlock => "Warlock",
+            EnemyKind::Golem => "Golem",
+        }
+    }
+
+    /// 计算攻击伤害（考虑惊讶状态和武器）
     pub fn calculate_attack(&self) -> i32 {
-        let base_damage = self.attack;
-        if self.is_surprised {
+        let base_damage = self.attack_power();
+        let damage = if self.is_surprised {
             base_damage / 2  // 惊讶状态下伤害减半
         } else {
             base_damage
-        }
+        };
+        
+        // 添加随机波动 (80%-120%)
+        let mut rng = rand::rng();
+        let damage_var = 0.8 + rng.random_range(0.0..0.4);
+        (damage as f32 * damage_var) as i32
     }
+
+    /// 治疗指定数值
+    pub fn heal(&mut self, amount: i32) {
+        self.hp = (self.hp + amount).min(self.max_hp);
+    }
+
+    /// 获取攻击距离（优先使用武器距离）
+    pub fn attack_distance(&self) -> i32 {
+        self.weapon.as_ref().map_or(self.attack_range, |w| w.hit_distance.into())
+    }
+
+    /// 判断是否为远程敌人
+    pub fn is_ranged(&self) -> bool {
+        self.attack_distance() > 1
+    }
+    
 }
 
 #[cfg(test)]
@@ -303,4 +415,46 @@ mod tests {
         let drops = enemy.drop_items();
         assert!(!drops.is_empty());
     }
+    #[test]
+    fn test_attack_power() {
+        let weapon = Weapon::new(WeaponType::Sword, 1).with_damage_bonus(3);
+        let enemy = Enemy::new(EnemyKind::Guard, 0, 0)
+            .with_weapon(weapon);
+        
+        assert_eq!(enemy.attack_power(), 12 + 3); // Guard基础攻击12 + 武器加成3
+    }
+
+    #[test]
+    fn test_accuracy() {
+        let weapon = Weapon::new(WeaponType::Bow, 1).with_accuracy_bonus(2);
+        let enemy = Enemy::new(EnemyKind::Warlock, 0, 0)
+            .with_weapon(weapon);
+        
+        assert_eq!(enemy.accuracy(), 16 + 2); // Warlock基础16 + 武器加成2
+    }
+
+    #[test]
+    fn test_attack_distance() {
+        let melee_weapon = Weapon::new(WeaponType::Sword, 1);
+        let ranged_weapon = Weapon::new(WeaponType::Bow, 1).with_hit_distance(4);
+        
+        let melee_enemy = Enemy::new(EnemyKind::Guard, 0, 0)
+            .with_weapon(melee_weapon);
+        let ranged_enemy = Enemy::new(EnemyKind::Warlock, 0, 0)
+            .with_weapon(ranged_weapon);
+        let default_enemy = Enemy::new(EnemyKind::Rat, 0, 0);
+        
+        assert_eq!(melee_enemy.attack_distance(), 1);
+        assert_eq!(ranged_enemy.attack_distance(), 4);
+        assert_eq!(default_enemy.attack_distance(), 1); // Rat的默认攻击距离
+    }
+
+    #[test]
+    fn test_crit_bonus() {
+        let enemy = Enemy::new(EnemyKind::Assassin, 0, 0)
+            .with_crit_bonus(0.15);
+        
+        assert_eq!(enemy.crit_bonus(), 0.15);
+    }
+    
 }

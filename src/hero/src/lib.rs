@@ -13,6 +13,7 @@ use std::time::SystemTime;
 use crate::class::*;
 use combat::enemy::*;
 use items::{Item, ItemKind};
+use combat::Combat;
 
 pub mod bag;
 pub mod class;

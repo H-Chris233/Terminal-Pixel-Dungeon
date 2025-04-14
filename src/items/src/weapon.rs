@@ -47,6 +47,7 @@ pub struct Weapon {
     pub identified: bool,                 // 是否已鉴定
     pub kind: WeaponKind,
     pub base_value: u32,
+    pub hit_distance: u8,
 }
 
 impl Weapon {
@@ -74,6 +75,7 @@ impl Weapon {
             identified: false,
             kind,
             base_value: Self::base_value_for_tier(tier), // 根据品阶设置基础价值
+            hit_distance: 1,
         }
     }
     
@@ -238,6 +240,58 @@ impl Weapon {
     pub fn modify(&mut self, direction: WeaponMod) {
         self.modifier = direction;
     }
+    
+    /// 获取武器伤害加成（基于强化等级和改造方向）
+    pub fn damage_bonus(&self) -> i32 {
+        let base_bonus = self.upgrade_level as i32;
+        
+        match self.modifier {
+            WeaponMod::Damage => (base_bonus as f32 * 1.3).round() as i32,
+            WeaponMod::Speed => (base_bonus as f32 * 0.8).round() as i32,
+            WeaponMod::Accuracy => base_bonus,
+            WeaponMod::Balanced => (base_bonus as f32 * 1.1).round() as i32,
+        }
+    }
+
+    /// 获取武器命中加成（基于武器类型和改造方向）
+    pub fn accuracy_bonus(&self) -> i32 {
+        let base_bonus = match self.kind {
+            WeaponKind::Sword => 0,
+            WeaponKind::Dagger => 1,
+            WeaponKind::Greataxe => -1,
+            WeaponKind::Spear => 2,
+            WeaponKind::Mace => -2,
+            WeaponKind::Whip => 3,
+        };
+        
+        base_bonus + match self.modifier {
+            WeaponMod::Damage => 0,
+            WeaponMod::Speed => 1,
+            WeaponMod::Accuracy => 3,
+            WeaponMod::Balanced => 1,
+        }
+    }
+
+    /// 获取武器攻击距离
+    pub fn hit_distance(&self) -> i32 {
+        let base_distance = match self.kind {
+            WeaponKind::Spear => 2,
+            _ => 1,
+        };
+        
+        // 如果有投射附魔则增加1距离
+        if let Some(WeaponEnhance::Projecting) = self.enchanted {
+            base_distance + 1
+        } else {
+            base_distance
+        }
+    }
+
+    /// 判断是否为远程武器
+    pub fn is_ranged(&self) -> bool {
+        self.hit_distance > 1
+    }
+    
 }
 
 /// 武器类型枚举（还原Shattered PD的武器分类）
@@ -315,6 +369,7 @@ impl Default for Weapon {
             identified: false,           // 未鉴定
             kind: WeaponKind::Sword,     // 剑类武器
             base_value: 300,             // 一阶武器基础价值
+            hit_distance: 1,
         }
     }
 }
