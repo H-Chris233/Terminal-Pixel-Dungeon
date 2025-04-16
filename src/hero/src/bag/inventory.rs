@@ -1,4 +1,5 @@
 // src/hero/src/bag/inventory.rs
+use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use thiserror::Error;
@@ -12,6 +13,8 @@ pub enum InventoryError {
     Full,
     #[error("物品不可堆叠")]
     NotStackable,
+    #[error("背包已满")]
+    InventoryFull,
     #[error("未知物品类型")]
     UnknownItemType,
     #[error("无效索引")]
@@ -19,14 +22,14 @@ pub enum InventoryError {
 }
 
 /// 通用库存系统（优化实现）
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct Inventory<T: ItemTrait> {
     slots: Vec<InventorySlot<T>>, // 使用独立槽位设计
     capacity: usize,
 }
 
 /// 库存槽位（支持单物品或多数量）
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 enum InventorySlot<T: ItemTrait> {
     Single(T),         // 不可堆叠物品
     Stackable(T, u32), // 可堆叠物品（类型+数量）
@@ -76,20 +79,14 @@ impl<T: ItemTrait> Inventory<T> {
         Ok(())
     }
 
-    /// 移除物品（按索引）
+    pub fn get(&self, index: usize) -> Option<&T> {
+        self.items.get(index)
+    }
     pub fn remove(&mut self, index: usize) -> Result<T, InventoryError> {
-        if index >= self.slots.len() {
-            return Err(InventoryError::InvalidIndex);
-        }
-
-        match self.slots.remove(index) {
-            InventorySlot::Single(item) => Ok(item),
-            InventorySlot::Stackable(item, 1) => Ok(item),
-            InventorySlot::Stackable(item, count) => {
-                self.slots
-                    .insert(index, InventorySlot::Stackable(item.clone(), count - 1));
-                Ok(item)
-            }
+        if index < self.items.len() {
+            Ok(self.items.remove(index))
+        } else {
+            Err(InventoryError::IndexOutOfBounds)
         }
     }
 
@@ -153,3 +150,5 @@ impl<T: ItemTrait> Inventory<T> {
         self.capacity
     }
 }
+
+impl<T> Inventory<T> {}

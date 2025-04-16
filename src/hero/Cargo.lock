@@ -63,8 +63,12 @@ name = "combat"
 version = "0.1.0"
 dependencies = [
  "bincode",
+ "items",
  "rand",
  "serde",
+ "strum",
+ "strum_macros",
+ "tui",
 ]
 
 [[package]]
@@ -131,6 +135,7 @@ dependencies = [
  "combat",
  "dungeon",
  "items",
+ "rand",
  "serde",
  "strum",
  "strum_macros",

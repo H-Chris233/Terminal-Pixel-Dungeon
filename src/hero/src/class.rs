@@ -72,28 +72,20 @@ impl Class {
     pub fn starting_kit(&self) -> Vec<Item> {
         match self {
             Class::Warrior => vec![
-                Item::new(
-                    ItemKind::Weapon(Weapon::new(1, WeaponKind::Sword))),
-                Item::new(
-                    ItemKind::Armor(Armor::new(3))),
+                Item::new(ItemKind::Weapon(Weapon::new(1, WeaponKind::Sword))),
+                Item::new(ItemKind::Armor(Armor::new(3))),
             ],
             Class::Mage => vec![
-                Item::new(
-                    ItemKind::Weapon(Weapon::new(1, WeaponKind::Sword))),
-                Item::new(
-                    ItemKind::Armor(Armor::new(1))),
+                Item::new(ItemKind::Weapon(Weapon::new(1, WeaponKind::Sword))),
+                Item::new(ItemKind::Armor(Armor::new(1))),
             ],
             Class::Rogue => vec![
-                Item::new(
-                    ItemKind::Weapon(Weapon::new(1, WeaponKind::Dagger))),
-                Item::new(
-                    ItemKind::Armor(Armor::new(2))),
+                Item::new(ItemKind::Weapon(Weapon::new(1, WeaponKind::Dagger))),
+                Item::new(ItemKind::Armor(Armor::new(2))),
             ],
             Class::Huntress => vec![
-                Item::new(
-                    ItemKind::Weapon(Weapon::new(1, WeaponKind::Sword))),
-                Item::new(
-                    ItemKind::Armor(Armor::new(2))),
+                Item::new(ItemKind::Weapon(Weapon::new(1, WeaponKind::Sword))),
+                Item::new(ItemKind::Armor(Armor::new(2))),
             ],
         }
     }
