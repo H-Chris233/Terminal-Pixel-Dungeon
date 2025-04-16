@@ -259,14 +259,14 @@ impl Weapon {
     }
     
     /// 获取武器伤害加成（基于强化等级和改造方向）
-    pub fn damage_bonus(&self) -> i32 {
-        let base_bonus = self.upgrade_level as i32;
+    pub fn damage_bonus(&self) -> u32 {
+        let base_bonus = self.upgrade_level as u32;
         
         match self.modifier {
-            WeaponMod::Damage => (base_bonus as f32 * 1.3).round() as i32,
-            WeaponMod::Speed => (base_bonus as f32 * 0.8).round() as i32,
+            WeaponMod::Damage => (base_bonus as f32 * 1.3).round() as u32,
+            WeaponMod::Speed => (base_bonus as f32 * 0.8).round() as u32,
             WeaponMod::Accuracy => base_bonus,
-            WeaponMod::Balanced => (base_bonus as f32 * 1.1).round() as i32,
+            WeaponMod::Balanced => (base_bonus as f32 * 1.1).round() as u32,
         }
     }
 
@@ -290,7 +290,7 @@ impl Weapon {
     }
 
     /// 获取武器攻击距离
-    pub fn range(&self) -> i32 {
+    pub fn range(&self) -> u32 {
         let base_range = match self.kind {
             WeaponKind::Spear => 2,
             _ => 1,

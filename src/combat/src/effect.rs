@@ -1,11 +1,7 @@
-// src/combat/src/effect.rs
+
 use bincode::{Decode, Encode};
-use items::Item;
-use serde::de::MapAccess;
-use serde::de::Visitor;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::time::Duration;
 use strum::{Display, EnumIter, EnumString};
 use tui::style::{Color, Style};
 
@@ -13,63 +9,42 @@ use tui::style::{Color, Style};
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct Effect {
     effect_type: EffectType,
-    duration: Duration,
-    intensity: u8,
-    source: EffectSource,
-    last_blink: u64, // 最后闪烁时间(ms)
+    turns: u32,      // 剩余回合数
+    intensity: u8,   // 效果强度
     visible: bool,   // 当前是否可见（用于闪烁效果）
-}
-
-/// 效果来源（用于伤害计算和免疫判断）
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
-pub enum EffectSource {
-    Player,
-    Enemy,
-    Environment,
-    Item(Item), // 物品名称
 }
 
 impl Effect {
     /// 创建新效果（默认强度3）
-    pub fn new(effect_type: EffectType, duration: Duration, source: EffectSource) -> Self {
+    pub fn new(effect_type: EffectType, turns: u32) -> Self {
         Self {
             effect_type,
-            duration,
+            turns,
             intensity: 3,
-            source,
-            last_blink: 0, // 新增字段
-            visible: true, // 新增字段
+            visible: true,
         }
     }
 
-    pub fn with_intensity(
-        effect_type: EffectType,
-        duration: Duration,
-        intensity: u8,
-        source: EffectSource,
-    ) -> Self {
+    pub fn with_intensity(effect_type: EffectType, turns: u32, intensity: u8) -> Self {
         Self {
             effect_type,
-            duration,
+            turns,
             intensity: intensity.clamp(1, 10),
-            source,
-            last_blink: 0, // 新增字段
-            visible: true, // 新增字段
+            visible: true,
         }
     }
 
     /// 检查效果是否已结束
     pub fn is_expired(&self) -> bool {
-        self.duration.as_secs() == 0
+        self.turns == 0
     }
 
-    /// 更新效果持续时间（返回是否仍有效）
-    pub fn update(&mut self, elapsed: Duration) -> bool {
-        if let Some(new_duration) = self.duration.checked_sub(elapsed) {
-            self.duration = new_duration;
+    /// 更新效果回合数（返回是否仍有效）
+    pub fn update(&mut self) -> bool {
+        if self.turns > 0 {
+            self.turns -= 1;
             !self.is_expired()
         } else {
-            self.duration = Duration::ZERO;
             false
         }
     }
@@ -79,9 +54,14 @@ impl Effect {
         self.effect_type
     }
 
-    /// 获取剩余持续时间
-    pub fn duration(&self) -> Duration {
-        self.duration
+    /// 获取剩余回合数
+    pub fn turns(&self) -> u32 {
+        self.turns
+    }
+
+    /// 设置剩余回合数
+    pub fn set_turns(&mut self, turns: u32) {
+        self.turns = turns;
     }
 
     /// 获取效果强度
@@ -89,13 +69,8 @@ impl Effect {
         self.intensity
     }
 
-    /// 获取效果来源
-    pub fn source(&self) -> &EffectSource {
-        &self.source
-    }
-
     /// 计算效果造成的伤害（基于类型和强度）
-    pub fn calculate_damage(&self) -> u32 {
+    pub fn damage(&self) -> u32 {
         match self.effect_type {
             EffectType::Burning => (self.intensity as u32) * 2,
             EffectType::Poison => (self.intensity as u32) * 3,
@@ -124,10 +99,10 @@ impl Effect {
     /// 获取效果描述（用于UI显示）
     pub fn description(&self) -> String {
         let base = match self.effect_type {
-            EffectType::Burning => format!("燃烧中(每回合-{}HP)", self.calculate_damage()),
-            EffectType::Poison => format!("中毒(每回合-{}HP)", self.calculate_damage()),
+            EffectType::Burning => format!("燃烧中(每回合-{}HP)", self.damage()),
+            EffectType::Poison => format!("中毒(每回合-{}HP)", self.damage()),
             EffectType::Paralysis => "麻痹无法行动".to_string(),
-            EffectType::Bleeding => format!("流血(移动时-{}HP)", self.calculate_damage()),
+            EffectType::Bleeding => format!("流血(移动时-{}HP)", self.damage()),
             EffectType::Invisibility => "隐身中".to_string(),
             EffectType::Levitation => "漂浮中".to_string(),
             EffectType::Slow => "减速".to_string(),
@@ -144,20 +119,20 @@ impl Effect {
             EffectType::Rooted => "根系缠绕(无法移动)".to_string(),
         };
 
-        if self.duration.as_secs() > 0 {
-            format!("{} (剩余{}回合)", base, self.duration.as_secs())
+        if self.turns > 0 {
+            format!("{} (剩余{}回合)", base, self.turns)
         } else {
             base
         }
     }
+
     /// 更新视觉效果状态（返回是否需要重绘）
     pub fn update_visual(&mut self, elapsed_ms: u64) -> bool {
-        self.last_blink += elapsed_ms;
         let visual = self.effect_type.visual_style();
-
+        
         if visual.blink_interval > 0 {
-            if self.last_blink >= visual.blink_interval {
-                self.last_blink = 0;
+            // 简单实现：每N回合闪烁一次
+            if self.turns % 2 == 0 {
                 self.visible = !self.visible;
                 return true;
             }
@@ -253,7 +228,7 @@ pub struct VisualEffect {
     pub fg_color: SerializableColor,
     pub bg_color: SerializableColor,
     pub overlay_char: Option<char>,
-    pub blink_interval: u64,
+    pub blink_interval: u64, // 闪烁间隔（回合数）
 }
 
 impl VisualEffect {
@@ -272,25 +247,25 @@ impl EffectType {
                 fg_color: SerializableColor::Red,
                 bg_color: SerializableColor::Black,
                 overlay_char: Some('🔥'),
-                blink_interval: 300,
+                blink_interval: 1, // 每回合闪烁
             },
             EffectType::Poison => VisualEffect {
                 fg_color: SerializableColor::Green,
                 bg_color: SerializableColor::Black,
                 overlay_char: Some('☠'),
-                blink_interval: 500,
+                blink_interval: 2, // 每2回合闪烁
             },
             EffectType::Paralysis => VisualEffect {
                 fg_color: SerializableColor::Yellow,
                 bg_color: SerializableColor::Black,
                 overlay_char: Some('⚡'),
-                blink_interval: 200,
+                blink_interval: 1,
             },
             EffectType::Bleeding => VisualEffect {
                 fg_color: SerializableColor::Rgb(139, 0, 0),
                 bg_color: SerializableColor::Black,
                 overlay_char: Some('🩸'),
-                blink_interval: 0,
+                blink_interval: 0, // 不闪烁
             },
             EffectType::Invisibility => VisualEffect {
                 fg_color: SerializableColor::Gray,
@@ -302,7 +277,7 @@ impl EffectType {
                 fg_color: SerializableColor::LightBlue,
                 bg_color: SerializableColor::Black,
                 overlay_char: Some('🔼'),
-                blink_interval: 400,
+                blink_interval: 1,
             },
             EffectType::Slow => VisualEffect {
                 fg_color: SerializableColor::Gray,
@@ -314,13 +289,13 @@ impl EffectType {
                 fg_color: SerializableColor::LightGreen,
                 bg_color: SerializableColor::Black,
                 overlay_char: Some('⚡'),
-                blink_interval: 100,
+                blink_interval: 1,
             },
             EffectType::MindVision => VisualEffect {
                 fg_color: SerializableColor::Magenta,
                 bg_color: SerializableColor::Black,
                 overlay_char: Some('👁'),
-                blink_interval: 600,
+                blink_interval: 2,
             },
             EffectType::AntiMagic => VisualEffect {
                 fg_color: SerializableColor::Blue,
@@ -338,13 +313,13 @@ impl EffectType {
                 fg_color: SerializableColor::LightYellow,
                 bg_color: SerializableColor::Black,
                 overlay_char: Some('➰'),
-                blink_interval: 150,
+                blink_interval: 1,
             },
             EffectType::Fury => VisualEffect {
                 fg_color: SerializableColor::Red,
                 bg_color: SerializableColor::Black,
                 overlay_char: Some('💢'),
-                blink_interval: 200,
+                blink_interval: 1,
             },
             EffectType::Ooze => VisualEffect {
                 fg_color: SerializableColor::Rgb(0, 100, 0),
@@ -362,7 +337,7 @@ impl EffectType {
                 fg_color: SerializableColor::Yellow,
                 bg_color: SerializableColor::Black,
                 overlay_char: Some('✨'),
-                blink_interval: 300,
+                blink_interval: 1,
             },
             EffectType::Darkness => VisualEffect {
                 fg_color: SerializableColor::DarkGray,
@@ -371,9 +346,9 @@ impl EffectType {
                 blink_interval: 0,
             },
             EffectType::Rooted => VisualEffect {
-                fg_color: SerializableColor::Rgb(101, 67, 33), // 棕色
+                fg_color: SerializableColor::Rgb(101, 67, 33),
                 bg_color: SerializableColor::Black,
-                overlay_char: Some('🌿'), // 使用植物符号
+                overlay_char: Some('🌿'),
                 blink_interval: 0,
             },
         }
@@ -399,7 +374,7 @@ impl EffectType {
             EffectType::Frost => SerializableColor::LightCyan,
             EffectType::Light => SerializableColor::Yellow,
             EffectType::Darkness => SerializableColor::DarkGray,
-            EffectType::Rooted => SerializableColor::Rgb(101, 67, 33), // 棕色
+            EffectType::Rooted => SerializableColor::Rgb(101, 67, 33),
         }
     }
 }
