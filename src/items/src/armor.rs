@@ -9,7 +9,7 @@ use tui::style::Color;
 #[derive(PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct Armor {
     pub tier: u32,               // 品阶1-5
-    pub defense: i32,              // 基础防御
+    pub defense: u32,              // 基础防御
     pub upgrade_level: u8,         // 强化等级（非负）
     pub glyph: Option<ArmorGlyph>, // 护甲刻印
     pub cursed: bool,              // 是否被诅咒
@@ -132,7 +132,7 @@ impl Armor {
     }
 
     /// 获取基础防御值（根据游戏平衡数据）
-    fn base_defense(tier: u32) -> i32 {
+    fn base_defense(tier: u32) -> u32 {
         match tier {
             1 => 2,  // 布甲
             2 => 5,  // 皮甲
@@ -199,7 +199,7 @@ impl Armor {
     }
     
     /// 获取护甲闪避惩罚（基于品阶和强化等级）
-    pub fn evasion_penalty(&self) -> i32 {
+    pub fn evasion_penalty(&self) -> u32 {
         // 基础闪避惩罚（品阶越高惩罚越大）
         let base_penalty = match self.tier {
             1 => 0,   // 布甲无惩罚
@@ -211,7 +211,7 @@ impl Armor {
         };
 
         // 每3级强化减少1点惩罚（最低0）
-        let upgrade_reduction = self.upgrade_level as i32 / 3;
+        let upgrade_reduction = self.upgrade_level as u32 / 3;
         let mut final_penalty = base_penalty - upgrade_reduction;
 
         // 特殊刻印效果：流动刻印完全消除惩罚
@@ -221,7 +221,7 @@ impl Armor {
 
         // 诅咒增加50%惩罚（向上取整）
         if self.cursed {
-            final_penalty = (final_penalty as f32 * 1.5).ceil() as i32;
+            final_penalty = (final_penalty as f32 * 1.5).ceil() as u32;
         }
 
         final_penalty.max(0) // 确保不会返回负数
@@ -244,10 +244,10 @@ impl Armor {
     }
 
     /// 计算实际防御值（考虑强化等级和诅咒）
-    pub fn defense(&self) -> i32 {
-        let mut defense = self.defense + self.upgrade_level as i32;
+    pub fn defense(&self) -> u32 {
+        let mut defense = self.defense + self.upgrade_level as u32;
         if self.cursed {
-            defense = (defense as f32 * 0.67).floor() as i32; // 诅咒减少33%防御
+            defense = (defense as f32 * 0.67).floor() as u32; // 诅咒减少33%防御
         }
         defense.max(1) // 防御值至少为1
     }
@@ -290,9 +290,9 @@ impl Armor {
         }
         
         self.glyph.as_ref().map(|glyph| match glyph {
-            ArmorGlyph::Thorns => GlyphEffect::ReflectDamage(1 + self.upgrade_level as i32 / 3),
+            ArmorGlyph::Thorns => GlyphEffect::ReflectDamage(1 + self.upgrade_level as u32 / 3),
             ArmorGlyph::Repulsion => GlyphEffect::Knockback(2),
-            ArmorGlyph::Affection => GlyphEffect::Charm(10 + self.upgrade_level as i32 * 5),
+            ArmorGlyph::Affection => GlyphEffect::Charm(10 + self.upgrade_level as u32 * 5),
             _ => GlyphEffect::None,
         })
     }
@@ -302,9 +302,9 @@ impl Armor {
 #[derive(Debug, Clone)]
 pub enum GlyphEffect {
     None,
-    ReflectDamage(i32), // 反弹伤害值
-    Knockback(i32),     // 击退距离
-    Charm(i32),         // 魅惑概率(百分比)
+    ReflectDamage(u32), // 反弹伤害值
+    Knockback(u32),     // 击退距离
+    Charm(u32),         // 魅惑概率(百分比)
 }
 
 impl fmt::Display for ArmorGlyph {

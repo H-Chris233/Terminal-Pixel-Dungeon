@@ -7,22 +7,22 @@ use items::weapon::Weapon;
 /// 表示可以参加战斗的活体
 pub trait Combatant {
     /// 获取当前生命值
-    fn hp(&self) -> i32;
+    fn hp(&self) -> u32;
 
     /// 获取最大生命值
-    fn max_hp(&self) -> i32;
+    fn max_hp(&self) -> u32;
 
     /// 获取基础攻击力
-    fn attack_power(&self) -> i32;
+    fn attack_power(&self) -> u32;
 
     /// 获取防御力
-    fn defense(&self) -> i32;
+    fn defense(&self) -> u32;
 
     /// 获取命中率
-    fn accuracy(&self) -> i32;
+    fn accuracy(&self) -> u32;
 
     /// 获取闪避率
-    fn evasion(&self) -> i32;
+    fn evasion(&self) -> u32;
 
     /// 获取暴击加成
     fn crit_bonus(&self) -> f32;
@@ -37,10 +37,10 @@ pub trait Combatant {
     fn name(&self) -> &str;
 
     /// 获取攻击距离
-    fn attack_distance(&self) -> i32;
+    fn attack_distance(&self) -> u32;
 
     /// 获取击败后提供的经验值
-    fn experience_value(&self) -> Option<i32> {
+    fn experience_value(&self) -> Option<u32> {
         None // 默认不提供经验值
     }
 
@@ -50,31 +50,31 @@ pub trait Combatant {
     }
 
     /// 造成伤害
-    fn take_damage(&mut self, amount: i32) -> bool;
+    fn take_damage(&mut self, amount: u32) -> bool;
 
     /// 治疗
-    fn heal(&mut self, amount: i32);
+    fn heal(&mut self, amount: u32);
 }
 
 // 为Enemy实现Combatant
 impl Combatant for Enemy {
-    fn hp(&self) -> i32 {
+    fn hp(&self) -> u32 {
         self.hp
     }
 
-    fn max_hp(&self) -> i32 {
+    fn max_hp(&self) -> u32 {
         self.max_hp
     }
 
-    fn attack_power(&self) -> i32 {
-        self.attack + self.weapon.as_ref().map_or(0, |w| w.damage_bonus() as i32)
+    fn attack_power(&self) -> u32 {
+        self.attack + self.weapon.as_ref().map_or(0, |w| w.damage_bonus() as u32)
     }
 
-    fn defense(&self) -> i32 {
+    fn defense(&self) -> u32 {
         self.defense
     }
 
-    fn accuracy(&self) -> i32 {
+    fn accuracy(&self) -> u32 {
         let base = match self.kind {
             EnemyKind::Rat => 8,
             EnemyKind::Snake => 10,
@@ -89,10 +89,10 @@ impl Combatant for Enemy {
         base + self
             .weapon
             .as_ref()
-            .map_or(0, |w| w.accuracy_bonus() as i32)
+            .map_or(0, |w| w.accuracy_bonus() as u32)
     }
 
-    fn evasion(&self) -> i32 {
+    fn evasion(&self) -> u32 {
         match self.kind {
             EnemyKind::Rat => 6,
             EnemyKind::Snake => 12,
@@ -132,22 +132,22 @@ impl Combatant for Enemy {
         }
     }
 
-    fn attack_distance(&self) -> i32 {
+    fn attack_distance(&self) -> u32 {
         self.weapon
             .as_ref()
-            .map_or(self.attack_range, |w| w.range() as i32)
+            .map_or(self.attack_range, |w| w.range() as u32)
     }
 
-    fn take_damage(&mut self, amount: i32) -> bool {
-        let actual_damage = (amount - self.defense).max(1);
-        self.hp = (self.hp - actual_damage).max(0);
+    fn take_damage(&mut self, amount: u32) -> bool {
+        let actual_damage = (amount - self.defense as u32).max(1);
+        self.hp = (self.hp as u32 - actual_damage).max(0);
         self.is_alive()
     }
 
-    fn heal(&mut self, amount: i32) {
+    fn heal(&mut self, amount: u32) {
         self.hp = (self.hp + amount).min(self.max_hp);
     }
-    fn experience_value(&self) -> Option<i32> {
+    fn experience_value(&self) -> Option<u32> {
         Some(self.exp_value)
     }
 }

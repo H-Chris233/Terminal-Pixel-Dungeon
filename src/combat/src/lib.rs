@@ -22,7 +22,7 @@ mod constants {
     pub const CRIT_MULTIPLIER: f32 = 1.5; // Critical damage multiplier
     pub const BASE_CRIT_CHANCE: f32 = 0.1; // Base critical chance
     pub const DEFENSE_CAP: f32 = 0.8; // Maximum damage reduction from defense
-    pub const MIN_DAMAGE: i32 = 1; // Minimum damage dealt
+    pub const MIN_DAMAGE: u32 = 1; // Minimum damage dealt
     pub const RANGED_PENALTY_PER_TILE: f32 = 0.15; // 15% penalty per tile closer than max
     pub const SURPRISE_ATTACK_MODIFIER: f32 = 0.5; // Damage modifier for surprise attacks
 }
@@ -66,7 +66,7 @@ impl Combat {
         attacker: &T,
         defender: &U,
         is_surprise: bool,
-    ) -> i32 {
+    ) -> u32 {
         // Base damage with weapon variation (80-120%)
         let base_damage = attacker.attack_power() as f32;
         let damage_var = 0.8 + rand::rng().random_range(0.0..0.4);
@@ -88,7 +88,7 @@ impl Combat {
         let mitigated_damage = raw_damage * (1.0 - defense_factor);
 
         // Ensure minimum damage is dealt
-        mitigated_damage.max(constants::MIN_DAMAGE as f32) as i32
+        mitigated_damage.max(constants::MIN_DAMAGE as f32) as u32
     }
 
     /// Resolve a single attack with combat logs
@@ -147,7 +147,7 @@ impl Combat {
 pub struct CombatResult {
     pub logs: Vec<String>, // Combat messages for UI
     pub defeated: bool,    // Whether target was defeated
-    pub experience: i32,   // Experience gained (if any)
+    pub experience: u32,   // Experience gained (if any)
 }
 
 impl CombatResult {

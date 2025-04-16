@@ -1,3 +1,4 @@
+
 // src/hero/src/bag.rs
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
@@ -6,8 +7,9 @@ use thiserror::Error;
 
 use crate::HeroError;
 
-pub mod equipment;
-pub mod inventory;
+// 子模块定义
+pub mod equipment;  // 装备管理
+pub mod inventory;  // 物品库存管理
 
 use crate::bag::{
     equipment::{EquipError, Equipment},
@@ -27,70 +29,71 @@ use items::{
     Item, ItemKind,
 };
 
-/// Complete bag system matching Shattered PD mechanics
+/// 完整的背包系统（遵循破碎的像素地牢机制）
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct Bag {
-    gold: u32,
-    equipment: Equipment,
-    weapons: Inventory<Weapon>,
-    armors: Inventory<Armor>,
-    potions: Inventory<Potion>,
-    scrolls: Inventory<Scroll>,
-    wands: Inventory<Wand>,
-    rings: Inventory<Ring>,
-    seeds: Inventory<Seed>,
-    stones: Inventory<Stone>,
-    food: Inventory<Food>,
-    misc: Inventory<MiscItem>,
+    gold: u32,                  // 金币数量
+    equipment: Equipment,       // 已装备的物品
+    weapons: Inventory<Weapon>, // 武器库存
+    armors: Inventory<Armor>,   // 护甲库存
+    potions: Inventory<Potion>, // 药水库存
+    scrolls: Inventory<Scroll>, // 卷轴库存
+    wands: Inventory<Wand>,     // 法杖库存
+    rings: Inventory<Ring>,     // 戒指库存
+    seeds: Inventory<Seed>,     // 种子库存
+    stones: Inventory<Stone>,   // 宝石库存
+    food: Inventory<Food>,      // 食物库存
+    misc: Inventory<MiscItem>,  // 杂项物品
 }
 
-/// Bag-specific error types
+/// 背包特定的错误类型
 #[derive(Debug, Error)]
 pub enum BagError {
     #[error(transparent)]
-    Inventory(#[from] InventoryError),
+    Inventory(#[from] InventoryError),  // 库存错误
     #[error(transparent)]
-    Equipment(#[from] EquipError),
-    #[error("Not enough gold")]
-    NotEnoughGold,
-    #[error("No weapon equipped")]
-    NoWeaponEquipped,
-    #[error("No upgrade scroll available")]
-    NoUpgradeScroll,
+    Equipment(#[from] EquipError),      // 装备错误
+    #[error("金币不足")]
+    NotEnoughGold,                     // 金币不足
+    #[error("没有装备武器")]
+    NoWeaponEquipped,                  // 无武器
+    #[error("没有升级卷轴")]
+    NoUpgradeScroll,                   // 无升级卷轴
     #[error("背包已满")]
-    InventoryFull,
-    #[error("Invalid item index")]
-    InvalidIndex,
-    #[error("Item cannot be used")]
-    CannotUseItem,
-    #[error("Item cannot be equipped")]
-    CannotEquipItem,
+    InventoryFull,                     // 背包满
+    #[error("无效的物品索引")]
+    InvalidIndex,                      // 无效索引
+    #[error("物品无法使用")]
+    CannotUseItem,                     // 不可使用
+    #[error("物品无法装备")]
+    CannotEquipItem,                   // 不可装备
 }
 
 impl Bag {
-    /// Create new bag with default capacities
+    /// 创建具有默认容量的新背包
     pub fn new() -> Self {
         Self {
             gold: 0,
             equipment: Equipment::new(),
-            weapons: Inventory::new(4),
-            armors: Inventory::new(3),
-            potions: Inventory::new(8),
-            scrolls: Inventory::new(8),
-            wands: Inventory::new(4),
-            rings: Inventory::new(4),
-            seeds: Inventory::new(4),
-            stones: Inventory::new(4),
-            food: Inventory::new(4),
-            misc: Inventory::new(4),
+            weapons: Inventory::new(4),   // 武器容量4
+            armors: Inventory::new(3),    // 护甲容量3
+            potions: Inventory::new(8),   // 药水容量8
+            scrolls: Inventory::new(8),   // 卷轴容量8
+            wands: Inventory::new(4),     // 法杖容量4
+            rings: Inventory::new(4),     // 戒指容量4
+            seeds: Inventory::new(4),     // 种子容量4
+            stones: Inventory::new(4),    // 宝石容量4
+            food: Inventory::new(4),     // 食物容量4
+            misc: Inventory::new(4),     // 杂项容量4
         }
     }
 
-    /// Gold management
+    /// 金币管理
     pub fn add_gold(&mut self, amount: u32) {
         self.gold += amount;
     }
 
+    /// 花费金币
     pub fn spend_gold(&mut self, amount: u32) -> Result<(), BagError> {
         if self.gold >= amount {
             self.gold -= amount;
@@ -100,7 +103,7 @@ impl Bag {
         }
     }
 
-    /// Unified item usage interface
+    /// 统一的物品使用接口
     pub fn use_item(&mut self, index: usize) -> Result<Item, BagError> {
         let item = self.get_item_by_index(index)?;
 
@@ -125,7 +128,7 @@ impl Bag {
         }
     }
 
-    /// Unified equipment interface
+    /// 统一的装备接口
     pub fn equip_item(&mut self, index: usize, strength: u8) -> Result<Option<Item>, BagError> {
         let item = self.get_item_by_index(index)?;
 
@@ -154,7 +157,7 @@ impl Bag {
         }
     }
 
-    /// Weapon upgrade system
+    /// 武器升级系统
     pub fn upgrade_weapon(&mut self) -> Result<(), BagError> {
         let scroll_idx = self.find_upgrade_scroll()?;
         self.scrolls.remove(scroll_idx)?;
@@ -162,14 +165,14 @@ impl Bag {
         Ok(())
     }
 
-    /// Find first available upgrade scroll
+    /// 查找第一个可用的升级卷轴
     fn find_upgrade_scroll(&self) -> Result<usize, BagError> {
         self.scrolls
             .find(|s| matches!(s.kind, ScrollKind::Upgrade))
             .ok_or(BagError::NoUpgradeScroll)
     }
 
-    /// Find available ring slot (0 or 1)
+    /// 查找可用的戒指槽位(0或1)
     fn find_available_ring_slot(&self) -> usize {
         if self.equipment.rings[0].is_none() {
             0
@@ -178,11 +181,11 @@ impl Bag {
         }
     }
 
-    /// Get item by global index across all inventories
+    /// 通过全局索引获取物品（跨所有库存）
     fn get_item_by_index(&self, index: usize) -> Result<Item, BagError> {
         let mut idx = index;
 
-        // Check weapons
+        // 检查武器
         if idx < self.weapons.len() {
             return self
                 .weapons
@@ -192,7 +195,7 @@ impl Bag {
         }
         idx -= self.weapons.len();
 
-        // Check armors
+        // 检查护甲
         if idx < self.armors.len() {
             return self
                 .armors
@@ -202,7 +205,7 @@ impl Bag {
         }
         idx -= self.armors.len();
 
-        // Continue with other inventories...
+        // 检查药水
         if idx < self.potions.len() {
             return self
                 .potions
@@ -212,6 +215,7 @@ impl Bag {
         }
         idx -= self.potions.len();
 
+        // 检查卷轴
         if idx < self.scrolls.len() {
             return self
                 .scrolls
@@ -221,6 +225,7 @@ impl Bag {
         }
         idx -= self.scrolls.len();
 
+        // 检查戒指
         if idx < self.rings.len() {
             return self
                 .rings
@@ -230,6 +235,7 @@ impl Bag {
         }
         idx -= self.rings.len();
 
+        // 检查食物
         if idx < self.food.len() {
             return self
                 .food
@@ -241,7 +247,7 @@ impl Bag {
         Err(BagError::InvalidIndex)
     }
 
-    /// Add item with automatic categorization
+    /// 自动分类添加物品
     pub fn add_item(&mut self, item: Item) -> Result<(), BagError> {
         match item.kind {
             ItemKind::Weapon(w) => self
@@ -268,6 +274,7 @@ impl Bag {
         .map_err(Into::into)
     }
 
+    /// 移除物品
     pub fn remove_item(&mut self, index: usize) -> Result<(), BagError> {
         let mut idx = index;
 
@@ -303,7 +310,7 @@ impl Bag {
         Err(BagError::InvalidIndex)
     }
 
-    /// Sorting functions
+    /// 排序功能
     pub fn sort_weapons(&mut self) {
         self.weapons.sort_by(|a, b| {
             b.upgrade_level
@@ -324,7 +331,7 @@ impl Bag {
         self.rings.sort_by(|a, b| b.level.cmp(&a.level));
     }
 
-    /// Getters for UI
+    /// 获取方法（用于UI）
     pub fn gold(&self) -> u32 {
         self.gold
     }
@@ -357,85 +364,3 @@ impl Bag {
         &self.food
     }
 }
-
-/* === STRUCTS === */
-
-/*
-pub struct Bag {
-    gold: u32,
-    equipment: Equipment,
-    weapons: Inventory<Weapon>,
-    armors: Inventory<Armor>,
-    potions: Inventory<Potion>,
-    scrolls: Inventory<Scroll>,
-    wands: Inventory<Wand>,
-    rings: Inventory<Ring>,
-    seeds: Inventory<Seed>,
-    stones: Inventory<Stone>,
-    food: Inventory<Food>,
-    misc: Inventory<MiscItem>,
-}
-*/
-
-/* === ENUMS === */
-
-/*
-pub enum BagError {
-    #[error(transparent)]
-    Inventory(#[from] InventoryError),
-    #[error(transparent)]
-    Equipment(#[from] EquipError),
-    #[error("Not enough gold")]
-    NotEnoughGold,
-    #[error("No weapon equipped")]
-    NoWeaponEquipped,
-    #[error("No upgrade scroll available")]
-    NoUpgradeScroll,
-    #[error("Invalid item index")]
-    InvalidIndex,
-    #[error("Item cannot be used")]
-    CannotUseItem,
-    #[error("Item cannot be equipped")]
-    CannotEquipItem,
-}
-*/
-
-/* === IMPL BLOCK FOR Bag === */
-
-/*
-impl Bag {
-    pub fn new() -> Self
-    pub fn add_gold(&mut self, amount: u32)
-    pub fn spend_gold(&mut self, amount: u32) -> Result<(), BagError>
-    pub fn use_item(&mut self, index: usize) -> Result<Item, BagError>
-    pub fn equip_item(&mut self, index: usize, strength: u8) -> Result<Option<Item>, BagError>
-    pub fn upgrade_weapon(&mut self) -> Result<(), BagError>
-    fn find_upgrade_scroll(&self) -> Result<usize, BagError>
-    fn find_available_ring_slot(&self) -> usize
-    fn get_item_by_index(&self, index: usize) -> Result<Item, BagError>
-    pub fn add_item(&mut self, item: Item) -> Result<(), BagError>
-    fn remove_item(&mut self, index: usize) -> Result<(), BagError>
-    pub fn sort_weapons(&mut self)
-    pub fn sort_armors(&mut self)
-    pub fn sort_rings(&mut self)
-    pub fn gold(&self) -> u32
-    pub fn weapons(&self) -> &Inventory<Weapon>
-    pub fn armors(&self) -> &Inventory<Armor>
-    pub fn potions(&self) -> &Inventory<Potion>
-    pub fn scrolls(&self) -> &Inventory<Scroll>
-    pub fn equipment(&self) -> &Equipment
-    pub fn rings(&self) -> &Inventory<Ring>
-    pub fn food(&self) -> &Inventory<Food>
-}
-*/
-
-/* === TRAIT IMPLEMENTATIONS === */
-
-/*
-impl Clone for Bag
-impl Debug for Bag
-impl Encode for Bag
-impl Decode for Bag
-impl Serialize for Bag
-impl Deserialize for Bag
-*/

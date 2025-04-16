@@ -12,16 +12,16 @@ use items::Weapon;
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct Enemy {
     pub kind: EnemyKind,
-    pub hp: i32,
-    pub max_hp: i32,
-    pub attack: i32,
-    pub defense: i32,
-    pub exp_value: i32,
+    pub hp: u32,
+    pub max_hp: u32,
+    pub attack: u32,
+    pub defense: u32,
+    pub exp_value: u32,
     pub x: i32,
     pub y: i32,
     pub state: EnemyState,
-    pub attack_range: i32,
-    pub detection_range: i32,
+    pub attack_range: u32,
+    pub detection_range: u32,
     pub symbol: char,
     pub color: (u8, u8, u8),
     pub is_surprised: bool,
@@ -63,7 +63,7 @@ pub enum EnemyState {
 /// 掉落物品类型
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub enum DropItem {
-    Gold(i32),
+    Gold(u32),
     HealthPotion,
     Weapon(String), // 武器类型
     Armor(String),  // 护甲类型
@@ -108,7 +108,7 @@ impl Enemy {
     }
 
     /// 受到伤害
-    pub fn take_damage(&mut self, amount: i32) -> bool {
+    pub fn take_damage(&mut self, amount: u32) -> bool {
         let actual_damage = (amount - self.defense).max(1);
         self.hp = (self.hp - actual_damage).max(0);
         self.is_alive()
@@ -257,7 +257,7 @@ impl Enemy {
     }
 
     /// 获取攻击力（考虑武器加成）
-    pub fn attack_power(&self) -> i32 {
+    pub fn attack_power(&self) -> u32 {
         let base = self.attack;
         self.weapon
             .as_ref()
@@ -265,12 +265,12 @@ impl Enemy {
     }
 
     /// 获取防御力
-    pub fn defense(&self) -> i32 {
+    pub fn defense(&self) -> u32 {
         self.defense
     }
 
     /// 获取经验值
-    pub fn experience_value(&self) -> i32 {
+    pub fn experience_value(&self) -> u32 {
         self.exp_value
     }
 
@@ -293,7 +293,7 @@ impl Enemy {
     }
 
     /// 获取闪避率
-    pub fn evasion(&self) -> i32 {
+    pub fn evasion(&self) -> u32 {
         match self.kind {
             EnemyKind::Rat => 6,
             EnemyKind::Snake => 12,
@@ -345,7 +345,7 @@ impl Enemy {
     }
 
     /// 计算攻击伤害（考虑惊讶状态和武器）
-    pub fn calculate_attack(&self) -> i32 {
+    pub fn calculate_attack(&self) -> u32 {
         let base_damage = self.attack_power();
         let damage = if self.is_surprised {
             base_damage / 2 // 惊讶状态下伤害减半
@@ -356,16 +356,16 @@ impl Enemy {
         // 添加随机波动 (80%-120%)
         let mut rng = rand::rng();
         let damage_var = 0.8 + rng.random_range(0.0..0.4);
-        (damage as f32 * damage_var) as i32
+        (damage as f32 * damage_var) as u32
     }
 
     /// 治疗指定数值
-    pub fn heal(&mut self, amount: i32) {
+    pub fn heal(&mut self, amount: u32) {
         self.hp = (self.hp + amount).min(self.max_hp);
     }
 
     /// 获取攻击距离（优先使用武器距离）
-    pub fn attack_distance(&self) -> i32 {
+    pub fn attack_distance(&self) -> u32 {
         self.weapon
             .as_ref()
             .map_or(self.attack_range, |w| w.range().into())
