@@ -1,4 +1,5 @@
 // src/hero/src/bag/equipment.rs
+use bincode::{Decode, Encode};
 use items::{armor::Armor, ring::Ring, scroll::Scroll, weapon::Weapon};
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumIter};
@@ -35,7 +36,7 @@ pub enum EquipmentSlot {
 }
 
 /// 装备系统（完整实现游戏机制）
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct Equipment {
     pub weapon: Option<Weapon>,
     pub armor: Option<Armor>,
@@ -83,11 +84,7 @@ impl Equipment {
     }
 
     /// 装备护甲（完整游戏逻辑）
-    pub fn equip_armor(
-        &mut self,
-        armor: Armor,
-        user_str: u8,
-    ) -> Result<Option<Armor>, EquipError> {
+    pub fn equip_armor(&mut self, armor: Armor, user_str: u8) -> Result<Option<Armor>, EquipError> {
         // 检查力量需求
         if user_str < armor.str_requirement {
             return Err(EquipError::StrengthRequirement);
@@ -120,7 +117,7 @@ impl Equipment {
         self.update_cursed_status();
         Ok(old)
     }
-    
+
     /// 卸下武器（考虑诅咒状态）
     pub fn unequip_weapon(&mut self) -> Result<Option<Weapon>, EquipError> {
         if self.cursed {
@@ -218,6 +215,29 @@ impl Equipment {
                 .iter()
                 .any(|r| r.as_ref().map_or(false, |r| r.cursed));
     }
+    /// 获取当前装备的武器（如果有）
+    pub fn weapon(&self) -> Option<&Weapon> {
+        self.weapon.as_ref()
+    }
+
+    /// 获取当前装备的护甲（如果有）
+    pub fn armor(&self) -> Option<&Armor> {
+        self.armor.as_ref()
+    }
+
+    /// 获取当前装备的所有戒指（过滤掉None值）
+    pub fn rings(&self) -> Vec<&Ring> {
+        self.rings.iter().filter_map(|opt| opt.as_ref()).collect()
+    }
+
+    /// 获取指定槽位的戒指（0或1）
+    pub fn ring(&self, slot: usize) -> Option<&Ring> {
+        if slot < 2 {
+            self.rings[slot].as_ref()
+        } else {
+            None
+        }
+    }
 }
 
 #[cfg(test)]
@@ -265,7 +285,7 @@ mod tests {
             Err(EquipError::StrengthRequirement)
         );
     }
-    
+
     #[test]
     fn test_unequip() {
         let mut eq = Equipment::new();
@@ -323,9 +343,7 @@ mod tests {
         assert!(eq.armor.is_none());
         assert!(eq.rings.iter().all(|r| r.is_none()));
     }
-    
 }
-
 
 /*
 // 错误类型

@@ -1,14 +1,12 @@
-
 // src/combat/src/enemy/enemy.rs
 
 use bincode::{Decode, Encode};
-use serde::{Deserialize, Serialize};
-use rand::Rng;
-use rand::prelude::IndexedRandom;
 use rand::distr::Uniform;
+use rand::prelude::IndexedRandom;
+use rand::Rng;
+use serde::{Deserialize, Serialize};
 
 use items::Weapon;
-
 
 /// 敌人实体，包含战斗属性和位置信息
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
@@ -67,11 +65,11 @@ pub enum EnemyState {
 pub enum DropItem {
     Gold(i32),
     HealthPotion,
-    Weapon(String),  // 武器类型
-    Armor(String),   // 护甲类型
-    Scroll(String),  // 卷轴类型
-    Key,             // 钥匙
-    Artifact,        // 神器
+    Weapon(String), // 武器类型
+    Armor(String),  // 护甲类型
+    Scroll(String), // 卷轴类型
+    Key,            // 钥匙
+    Artifact,       // 神器
 }
 
 impl Enemy {
@@ -88,7 +86,7 @@ impl Enemy {
             EnemyKind::Warlock => (18, 15, 5, 12, 3, 8, 'W', (255, 0, 255)),
             EnemyKind::Golem => (50, 18, 15, 15, 1, 4, 'M', (150, 150, 150)),
         };
-        
+
         Self {
             kind,
             hp,
@@ -108,25 +106,25 @@ impl Enemy {
             crit_bonus: 0.0,
         }
     }
-    
+
     /// 受到伤害
     pub fn take_damage(&mut self, amount: i32) -> bool {
         let actual_damage = (amount - self.defense).max(1);
         self.hp = (self.hp - actual_damage).max(0);
         self.is_alive()
     }
-    
+
     /// 是否存活
     pub fn is_alive(&self) -> bool {
         self.hp > 0
     }
-    
+
     /// 重置敌人状态
     pub fn reset(&mut self) {
         self.state = EnemyState::Idle;
         self.is_surprised = false;
     }
-    
+
     /// 状态转换方法
     pub fn set_state(&mut self, new_state: EnemyState) {
         if new_state == EnemyState::Hostile {
@@ -134,32 +132,37 @@ impl Enemy {
         }
         self.state = new_state;
     }
-    
+
     /// 转换为敌对状态
     pub fn make_hostile(&mut self) {
         self.set_state(EnemyState::Hostile);
     }
-    
+
     /// 转换为逃跑状态
     pub fn start_fleeing(&mut self) {
         self.set_state(EnemyState::Fleeing);
     }
-    
+
     /// 转换为警戒状态
     pub fn alert(&mut self) {
         self.set_state(EnemyState::Alert);
     }
-    
+
     /// 使用改进的寻路算法计算下一步移动方向
-    pub fn calculate_move(&self, target_x: i32, target_y: i32, obstacles: &[(i32, i32)]) -> Option<(i32, i32)> {
+    pub fn calculate_move(
+        &self,
+        target_x: i32,
+        target_y: i32,
+        obstacles: &[(i32, i32)],
+    ) -> Option<(i32, i32)> {
         // 简单实现：优先减少x或y距离
         let dx = (target_x - self.x).signum();
         let dy = (target_y - self.y).signum();
-        
+
         // 检查移动是否有效(不穿过障碍物)
         let new_x = self.x + dx;
         let new_y = self.y + dy;
-        
+
         if !obstacles.contains(&(new_x, new_y)) {
             Some((dx, dy))
         } else {
@@ -183,80 +186,82 @@ impl Enemy {
             }
         }
     }
-    
+
     /// 执行移动
     pub fn perform_move(&mut self, dx: i32, dy: i32) {
         self.x += dx;
         self.y += dy;
         self.is_surprised = false; // 移动后不再处于惊讶状态
     }
-    
+
     /// 敌人死亡时掉落物品
     pub fn drop_items(&self) -> Vec<DropItem> {
-    let mut drops = Vec::new();
-    let mut rng = rand::rng();
-    
-    // 基础掉落：金币
-    let gold_amount = match self.kind {
-        EnemyKind::Rat => rng.random_range(1..5),
-        EnemyKind::Snake => rng.random_range(2..6),
-        EnemyKind::Gnoll => rng.random_range(3..8),
-        EnemyKind::Crab => rng.random_range(2..7),
-        EnemyKind::Bat => rng.random_range(1..4),
-        EnemyKind::Scorpion => rng.random_range(4..10),
-        EnemyKind::Guard => rng.random_range(5..12),
-        EnemyKind::Warlock => rng.random_range(8..15),
-        EnemyKind::Golem => rng.random_range(10..20),
-    };
-    
-    drops.push(DropItem::Gold(gold_amount));
-    
-    // 稀有掉落
-    let rare_drop_chance = match self.kind {
-        EnemyKind::Rat => 0.05,
-        EnemyKind::Snake => 0.08,
-        EnemyKind::Gnoll => 0.1,
-        EnemyKind::Crab => 0.07,
-        EnemyKind::Bat => 0.15,
-        EnemyKind::Scorpion => 0.12,
-        EnemyKind::Guard => 0.2,
-        EnemyKind::Warlock => 0.25,
-        EnemyKind::Golem => 0.3,
-    };
-    
-    if rng.random::<f32>() < rare_drop_chance {
-        drops.push(match rng.random_range(0..6) {
-            0 => DropItem::HealthPotion,
-            1 => DropItem::Weapon("Dagger".to_string()),
-            2 => DropItem::Armor("Leather".to_string()),
-            3 => DropItem::Scroll("Identify".to_string()),
-            4 => DropItem::Key,
-            _ => DropItem::Gold(5),
-        });
-    }
-    
-    // 特殊敌人掉落
-    match self.kind {
-        EnemyKind::Guard => {
-            if rng.random::<f32>() < 0.1 {
-                drops.push(DropItem::Key);
+        let mut drops = Vec::new();
+        let mut rng = rand::rng();
+
+        // 基础掉落：金币
+        let gold_amount = match self.kind {
+            EnemyKind::Rat => rng.random_range(1..5),
+            EnemyKind::Snake => rng.random_range(2..6),
+            EnemyKind::Gnoll => rng.random_range(3..8),
+            EnemyKind::Crab => rng.random_range(2..7),
+            EnemyKind::Bat => rng.random_range(1..4),
+            EnemyKind::Scorpion => rng.random_range(4..10),
+            EnemyKind::Guard => rng.random_range(5..12),
+            EnemyKind::Warlock => rng.random_range(8..15),
+            EnemyKind::Golem => rng.random_range(10..20),
+        };
+
+        drops.push(DropItem::Gold(gold_amount));
+
+        // 稀有掉落
+        let rare_drop_chance = match self.kind {
+            EnemyKind::Rat => 0.05,
+            EnemyKind::Snake => 0.08,
+            EnemyKind::Gnoll => 0.1,
+            EnemyKind::Crab => 0.07,
+            EnemyKind::Bat => 0.15,
+            EnemyKind::Scorpion => 0.12,
+            EnemyKind::Guard => 0.2,
+            EnemyKind::Warlock => 0.25,
+            EnemyKind::Golem => 0.3,
+        };
+
+        if rng.random::<f32>() < rare_drop_chance {
+            drops.push(match rng.random_range(0..6) {
+                0 => DropItem::HealthPotion,
+                1 => DropItem::Weapon("Dagger".to_string()),
+                2 => DropItem::Armor("Leather".to_string()),
+                3 => DropItem::Scroll("Identify".to_string()),
+                4 => DropItem::Key,
+                _ => DropItem::Gold(5),
+            });
+        }
+
+        // 特殊敌人掉落
+        match self.kind {
+            EnemyKind::Guard => {
+                if rng.random::<f32>() < 0.1 {
+                    drops.push(DropItem::Key);
+                }
             }
-        },
-        EnemyKind::Warlock => {
-            if rng.random::<f32>() < 0.15 {
-                drops.push(DropItem::Scroll("Magic Mapping".to_string()));
+            EnemyKind::Warlock => {
+                if rng.random::<f32>() < 0.15 {
+                    drops.push(DropItem::Scroll("Magic Mapping".to_string()));
+                }
             }
-        },
-        _ => {}
+            _ => {}
+        }
+
+        drops
     }
-    
-    drops
-}
-    
+
     /// 获取攻击力（考虑武器加成）
     pub fn attack_power(&self) -> i32 {
         let base = self.attack;
-        self.weapon.as_ref().map_or(base, |w| base + w.damage_bonus())
+        self.weapon
+            .as_ref()
+            .map_or(base, |w| base + w.damage_bonus())
     }
 
     /// 获取防御力
@@ -282,7 +287,9 @@ impl Enemy {
             EnemyKind::Warlock => 16,
             EnemyKind::Golem => 10,
         };
-        self.weapon.as_ref().map_or(base, |w| base + w.accuracy_bonus())
+        self.weapon
+            .as_ref()
+            .map_or(base, |w| base + w.accuracy_bonus())
     }
 
     /// 获取闪避率
@@ -341,11 +348,11 @@ impl Enemy {
     pub fn calculate_attack(&self) -> i32 {
         let base_damage = self.attack_power();
         let damage = if self.is_surprised {
-            base_damage / 2  // 惊讶状态下伤害减半
+            base_damage / 2 // 惊讶状态下伤害减半
         } else {
             base_damage
         };
-        
+
         // 添加随机波动 (80%-120%)
         let mut rng = rand::rng();
         let damage_var = 0.8 + rng.random_range(0.0..0.4);
@@ -359,56 +366,57 @@ impl Enemy {
 
     /// 获取攻击距离（优先使用武器距离）
     pub fn attack_distance(&self) -> i32 {
-        self.weapon.as_ref().map_or(self.attack_range, |w| w.hit_distance.into())
+        self.weapon
+            .as_ref()
+            .map_or(self.attack_range, |w| w.range().into())
     }
 
     /// 判断是否为远程敌人
     pub fn is_ranged(&self) -> bool {
         self.attack_distance() > 1
     }
-    
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_enemy_creation() {
         let rat = Enemy::new(EnemyKind::Rat, 0, 0);
         assert_eq!(rat.hp, 10);
         assert_eq!(rat.attack, 4);
         assert_eq!(rat.symbol, 'r');
-        
+
         let golem = Enemy::new(EnemyKind::Golem, 0, 0);
         assert_eq!(golem.hp, 50);
         assert_eq!(golem.defense, 15);
     }
-    
+
     #[test]
     fn test_state_transitions() {
         let mut enemy = Enemy::new(EnemyKind::Gnoll, 0, 0);
         assert_eq!(enemy.state, EnemyState::Idle);
-        
+
         enemy.make_hostile();
         assert_eq!(enemy.state, EnemyState::Hostile);
         assert!(enemy.is_surprised);
-        
+
         enemy.start_fleeing();
         assert_eq!(enemy.state, EnemyState::Fleeing);
     }
-    
+
     #[test]
     fn test_damage_calculation() {
         let mut enemy = Enemy::new(EnemyKind::Guard, 0, 0);
         let alive = enemy.take_damage(15);
         assert!(alive);
         assert_eq!(enemy.hp, 30 - (15 - 10).max(1));
-        
+
         let alive = enemy.take_damage(50);
         assert!(!alive);
     }
-    
+
     #[test]
     fn test_drop_items() {
         let enemy = Enemy::new(EnemyKind::Warlock, 0, 0);
@@ -418,18 +426,16 @@ mod tests {
     #[test]
     fn test_attack_power() {
         let weapon = Weapon::new(WeaponType::Sword, 1).with_damage_bonus(3);
-        let enemy = Enemy::new(EnemyKind::Guard, 0, 0)
-            .with_weapon(weapon);
-        
+        let enemy = Enemy::new(EnemyKind::Guard, 0, 0).with_weapon(weapon);
+
         assert_eq!(enemy.attack_power(), 12 + 3); // Guard基础攻击12 + 武器加成3
     }
 
     #[test]
     fn test_accuracy() {
         let weapon = Weapon::new(WeaponType::Bow, 1).with_accuracy_bonus(2);
-        let enemy = Enemy::new(EnemyKind::Warlock, 0, 0)
-            .with_weapon(weapon);
-        
+        let enemy = Enemy::new(EnemyKind::Warlock, 0, 0).with_weapon(weapon);
+
         assert_eq!(enemy.accuracy(), 16 + 2); // Warlock基础16 + 武器加成2
     }
 
@@ -437,13 +443,11 @@ mod tests {
     fn test_attack_distance() {
         let melee_weapon = Weapon::new(WeaponType::Sword, 1);
         let ranged_weapon = Weapon::new(WeaponType::Bow, 1).with_hit_distance(4);
-        
-        let melee_enemy = Enemy::new(EnemyKind::Guard, 0, 0)
-            .with_weapon(melee_weapon);
-        let ranged_enemy = Enemy::new(EnemyKind::Warlock, 0, 0)
-            .with_weapon(ranged_weapon);
+
+        let melee_enemy = Enemy::new(EnemyKind::Guard, 0, 0).with_weapon(melee_weapon);
+        let ranged_enemy = Enemy::new(EnemyKind::Warlock, 0, 0).with_weapon(ranged_weapon);
         let default_enemy = Enemy::new(EnemyKind::Rat, 0, 0);
-        
+
         assert_eq!(melee_enemy.attack_distance(), 1);
         assert_eq!(ranged_enemy.attack_distance(), 4);
         assert_eq!(default_enemy.attack_distance(), 1); // Rat的默认攻击距离
@@ -451,10 +455,8 @@ mod tests {
 
     #[test]
     fn test_crit_bonus() {
-        let enemy = Enemy::new(EnemyKind::Assassin, 0, 0)
-            .with_crit_bonus(0.15);
-        
+        let enemy = Enemy::new(EnemyKind::Assassin, 0, 0).with_crit_bonus(0.15);
+
         assert_eq!(enemy.crit_bonus(), 0.15);
     }
-    
 }

@@ -197,6 +197,35 @@ impl Armor {
             cursed_str
         )
     }
+    
+    /// 获取护甲闪避惩罚（基于品阶和强化等级）
+    pub fn evasion_penalty(&self) -> i32 {
+        // 基础闪避惩罚（品阶越高惩罚越大）
+        let base_penalty = match self.tier {
+            1 => 0,   // 布甲无惩罚
+            2 => 1,   // 皮甲
+            3 => 2,   // 锁甲
+            4 => 3,   // 鳞甲
+            5 => 4,   // 板甲
+            _ => 0,
+        };
+
+        // 每3级强化减少1点惩罚（最低0）
+        let upgrade_reduction = self.upgrade_level as i32 / 3;
+        let mut final_penalty = base_penalty - upgrade_reduction;
+
+        // 特殊刻印效果：流动刻印完全消除惩罚
+        if let Some(ArmorGlyph::Flow) = self.glyph {
+            final_penalty = 0;
+        }
+
+        // 诅咒增加50%惩罚（向上取整）
+        if self.cursed {
+            final_penalty = (final_penalty as f32 * 1.5).ceil() as i32;
+        }
+
+        final_penalty.max(0) // 确保不会返回负数
+    }
 
     /// 获取护甲颜色（用于TUI显示）
     pub fn color(&self) -> Color {
@@ -215,7 +244,7 @@ impl Armor {
     }
 
     /// 计算实际防御值（考虑强化等级和诅咒）
-    pub fn effective_defense(&self) -> i32 {
+    pub fn defense(&self) -> i32 {
         let mut defense = self.defense + self.upgrade_level as i32;
         if self.cursed {
             defense = (defense as f32 * 0.67).floor() as i32; // 诅咒减少33%防御
@@ -318,7 +347,7 @@ impl fmt::Display for Armor {
         let mut info = format!(
             "{} - 防御: {}",
             self.name(),
-            self.effective_defense()
+            self.defense()
         );
 
         // 添加力量需求

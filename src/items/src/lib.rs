@@ -187,6 +187,85 @@ impl From<Ring> for Item {
     }
 }
 
+impl From<Potion> for Item {
+    fn from(potion: Potion) -> Self {
+        Item {
+            name: potion.name(),
+            kind: ItemKind::Potion(potion),
+            description: "...".to_string(),
+            quantity: 1,
+            x: -1,
+            y: -1,
+        }
+    }
+}
+
+impl From<Scroll> for Item {
+    fn from(scroll: Scroll) -> Self {
+        Item {
+            name: scroll.name(),
+            kind: ItemKind::Scroll(scroll),
+            description: "...".to_string(),
+            quantity: 1,
+            x: -1,
+            y: -1,
+        }
+    }
+}
+
+impl From<Food> for Item {
+    fn from(food: Food) -> Self {
+        Item {
+            name: food.name(),
+            kind: ItemKind::Food(food),
+            description: "...".to_string(),
+            quantity: 1,
+            x: -1,
+            y: -1,
+        }
+    }
+}
+
+impl From<Seed> for Item {
+    fn from(seed: Seed) -> Self {
+        Item {
+            name: seed.name(),
+            kind: ItemKind::Seed(seed),
+            description: "...".to_string(),
+            quantity: 1,
+            x: -1,
+            y: -1,
+        }
+    }
+}
+
+impl From<Wand> for Item {
+    fn from(wand: Wand) -> Self {
+        Item {
+            name: wand.name(),
+            kind: ItemKind::Wand(wand),
+            description: "...".to_string(),
+            quantity: 1,
+            x: -1,
+            y: -1,
+        }
+    }
+}
+
+impl From<Stone> for Item {
+    fn from(stone: Stone) -> Self {
+        Item {
+            name: stone.name(),
+            kind: ItemKind::Stone(stone),
+            description: "...".to_string(),
+            quantity: 1,
+            x: -1,
+            y: -1,
+        }
+    }
+}
+
+
 /// 物品特性约束
 pub trait ItemTrait: PartialEq + Clone + Serialize + std::fmt::Debug {
     /// 是否可堆叠（药水/卷轴等可堆叠，武器/护甲不可）

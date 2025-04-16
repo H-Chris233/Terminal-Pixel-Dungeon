@@ -47,7 +47,6 @@ pub struct Weapon {
     pub identified: bool,                 // 是否已鉴定
     pub kind: WeaponKind,
     pub base_value: u32,
-    pub hit_distance: u8,
 }
 
 impl Weapon {
@@ -75,7 +74,6 @@ impl Weapon {
             identified: false,
             kind,
             base_value: Self::base_value_for_tier(tier), // 根据品阶设置基础价值
-            hit_distance: 1,
         }
     }
     
@@ -213,6 +211,25 @@ impl Weapon {
 
         damage.max(1)
     }
+    
+    /// 获取武器暴击加成（基于武器类型和附魔效果）
+    pub fn crit_bonus(&self) -> f32 {
+        let base_bonus = match self.kind {
+            WeaponKind::Dagger => 0.15,   // 匕首有更高暴击率
+            WeaponKind::Sword => 0.05,
+            WeaponKind::Greataxe => 0.10, // 巨斧有较高暴击伤害
+            WeaponKind::Spear => 0.03,
+            WeaponKind::Mace => 0.0,
+            WeaponKind::Whip => 0.07,
+        };
+        
+        // 幸运附魔增加暴击率
+        if let Some(WeaponEnhance::Lucky) = self.enchanted {
+            base_bonus + 0.15
+        } else {
+            base_bonus
+        }
+    }
 
     /// 添加随机附魔（还原Shattered PD的附魔概率）
     pub fn add_random_enhancement(&mut self) {
@@ -230,7 +247,7 @@ impl Weapon {
         self.enchanted =
             Some(enhancements[rand::rng().random_range(0..enhancements.len())].clone());
     }
-
+    
     /// 武器鉴定逻辑（还原Shattered PD的鉴定机制）
     pub fn identify(&mut self) {
         self.identified = true;
@@ -273,23 +290,23 @@ impl Weapon {
     }
 
     /// 获取武器攻击距离
-    pub fn hit_distance(&self) -> i32 {
-        let base_distance = match self.kind {
+    pub fn range(&self) -> i32 {
+        let base_range = match self.kind {
             WeaponKind::Spear => 2,
             _ => 1,
         };
         
         // 如果有投射附魔则增加1距离
         if let Some(WeaponEnhance::Projecting) = self.enchanted {
-            base_distance + 1
+            base_range + 1
         } else {
-            base_distance
+            base_range
         }
     }
 
     /// 判断是否为远程武器
     pub fn is_ranged(&self) -> bool {
-        self.hit_distance > 1
+        self.range() > 1
     }
     
 }
@@ -369,7 +386,6 @@ impl Default for Weapon {
             identified: false,           // 未鉴定
             kind: WeaponKind::Sword,     // 剑类武器
             base_value: 300,             // 一阶武器基础价值
-            hit_distance: 1,
         }
     }
 }

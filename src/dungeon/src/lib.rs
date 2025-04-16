@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 pub mod level;
+pub mod trap;
 
 use crate::level::Level;
 use crate::level::tiles::{TerrainType, TileInfo};
