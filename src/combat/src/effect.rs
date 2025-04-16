@@ -141,7 +141,7 @@ impl Effect {
             EffectType::Frost => "身体冻僵".to_string(),
             EffectType::Light => "发光中".to_string(),
             EffectType::Darkness => "视线受阻".to_string(),
-            EffectType::Rooted => "根系缠绕".to_string(),
+            EffectType::Rooted => "根系缠绕(无法移动)".to_string(),
         };
 
         if self.duration.as_secs() > 0 {
@@ -243,6 +243,8 @@ pub enum EffectType {
     Light, // 亮黄色发光
     #[strum(serialize = "darkness(黑暗)")]
     Darkness, // 深紫色迷雾
+    #[strum(serialize = "rooted(根系缠绕)")]
+    Rooted,
 }
 
 /// 视觉效果配置
@@ -368,6 +370,12 @@ impl EffectType {
                 overlay_char: Some('🌑'),
                 blink_interval: 0,
             },
+            EffectType::Rooted => VisualEffect {
+                fg_color: SerializableColor::Rgb(101, 67, 33), // 棕色
+                bg_color: SerializableColor::Black,
+                overlay_char: Some('🌿'), // 使用植物符号
+                blink_interval: 0,
+            },
         }
     }
 
@@ -391,6 +399,7 @@ impl EffectType {
             EffectType::Frost => SerializableColor::LightCyan,
             EffectType::Light => SerializableColor::Yellow,
             EffectType::Darkness => SerializableColor::DarkGray,
+            EffectType::Rooted => SerializableColor::Rgb(101, 67, 33), // 棕色
         }
     }
 }
