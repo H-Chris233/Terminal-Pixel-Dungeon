@@ -1,8 +1,11 @@
-
 // src/hero/combat.rs
 use super::core::{Hero, HeroError};
+use crate::class::Class;
+use crate::BagError;
+use crate::CombatSystem;
+
+use combat::{effect::EffectType, Combat, Combatant};
 use items::{armor::Armor, ring::Ring, weapon::Weapon};
-use combat::{Combat, Combatant, effect::EffectType};
 use rand::Rng;
 
 /// 战斗系统实现（确定性版本）
@@ -17,43 +20,31 @@ impl Combatant for Hero {
 
     /// 计算攻击力（包含武器加成和等级加成）
     fn attack_power(&self) -> u32 {
-        let weapon_bonus = self
-            .bag
-            .weapon()
-            .map_or(0, |w| w.damage_bonus() as u32);
-        
+        let weapon_bonus = self.bag.weapon().map_or(0, |w| w.damage_bonus() as u32);
+
         // SPD公式：基础攻击 + 武器加成 × (100 + 等级)/100
         (self.base_attack + weapon_bonus) * (100 + self.level) / 100
     }
 
     /// 计算防御力（包含护甲加成）
     fn defense(&self) -> u32 {
-        let armor_bonus = self
-            .bag
-            .armor()
-            .map_or(0, |a| a.defense() as u32);
-        
+        let armor_bonus = self.bag.armor().map_or(0, |a| a.defense() as u32);
+
         self.base_defense + armor_bonus
     }
 
     /// 计算命中率（包含武器加成）
     fn accuracy(&self) -> u32 {
-        let weapon_bonus = self
-            .bag
-            .weapon()
-            .map_or(0, |w| w.accuracy_bonus() as u32);
-        
+        let weapon_bonus = self.bag.weapon().map_or(0, |w| w.accuracy_bonus() as u32);
+
         // SPD基础精度80 + 每级2点 + 武器加成
         80 + (self.level * 2) + weapon_bonus
     }
 
     /// 计算闪避率（受护甲惩罚）
     fn evasion(&self) -> u32 {
-        let armor_penalty = self
-            .bag
-            .armor()
-            .map_or(0, |a| a.evasion_penalty());
-        
+        let armor_penalty = self.bag.armor().map_or(0, |a| a.evasion_penalty());
+
         // 每级3点 - 护甲惩罚
         (self.level * 3).saturating_sub(armor_penalty)
     }
@@ -67,17 +58,9 @@ impl Combatant for Hero {
             Class::Huntress => 0.07,
         };
 
-        let weapon_bonus = self
-            .bag
-            .weapon()
-            .map_or(0.0, |w| w.crit_bonus());
-        
-        let ring_bonus: f32 = self
-            .bag
-            .rings()
-            .iter()
-            .map(|r| r.crit_bonus())
-            .sum();
+        let weapon_bonus = self.bag.weapon().map_or(0.0, |w| w.crit_bonus());
+
+        let ring_bonus: f32 = self.bag.rings().iter().map(|r| r.crit_bonus()).sum();
 
         // 基础10% + 职业加成 + 装备加成
         0.1 + class_bonus + weapon_bonus + ring_bonus
@@ -90,14 +73,6 @@ impl Combatant for Hero {
 
     fn weapon(&self) -> Option<&Weapon> {
         self.bag.weapon()
-    }
-
-    fn armor(&self) -> Option<&Armor> {
-        self.bag.armor()
-    }
-
-    fn rings(&self) -> Vec<&Ring> {
-        self.bag.rings()
     }
 
     fn is_alive(&self) -> bool {
@@ -116,12 +91,11 @@ impl Combatant for Hero {
     /// 承受伤害（SPD防御公式）
     fn take_damage(&mut self, amount: u32) -> bool {
         // SPD防御公式：防御力 × (0.7~1.3随机系数)
-        let defense_roll = self.defense() as f32 * 
-            (0.7 + self.rng.gen_range(0.0..0.6));
-        
+        let defense_roll = self.defense() as f32 * (0.7 + self.rng.gen_range(0.0..0.6));
+
         // 实际伤害 = 攻击力 - 防御roll值（至少1点）
         let actual_damage = (amount as f32 - defense_roll).max(1.0) as u32;
-        
+
         self.hp = self.hp.saturating_sub(actual_damage);
         self.alive = self.hp > 0;
 
@@ -134,6 +108,10 @@ impl Combatant for Hero {
     /// 治疗（不超过最大HP）
     fn heal(&mut self, amount: u32) {
         self.hp = (self.hp + amount).min(self.max_hp);
+    }
+    /// 获取经验值
+    fn exp_value(&self) -> u32 {
+        self.level * 10 // 简单公式：每级10点经验值
     }
 }
 
@@ -161,7 +139,7 @@ impl Hero {
     pub fn hit_probability(&self, target: &dyn Combatant) -> f32 {
         let accuracy = self.accuracy() as f32;
         let evasion = target.evasion() as f32;
-        
+
         // SPD命中公式：min(0.9, max(0.1, acc/(acc + eva)))
         let raw_prob = accuracy / (accuracy + evasion);
         raw_prob.clamp(0.1, 0.9)
@@ -202,6 +180,52 @@ impl Hero {
             None
         }
     }
+    /// 武器升级（需要添加到Hero实现中）
+    pub fn upgrade_weapon(&mut self) -> Result<(), HeroError> {
+        self.bag.upgrade_weapon().map_err(|e| match e {
+            BagError::NoWeaponEquipped => HeroError::Underpowered,
+            BagError::NoUpgradeScroll => HeroError::IdentifyFailed,
+            _ => HeroError::from(e),
+        })
+    }
+}
+
+impl CombatSystem for Hero {
+    fn attack_power(&self) -> u32 {
+        let weapon_bonus = self
+            .bag
+            .equipment()
+            .weapon
+            .as_ref()
+            .map_or(0, |w| w.damage_bonus() as u32);
+
+        (self.base_attack + weapon_bonus) * (100 + self.level) / 100
+    }
+
+    fn defense(&self) -> u32 {
+        let armor_bonus = self
+            .bag
+            .equipment()
+            .armor
+            .as_ref()
+            .map_or(0, |a| a.defense() as u32);
+
+        self.base_defense + armor_bonus
+    }
+
+    fn take_damage(&mut self, amount: u32) -> bool {
+        // 使用英雄的RNG计算防御随机性
+        let defense_roll = self.defense() as f32 * (0.7 + self.rng.gen_range(0.0..0.6));
+        let actual_damage = (amount as f32 - defense_roll).max(1.0) as u32;
+
+        self.hp = self.hp.saturating_sub(actual_damage);
+        self.alive = self.hp > 0;
+
+        if !self.alive {
+            self.notify("你死了...".into());
+        }
+        self.alive
+    }
 }
 
 #[cfg(test)]
@@ -216,23 +240,47 @@ mod tests {
     }
 
     impl Combatant for MockCombatant {
-        fn hp(&self) -> u32 { self.hp }
-        fn max_hp(&self) -> u32 { 100 }
-        fn attack_power(&self) -> u32 { 10 }
-        fn defense(&self) -> u32 { 5 }
-        fn accuracy(&self) -> u32 { 80 }
-        fn evasion(&self) -> u32 { self.evasion }
-        fn crit_bonus(&self) -> f32 { 0.0 }
-        fn is_critical(&mut self) -> bool { false }
-        fn weapon(&self) -> Option<&Weapon> { None }
-        fn is_alive(&self) -> bool { self.hp > 0 }
-        fn name(&self) -> &str { "Mock" }
+        fn hp(&self) -> u32 {
+            self.hp
+        }
+        fn max_hp(&self) -> u32 {
+            100
+        }
+        fn attack_power(&self) -> u32 {
+            10
+        }
+        fn defense(&self) -> u32 {
+            5
+        }
+        fn accuracy(&self) -> u32 {
+            80
+        }
+        fn evasion(&self) -> u32 {
+            self.evasion
+        }
+        fn crit_bonus(&self) -> f32 {
+            0.0
+        }
+        fn is_critical(&mut self) -> bool {
+            false
+        }
+        fn weapon(&self) -> Option<&Weapon> {
+            None
+        }
+        fn is_alive(&self) -> bool {
+            self.hp > 0
+        }
+        fn name(&self) -> &str {
+            "Mock"
+        }
         fn take_damage(&mut self, amount: u32) -> bool {
             self.hp = self.hp.saturating_sub(amount);
             self.is_alive()
         }
         fn heal(&mut self, _: u32) {}
-        fn exp_value(&self) -> u32 { self.exp_value }
+        fn exp_value(&self) -> u32 {
+            self.exp_value
+        }
     }
 
     #[test]
@@ -240,15 +288,21 @@ mod tests {
         let mut hero = Hero::with_seed(Class::Warrior, 123);
         hero.level = 5;
         hero.base_attack = 15;
-        hero.bag.equip_weapon(Weapon::new(WeaponKind::Sword, 1)).unwrap();
+        hero.bag
+            .equip_weapon(Weapon::new(WeaponKind::Sword, 1))
+            .unwrap();
 
-        let mut target = MockCombatant { hp: 100, evasion: 10, exp_value: 50 };
-        
+        let mut target = MockCombatant {
+            hp: 100,
+            evasion: 10,
+            exp_value: 50,
+        };
+
         let (is_crit, damage) = hero.perform_attack(&mut target);
         assert!(damage >= 15);
         assert_eq!(is_crit, false); // 种子123的第一击不暴击
         assert_eq!(hero.experience, 0); // 目标未死亡
-        
+
         target.hp = 1;
         hero.perform_attack(&mut target);
         assert_eq!(hero.experience, 50); // 目标死亡获得经验
@@ -257,7 +311,11 @@ mod tests {
     #[test]
     fn test_rogue_counter() {
         let mut hero = Hero::with_seed(Class::Rogue, 456);
-        let mut attacker = MockCombatant { hp: 100, evasion: 20, exp_value: 0 };
+        let mut attacker = MockCombatant {
+            hp: 100,
+            evasion: 20,
+            exp_value: 0,
+        };
 
         // 测试30%概率的反击
         let mut counter_count = 0;
@@ -273,10 +331,18 @@ mod tests {
     fn test_mage_area_attack() {
         let mut hero = Hero::with_seed(Class::Mage, 789);
         let mut targets = vec![
-            &mut MockCombatant { hp: 50, evasion: 5, exp_value: 0 } as &mut dyn Combatant,
-            &mut MockCombatant { hp: 50, evasion: 5, exp_value: 0 },
+            &mut MockCombatant {
+                hp: 50,
+                evasion: 5,
+                exp_value: 0,
+            } as &mut dyn Combatant,
+            &mut MockCombatant {
+                hp: 50,
+                evasion: 5,
+                exp_value: 0,
+            },
         ];
-        
+
         let results = hero.area_attack(&mut targets);
         assert_eq!(results.len(), 2);
     }
@@ -284,8 +350,12 @@ mod tests {
     #[test]
     fn test_hit_probability() {
         let hero = Hero::with_seed(Class::Huntress, 999);
-        let target = MockCombatant { hp: 100, evasion: 20, exp_value: 0 };
-        
+        let target = MockCombatant {
+            hp: 100,
+            evasion: 20,
+            exp_value: 0,
+        };
+
         let prob = hero.hit_probability(&target);
         assert!(prob >= 0.1 && prob <= 0.9);
     }
@@ -295,8 +365,22 @@ mod tests {
         let mut hero = Hero::with_seed(Class::Warrior, 111);
         hero.base_defense = 10;
         hero.bag.equip_armor(Armor::new("chainmail", 6)).unwrap();
-        
+
         let defense = hero.defense();
         assert_eq!(defense, 16); // 10基础 + 6护甲
+    }
+    #[test]
+    fn test_weapon_upgrade() {
+        let mut hero = Hero::with_seed(Class::Warrior, 555);
+        hero.bag
+            .equip_weapon(Weapon::new(WeaponKind::Sword, 0))
+            .unwrap();
+        hero.bag
+            .add_item(Item::from(Scroll::new(ScrollKind::Upgrade)))
+            .unwrap();
+
+        let initial_damage = hero.attack_power();
+        hero.upgrade_weapon().unwrap();
+        assert!(hero.attack_power() > initial_damage);
     }
 }
