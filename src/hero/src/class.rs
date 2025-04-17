@@ -1,4 +1,3 @@
-
 // src/hero/src/class/class.rs
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
@@ -9,33 +8,46 @@ pub mod mage;
 pub mod rogue;
 pub mod warrior;
 
-use items::{armor::Armor, weapon::{Weapon, WeaponKind}};
+use items::{
+    armor::Armor,
+    weapon::{Weapon, WeaponKind},
+};
 use items::{Item, ItemKind};
 
 /// 英雄职业枚举（SPD核心四职业）
 #[derive(
-    Default, Clone, Debug, PartialEq, Eq, Hash, 
-    Encode, Decode, Serialize, Deserialize, 
-    EnumIter, EnumString, Display
+    Default,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    Encode,
+    Decode,
+    Serialize,
+    Deserialize,
+    EnumIter,
+    EnumString,
+    Display,
 )]
 pub enum Class {
     #[default]
     #[strum(serialize = "战士")]
     Warrior, // 高生命值，平衡攻防
-    
+
     #[strum(serialize = "法师")]
-    Mage,    // 低生命值，魔法特化
-    
+    Mage, // 低生命值，魔法特化
+
     #[strum(serialize = "盗贼")]
-    Rogue,   // 高暴击，擅长速攻
-    
+    Rogue, // 高暴击，擅长速攻
+
     #[strum(serialize = "女猎手")]
     Huntress, // 远程专家，自然亲和
 }
 
 impl Class {
     // === 基础属性 ===
-    
+
     /// 初始生命值（SPD标准值）
     pub fn base_hp(&self) -> u32 {
         match self {
@@ -71,8 +83,8 @@ impl Class {
         match self {
             Class::Warrior => 0.05,  // 5%基础
             Class::Mage => 0.0,      // 无加成
-            Class::Rogue => 0.15,     // 15%加成
-            Class::Huntress => 0.07,  // 7%加成
+            Class::Rogue => 0.15,    // 15%加成
+            Class::Huntress => 0.07, // 7%加成
         }
     }
 
@@ -87,7 +99,7 @@ impl Class {
     }
 
     // === 成长系统 ===
-    
+
     /// 每级攻击力成长
     pub fn attack_per_level(&self) -> u32 {
         match self {
@@ -109,7 +121,7 @@ impl Class {
     }
 
     // === 初始装备 ===
-    
+
     /// 职业初始装备（SPD标准配置）
     pub fn starting_kit(&self) -> Vec<Item> {
         match self {
@@ -137,13 +149,13 @@ impl Class {
     }
 
     // === 职业特性 ===
-    
+
     /// 获取职业描述（SPD特色）
     pub fn description(&self) -> &'static str {
         match self {
             Class::Warrior => "坚韧的战士，攻守平衡",
             Class::Mage => "智慧的法师，魔法大师",
-            Class::Rogue => "敏捷的盗贼，暴击专家", 
+            Class::Rogue => "敏捷的盗贼，暴击专家",
             Class::Huntress => "精准的猎手，远程王者",
         }
     }
@@ -152,11 +164,15 @@ impl Class {
 // 为每个职业保留子模块（供未来扩展）
 mod warrior_impl {
     use super::*;
-    
+
     /// 战士特有逻辑
     impl Class {
         pub fn warrior_rage_bonus(&self) -> f32 {
-            if *self == Class::Warrior { 1.1 } else { 1.0 }
+            if *self == Class::Warrior {
+                1.1
+            } else {
+                1.0
+            }
         }
     }
 }

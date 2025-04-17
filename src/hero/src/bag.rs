@@ -1,15 +1,16 @@
-
 // src/hero/src/bag.rs
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use thiserror::Error;
 
+use crate::Hero;
 use crate::HeroError;
+use crate::InventorySystem;
 
 // 子模块定义
-pub mod equipment;  // 装备管理
-pub mod inventory;  // 物品库存管理
+pub mod equipment; // 装备管理
+pub mod inventory; // 物品库存管理
 
 use crate::bag::{
     equipment::{EquipError, Equipment},
@@ -50,23 +51,23 @@ pub struct Bag {
 #[derive(Debug, Error)]
 pub enum BagError {
     #[error(transparent)]
-    Inventory(#[from] InventoryError),  // 库存错误
+    Inventory(#[from] InventoryError), // 库存错误
     #[error(transparent)]
-    Equipment(#[from] EquipError),      // 装备错误
+    Equipment(#[from] EquipError), // 装备错误
     #[error("金币不足")]
-    NotEnoughGold,                     // 金币不足
+    NotEnoughGold, // 金币不足
     #[error("没有装备武器")]
-    NoWeaponEquipped,                  // 无武器
+    NoWeaponEquipped, // 无武器
     #[error("没有升级卷轴")]
-    NoUpgradeScroll,                   // 无升级卷轴
+    NoUpgradeScroll, // 无升级卷轴
     #[error("背包已满")]
-    InventoryFull,                     // 背包满
+    InventoryFull, // 背包满
     #[error("无效的物品索引")]
-    InvalidIndex,                      // 无效索引
+    InvalidIndex, // 无效索引
     #[error("物品无法使用")]
-    CannotUseItem,                     // 不可使用
+    CannotUseItem, // 不可使用
     #[error("物品无法装备")]
-    CannotEquipItem,                   // 不可装备
+    CannotEquipItem, // 不可装备
 }
 
 impl Bag {
@@ -75,16 +76,16 @@ impl Bag {
         Self {
             gold: 0,
             equipment: Equipment::new(),
-            weapons: Inventory::new(4),   // 武器容量4
-            armors: Inventory::new(3),    // 护甲容量3
-            potions: Inventory::new(8),   // 药水容量8
-            scrolls: Inventory::new(8),   // 卷轴容量8
-            wands: Inventory::new(4),     // 法杖容量4
-            rings: Inventory::new(4),     // 戒指容量4
-            seeds: Inventory::new(4),     // 种子容量4
-            stones: Inventory::new(4),    // 宝石容量4
-            food: Inventory::new(4),     // 食物容量4
-            misc: Inventory::new(4),     // 杂项容量4
+            weapons: Inventory::new(4), // 武器容量4
+            armors: Inventory::new(3),  // 护甲容量3
+            potions: Inventory::new(8), // 药水容量8
+            scrolls: Inventory::new(8), // 卷轴容量8
+            wands: Inventory::new(4),   // 法杖容量4
+            rings: Inventory::new(4),   // 戒指容量4
+            seeds: Inventory::new(4),   // 种子容量4
+            stones: Inventory::new(4),  // 宝石容量4
+            food: Inventory::new(4),    // 食物容量4
+            misc: Inventory::new(4),    // 杂项容量4
         }
     }
 
@@ -248,7 +249,7 @@ impl Bag {
     }
 
     /// 自动分类添加物品
-    pub fn add_item(&mut self, item: Item) -> Result<(), BagError> {
+    fn add_item(&mut self, item: Item) -> Result<(), BagError> {
         match item.kind {
             ItemKind::Weapon(w) => self
                 .weapons
@@ -362,5 +363,38 @@ impl Bag {
 
     pub fn food(&self) -> &Inventory<Food> {
         &self.food
+    }
+}
+
+impl InventorySystem for Hero {
+    /// 添加物品到英雄背包，自动分类存储
+    ///
+    /// # 错误
+    /// 返回`BagError::InventoryFull`当对应类别背包已满
+    fn add_item(&mut self, item: Item) -> Result<(), BagError> {
+        self.bag.add_item(item).map_err(|e| {
+            debug!("添加物品失败: {:?}", e);
+            e
+        })
+    }
+
+    /// 移除指定索引的物品
+    ///
+    /// # 注意
+    /// 使用全局索引系统，需通过`hero.bag().items()`获取正确索引
+    fn remove_item(&mut self, index: usize) -> Result<(), BagError> {
+        self.bag.remove_item(index)
+    }
+
+    /// 装备指定物品，返回之前装备的同类型物品(如果有)
+    ///
+    /// # 参数
+    /// - `strength`: 英雄当前力量值，用于检查装备需求
+    fn equip_item(&mut self, index: usize, strength: u8) -> Result<Option<Item>, BagError> {
+        self.bag.equip_item(index, strength).inspect(|old_item| {
+            if let Some(item) = old_item {
+                debug!("卸下装备: {}", item.name());
+            }
+        })
     }
 }

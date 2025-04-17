@@ -1,5 +1,5 @@
-
 // src/hero/rng.rs
+use bincode::{Decode, Encode};
 use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg32;
 use serde::{Deserialize, Serialize};
@@ -41,14 +41,6 @@ impl HeroRng {
         self.rng.gen_bool(probability)
     }
 
-    /// 生成范围随机数 (包含下限，不包含上限)
-    pub fn gen_range<T>(&mut self, low: T, high: T) -> T
-    where
-        T: rand::distributions::uniform::SampleUniform,
-    {
-        self.rng.gen_range(low..high)
-    }
-
     /// 从列表中随机选择
     pub fn choose<'a, T>(&mut self, items: &'a [T]) -> Option<&'a T> {
         if items.is_empty() {
@@ -78,6 +70,9 @@ impl HeroRng {
     pub fn defense_roll(&mut self, base_defense: u32) -> u32 {
         let defense_factor = self.gen_range(0.7, 1.3);
         (base_defense as f32 * defense_factor) as u32
+    }
+    pub fn gen_range(&mut self, range: std::ops::Range<f32>) -> f32 {
+        self.rng.gen_range(range)
     }
 }
 
@@ -126,7 +121,7 @@ mod tests {
         let mut rng = HeroRng::new(789);
         let base_defense = 10;
         let roll = rng.defense_roll(base_defense);
-        
+
         // 检查防御值在预期范围内 (7-13)
         assert!(roll >= 7);
         assert!(roll <= 13);

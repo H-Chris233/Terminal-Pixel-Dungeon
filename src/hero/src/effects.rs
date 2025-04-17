@@ -1,10 +1,11 @@
-
 // src/hero/effects.rs
 use bincode::{Decode, Encode};
-use combat::effect::{Effect, EffectType};
+pub use combat::effect::{Effect, EffectType};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::EffectSystem;
+use crate::Hero;
 
 /// 效果管理系统
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Encode, Decode)]
@@ -50,7 +51,7 @@ impl EffectManager {
 
         true
     }
-    
+
     /// 检查效果互斥性
     pub fn has_conflicting_effect(&self, new_effect: EffectType) -> bool {
         self.effects.keys().any(|&existing| {
@@ -73,7 +74,7 @@ impl EffectManager {
     pub fn remove(&mut self, effect_type: EffectType) -> Option<Effect> {
         self.effects.remove(&effect_type)
     }
-    
+
     /// 强制添加效果（忽略互斥规则）
     pub fn add_force(&mut self, effect: Effect) {
         self.effects.insert(effect.effect_type(), effect);
@@ -86,9 +87,7 @@ impl EffectManager {
 
     /// 获取效果持续时间（回合数）
     pub fn get_turns(&self, effect_type: EffectType) -> u32 {
-        self.effects
-            .get(&effect_type)
-            .map_or(0, |e| e.turns())
+        self.effects.get(&effect_type).map_or(0, |e| e.turns())
     }
 
     /// 更新所有效果（每回合调用）
@@ -102,12 +101,7 @@ impl EffectManager {
                 expired.push((ty, e.damage()));
                 false
             } else {
-                *e = Effect::new(
-                    ty,
-                    new_turns,
-                    e.damage(),
-                    e.damage_interval(),
-                );
+                *e = Effect::new(ty, new_turns, e.damage(), e.damage_interval());
                 true
             }
         });
@@ -137,9 +131,21 @@ impl EffectManager {
 
     /// 获取效果伤害（如果有）
     pub fn get_damage(&self, effect_type: EffectType) -> Option<u32> {
-        self.effects
-            .get(&effect_type)
-            .and_then(|e| e.damage())
+        self.effects.get(&effect_type).and_then(|e| e.damage())
+    }
+}
+
+impl EffectSystem for Hero {
+    fn add_effect(&mut self, effect: Effect) {
+        self.effects.add(effect);
+    }
+
+    fn remove_effect(&mut self, effect_type: EffectType) {
+        self.effects.remove(effect_type);
+    }
+
+    fn has_effect(&self, effect_type: EffectType) -> bool {
+        self.effects.has(effect_type)
     }
 }
 
@@ -151,23 +157,23 @@ mod tests {
     #[test]
     fn test_effect_management() {
         let mut manager = EffectManager::new();
-        
+
         // 测试添加效果
         let poison = Effect::new(EffectType::Poison, 5, Some(2), 1);
         manager.add(poison);
         assert!(manager.has(EffectType::Poison));
         assert_eq!(manager.get_turns(EffectType::Poison), 5);
-        
+
         // 测试效果叠加
         let more_poison = Effect::new(EffectType::Poison, 3, Some(3), 1);
         manager.add(more_poison);
         assert_eq!(manager.get_turns(EffectType::Poison), 8);
-        
+
         // 测试效果更新
         let expired = manager.update();
         assert!(expired.is_empty());
         assert_eq!(manager.get_turns(EffectType::Poison), 7);
-        
+
         // 测试效果移除
         manager.remove(EffectType::Poison);
         assert!(!manager.has(EffectType::Poison));
@@ -177,7 +183,7 @@ mod tests {
     fn test_effect_expiration() {
         let mut manager = EffectManager::new();
         manager.add(Effect::new(EffectType::Burning, 1, Some(3), 1));
-        
+
         let expired = manager.update();
         assert_eq!(expired.len(), 1);
         assert_eq!(expired[0].0, EffectType::Burning);
@@ -186,21 +192,20 @@ mod tests {
     #[test]
     fn test_effect_conflicts() {
         let mut manager = EffectManager::new();
-        
+
         // 添加燃烧效果
         assert!(manager.add(Effect::new(EffectType::Burning, 5, Some(2), 1)));
-        
+
         // 尝试添加冰冻（应该失败）
         assert!(!manager.add(Effect::new(EffectType::Frozen, 3, None, 0)));
-        
+
         // 强制添加冰冻
         manager.add_force(Effect::new(EffectType::Frozen, 3, None, 0));
         assert!(manager.has(EffectType::Burning));
         assert!(manager.has(EffectType::Frozen));
-        
+
         // 移除燃烧后可以正常添加冰冻
         manager.remove(EffectType::Burning);
         assert!(manager.add(Effect::new(EffectType::Frozen, 3, None, 0)));
     }
-    
 }

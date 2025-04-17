@@ -1,4 +1,3 @@
-
 // src/hero/core.rs
 use crate::{
     bag::Bag,
@@ -7,9 +6,19 @@ use crate::{
     rng::HeroRng,
 };
 use combat::{Combatant, Trap};
+use dungeon::trap::TrapEffect;
 use dungeon::Dungeon;
-use items::{ItemCategory, potion::PotionKind};
+use items::scroll::ScrollKind;
+use items::{potion::PotionKind, Item, ItemCategory};
 use thiserror::Error;
+
+use bincode::{Decode, Encode};
+use serde::{Deserialize, Serialize};
+
+use crate::BagError;
+use crate::EffectSystem;
+use crate::HeroBehavior;
+use crate::InventorySystem;
 
 #[derive(Debug, Error)]
 pub enum HeroError {
@@ -25,11 +34,16 @@ pub enum HeroError {
     IdentifyFailed,
     #[error("饥饿过度")]
     Starvation,
+    #[error("物品被诅咒")]
+    CursedItem,
+    #[error("效果冲突")]
+    EffectConflict,
     #[error(transparent)]
     BagError(#[from] crate::bag::BagError),
 }
 
 /// 英雄核心数据结构
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Hero {
     // 基础属性
     pub class: Class,
@@ -52,7 +66,7 @@ pub struct Hero {
     pub alive: bool,
     pub turns: u32,
 
-    // 子系统
+    // 子系统（均已实现序列化）
     pub bag: Bag,
     pub effects: EffectManager,
     pub rng: HeroRng,
@@ -84,7 +98,7 @@ impl Hero {
             turns: 0,
             bag: Bag::new(),
             effects: EffectManager::new(),
-            rng: HeroRng::new(seed),
+            rng: HeroRng::new(seed), // 使用已实现序列化的HeroRng
         };
 
         // 根据职业初始化属性
@@ -128,12 +142,18 @@ impl Hero {
             self.satiety = self.satiety.saturating_sub(1);
             if self.satiety == 0 {
                 self.take_damage(1);
+                self.notify("你因饥饿而受到伤害！".into());
                 return Err(HeroError::Starvation);
+            } else if self.satiety <= 2 {
+                self.notify("你感到非常饥饿！".into());
             }
         }
 
         // 更新效果
         self.effects.update(self);
+        if self.effects.any_expired() {
+            self.notify("某些效果已失效".into());
+        }
 
         Ok(())
     }
@@ -210,18 +230,7 @@ impl Hero {
         }
     }
 
-    /// 使用物品
-    pub fn use_item(&mut self, category: ItemCategory, index: usize) -> Result<(), HeroError> {
-        match category {
-            ItemCategory::Potion => self.use_potion(index),
-            ItemCategory::Scroll => self.use_scroll(index),
-            ItemCategory::Weapon => self.equip_weapon(index),
-            ItemCategory::Armor => self.equip_armor(index),
-            ItemCategory::Ring => self.equip_ring(index),
-            _ => Err(HeroError::UnusableItem),
-        }
-    }
-
+    
     /// 获取经验值
     pub fn gain_exp(&mut self, exp: u32) {
         self.experience += exp;
@@ -237,125 +246,8 @@ impl Hero {
     pub fn notify(&self, message: String) {
         println!("[英雄] {}", message);
     }
+
     
-    /// 药水使用逻辑
-    fn use_potion(&mut self, index: usize) -> Result<(), HeroError> {
-        let potion = self.bag.potions().get(index).ok_or(HeroError::InvalidIndex)?;
-
-        if !potion.identified {
-            self.notify("你喝下了未知的药水...".into());
-            if self.rng.gen_bool(0.5) {
-                return Err(HeroError::IdentifyFailed);
-            }
-        }
-
-        match potion.kind {
-            PotionKind::Healing => self.heal(self.max_hp / 3),
-            PotionKind::Strength => self.strength += 1,
-            PotionKind::MindVision => self.effects.add(
-                Effect::new(EffectType::MindVision, 20, "获得灵视效果".into())
-            ),
-            PotionKind::ToxicGas => {
-                // 对周围敌人造成中毒效果
-                dungeon::affect_adjacent_enemies(self.x, self.y, |e| {
-                    e.add_effect(Effect::poison(2, 10));
-                });
-            },
-            PotionKind::Frost => {
-                // 冰冻周围敌人
-                dungeon::affect_adjacent_enemies(self.x, self.y, |e| {
-                    e.add_effect(Effect::new(EffectType::Frozen, 5, "被冰冻".into()));
-                });
-            }
-        }
-
-        self.bag.remove_potion(index)?;
-        Ok(())
-    }
-
-    /// 使用卷轴
-    fn use_scroll(&mut self, index: usize) -> Result<(), HeroError> {
-        let scroll = self.bag.scrolls().get(index).ok_or(HeroError::InvalidIndex)?;
-        
-        if !scroll.identified {
-            self.notify("你阅读了未知的卷轴...".into());
-            if self.rng.gen_bool(0.5) {
-                scroll.identify(&mut self.rng);
-            } else {
-                return Err(HeroError::IdentifyFailed);
-            }
-        }
-
-        match scroll.kind {
-            ScrollKind::Upgrade => {
-                if let Some(weapon) = self.bag.equipment().weapon.as_mut() {
-                    weapon.upgrade();
-                    self.notify(format!("你的{}变得更锋利了！", weapon.name));
-                } else {
-                    return Err(HeroError::UnusableItem);
-                }
-            },
-            ScrollKind::RemoveCurse => {
-                self.bag.remove_cursed_items();
-                self.notify("一股净化之力扫过你的装备".into());
-            },
-            ScrollKind::MagicMapping => {
-                dungeon::reveal_current_level(self.x, self.y);
-                self.notify("你的脑海中浮现出这一层的地图".into());
-            }
-        }
-
-        self.bag.remove_scroll(index)?;
-        Ok(())
-    }
-
-    /// 装备武器
-    fn equip_weapon(&mut self, index: usize) -> Result<(), HeroError> {
-        let weapon = self.bag.weapons().get(index).ok_or(HeroError::InvalidIndex)?;
-
-        if weapon.str_requirement > self.strength {
-            return Err(HeroError::Underpowered);
-        }
-
-        let old_weapon = self.bag.equip_weapon(index)?;
-        if let Some(w) = old_weapon {
-            self.bag.add_weapon(w).map_err(|_| HeroError::InventoryFull)?;
-        }
-
-        Ok(())
-    }
-
-    /// 装备护甲
-    fn equip_armor(&mut self, index: usize) -> Result<(), HeroError> {
-        let armor = self.bag.armors().get(index).ok_or(HeroError::InvalidIndex)?;
-
-        if armor.str_requirement > self.strength {
-            return Err(HeroError::Underpowered);
-        }
-
-        let old_armor = self.bag.equip_armor(index)?;
-        if let Some(a) = old_armor {
-            self.bag.add_armor(a).map_err(|_| HeroError::InventoryFull)?;
-        }
-
-        Ok(())
-    }
-
-    /// 装备戒指
-    fn equip_ring(&mut self, index: usize) -> Result<(), HeroError> {
-        let ring = self.bag.rings().get(index).ok_or(HeroError::InvalidIndex)?;
-        
-        if self.bag.equipment().rings.iter().filter(|r| r.is_some()).count() >= 2 {
-            return Err(HeroError::InventoryFull); // 戒指槽已满
-        }
-
-        let old_ring = self.bag.equip_ring(index)?;
-        if let Some(r) = old_ring {
-            self.bag.add_ring(r).map_err(|_| HeroError::InventoryFull)?;
-        }
-
-        Ok(())
-    }
 
     /// 触发陷阱
     pub fn trigger_trap(&mut self, trap: &mut Trap) -> Result<(), String> {
@@ -368,29 +260,29 @@ impl Hero {
             TrapEffect::Damage(amount) => {
                 self.take_damage(amount);
                 self.notify(format!("受到{}点伤害！", amount));
-            },
+            }
             TrapEffect::Poison(dmg, turns) => {
                 self.effects.add(Effect::poison(dmg, turns));
                 self.notify("你中毒了！".into());
-            },
+            }
             TrapEffect::Alarm => {
                 dungeon::alert_nearby_enemies(self.x, self.y);
                 self.notify("警报响起！敌人被吸引过来了！".into());
-            },
+            }
             TrapEffect::Teleport => {
                 dungeon::random_teleport(self);
                 self.notify("你被随机传送了！".into());
-            },
+            }
             TrapEffect::Paralyze(duration) => {
                 self.effects.add(Effect::new(
-                    EffectType::Paralysis, 
+                    EffectType::Paralysis,
                     duration,
-                    "你被麻痹了，无法移动！".into()
+                    "你被麻痹了，无法移动！".into(),
                 ));
-            },
+            }
             _ => {}
         }
-        
+
         Ok(())
     }
 
@@ -399,7 +291,7 @@ impl Hero {
         // 计算实际伤害（考虑防御随机性）
         let defense_roll = self.defense() as f32 * (0.7 + self.rng.gen_range(0.0..0.6));
         let actual_damage = (amount as f32 - defense_roll).max(1.0) as u32;
-        
+
         self.hp = self.hp.saturating_sub(actual_damage);
         self.alive = self.hp > 0;
 
@@ -422,8 +314,7 @@ impl Hero {
 
     /// 检查是否被控制效果影响
     pub fn is_immobilized(&self) -> bool {
-        self.effects.has(EffectType::Paralysis) || 
-        self.effects.has(EffectType::Rooted)
+        self.effects.has(EffectType::Paralysis) || self.effects.has(EffectType::Rooted)
     }
 
     /// 检查是否有视觉增强
@@ -445,6 +336,25 @@ impl Hero {
     pub fn reseed(&mut self, new_seed: u64) {
         self.rng.reseed(new_seed);
     }
+    /// 获取装备的暴击加成
+    pub fn equipment_crit_bonus(&self) -> f32 {
+        self.bag.equipment().crit_bonus()
+    }
+
+    /// 获取装备的闪避惩罚
+    pub fn equipment_evasion_penalty(&self) -> u32 {
+        self.bag.equipment().evasion_penalty()
+    }
+
+    /// 检查是否有装备槽位
+    pub fn has_equipment_slot(&self, category: ItemCategory) -> bool {
+        match category {
+            ItemCategory::Weapon => true,
+            ItemCategory::Armor => true,
+            ItemCategory::Ring => self.bag.equipment().rings.iter().any(|r| r.is_none()),
+            _ => false,
+        }
+    }
 }
 
 impl Default for Hero {
@@ -453,42 +363,85 @@ impl Default for Hero {
     }
 }
 
-// 实现Combatant trait
-impl Combatant for Hero {
-    fn hp(&self) -> u32 {
-        self.hp
+impl EffectSystem for Hero {
+    fn add_effect(&mut self, effect: Effect) {
+        self.effects.add(effect);
     }
 
-    fn max_hp(&self) -> u32 {
-        self.max_hp
+    fn remove_effect(&mut self, effect_type: EffectType) {
+        self.effects.remove(effect_type);
     }
 
-    fn attack_power(&self) -> u32 {
-        let weapon_bonus = self.bag.equipment()
-            .weapon
-            .as_ref()
-            .map_or(0, |w| w.damage_bonus() as u32);
-        
-        (self.base_attack + weapon_bonus) * (100 + self.level) / 100
+    fn has_effect(&self, effect_type: EffectType) -> bool {
+        self.effects.has(effect_type)
     }
 
-    fn defense(&self) -> u32 {
-        self.defense()
+    fn get_effect(&self, effect_type: EffectType) -> Option<&Effect> {
+        self.effects.get(effect_type)
     }
 
-    fn take_damage(&mut self, amount: u32) -> bool {
-        self.take_damage(amount)
+    fn clear_effects(&mut self) {
+        self.effects.clear();
+    }
+}
+
+
+
+impl HeroBehavior for Hero {
+    fn new(class: Class) -> Self {
+        Hero::new(class)
     }
 
-    fn heal(&mut self, amount: u32) {
-        self.heal(amount)
+    fn with_seed(class: Class, seed: u64) -> Self {
+        Hero::with_seed(class, seed)
     }
 
-    fn is_alive(&self) -> bool {
-        self.alive
+    fn on_turn(&mut self) -> Result<(), HeroError> {
+        self.on_turn()
     }
 
-    fn name(&self) -> &str {
-        &self.name
+    fn move_to(&mut self, dx: i32, dy: i32, dungeon: &mut Dungeon) -> Result<(), String> {
+        self.move_to(dx, dy, dungeon)
+    }
+
+    fn use_item(&mut self, category: ItemCategory, index: usize) -> Result<(), HeroError> {
+        self.use_item(category, index)
+    }
+
+    fn gain_exp(&mut self, exp: u32) {
+        self.gain_exp(exp)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bincode::{deserialize, serialize};
+
+    #[test]
+    fn test_hero_serialization() {
+        let mut hero = Hero::new(Class::Warrior);
+        hero.gain_exp(50);
+
+        // 序列化
+        let encoded = serialize(&hero).unwrap();
+
+        // 反序列化
+        let decoded: Hero = deserialize(&encoded).unwrap();
+
+        assert_eq!(hero.name, decoded.name);
+        assert_eq!(hero.level, decoded.level);
+        assert_eq!(hero.rng.seed(), decoded.rng.seed());
+    }
+    #[test]
+    fn test_combat_effects() {
+        let mut hero = Hero::new(Class::Warrior);
+        hero.add_effect(Effect::poison(1, 5));
+        assert!(hero.has_effect(EffectType::Poison));
+
+        for _ in 0..5 {
+            hero.on_turn().unwrap();
+        }
+        assert!(!hero.has_effect(EffectType::Poison));
     }
 }
