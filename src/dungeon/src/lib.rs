@@ -11,10 +11,11 @@ use std::collections::HashSet;
 pub mod level;
 pub mod trap;
 
-use crate::level::Level;
 use crate::level::tiles::{TerrainType, TileInfo};
+use crate::level::Level;
+use crate::trap::TrapEffect;
+use combat::enemy::Enemy;
 use items::Item;
-
 
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct Dungeon {
@@ -50,6 +51,10 @@ impl Dungeon {
         self.current_level().is_passable(x, y)
     }
 
+    pub fn is_door(&self, x: i32, y: i32) -> bool {
+        self.current_level().is_door(x, y)
+    }
+
     pub fn can_descend(&self, x: i32, y: i32) -> bool {
         self.current_level().stair_down == (x, y)
     }
@@ -71,12 +76,19 @@ impl Dungeon {
         TileInfo {
             passable: level.is_passable(x, y),
             has_item: level.items.iter().any(|item| item.x == x && item.y == y),
-            has_enemy: level.enemies.iter().any(|enemy| enemy.x == x && enemy.y == y),
-            blocks_sight: level.tiles.iter()
+            has_enemy: level
+                .enemies
+                .iter()
+                .any(|enemy| enemy.x == x && enemy.y == y),
+            blocks_sight: level
+                .tiles
+                .iter()
                 .any(|t| t.x == x && t.y == y && t.info.blocks_sight),
-            terrain_type: level.tiles.iter()
+            terrain_type: level
+                .tiles
+                .iter()
                 .find(|t| t.x == x && t.y == y)
-                .map(|t| t.info.terrain_type)
+                .map(|t| t.info.terrain_type.clone())
                 .unwrap_or(TerrainType::Wall),
             is_visible: level.visible_tiles.contains(&(x, y)),
             explored: false,
@@ -106,4 +118,66 @@ impl Dungeon {
         self.depth -= 1;
         Ok(())
     }
+
+    /// 统一处理英雄进入新格子的所有交互
+    pub fn on_hero_enter(&mut self, x: i32, y: i32) -> Vec<InteractionEvent> {
+        let mut events = Vec::new();
+
+        // 1. 陷阱检测（优先处理）
+        if let Some(mut trap) = self.current_level_mut().get_trap(x, y) {
+            if let Some(effect) = trap.trigger() {
+                events.push(InteractionEvent::TrapTriggered(effect));
+            }
+        }
+
+        // 2. 物品拾取
+        if let Some(item) = self.take_item(x, y) {
+            events.push(InteractionEvent::ItemFound(item.clone()));
+            // 实际拾取逻辑交给游戏状态机处理
+        }
+
+        // 3. 敌人遭遇
+        if let Some(enemy) = self.current_level().enemy_at(x, y) {
+            events.push(InteractionEvent::EnemyEncounter(enemy.clone()));
+        }
+
+        // 4. 楼梯检测
+        if self.can_ascend(x, y) {
+            events.push(InteractionEvent::StairsUp);
+        } else if self.can_descend(x, y) {
+            events.push(InteractionEvent::StairsDown);
+        }
+
+        events
+    }
+
+    /// 获取当前层的交互状态
+    pub fn get_tile_interactions(&self, x: i32, y: i32) -> TileInteraction {
+        TileInteraction {
+            has_trap: self.current_level().has_trap(x, y),
+            has_item: self.get_item(x, y).is_some(),
+            is_stair: self.can_descend(x, y) || self.can_ascend(x, y),
+            is_door: self.is_door(x, y),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum InteractionEvent {
+    TrapTriggered(TrapEffect),
+    ItemFound(Item),
+    EnemyEncounter(Enemy),
+    StairsUp,
+    StairsDown,
+    DoorOpened(i32, i32),
+    SecretRevealed(i32, i32),
+}
+
+/// 用于UI显示的交互信息
+#[derive(Debug, Clone)]
+pub struct TileInteraction {
+    pub has_trap: bool,
+    pub has_item: bool,
+    pub is_stair: bool,
+    pub is_door: bool,
 }

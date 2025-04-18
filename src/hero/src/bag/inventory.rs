@@ -80,11 +80,11 @@ impl<T: ItemTrait> Inventory<T> {
     }
 
     pub fn get(&self, index: usize) -> Option<&T> {
-        self.items.get(index)
+        self.items().get(index)
     }
     pub fn remove(&mut self, index: usize) -> Result<T, InventoryError> {
-        if index < self.items.len() {
-            Ok(self.items.remove(index))
+        if index < self.items().len() {
+            Ok(self.items().remove(index))
         } else {
             Err(InventoryError::IndexOutOfBounds)
         }

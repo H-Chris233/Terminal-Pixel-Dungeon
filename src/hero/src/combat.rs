@@ -66,11 +66,6 @@ impl Combatant for Hero {
         0.1 + class_bonus + weapon_bonus + ring_bonus
     }
 
-    /// 判断是否暴击（使用英雄的RNG）
-    fn is_critical(&mut self) -> bool {
-        self.rng.gen_bool(self.crit_bonus() as f64)
-    }
-
     fn weapon(&self) -> Option<&Weapon> {
         self.bag.weapon()
     }
@@ -108,10 +103,6 @@ impl Combatant for Hero {
     /// 治疗（不超过最大HP）
     fn heal(&mut self, amount: u32) {
         self.hp = (self.hp + amount).min(self.max_hp);
-    }
-    /// 获取经验值
-    fn exp_value(&self) -> u32 {
-        self.level * 10 // 简单公式：每级10点经验值
     }
 }
 
@@ -225,6 +216,14 @@ impl CombatSystem for Hero {
             self.notify("你死了...".into());
         }
         self.alive
+    }
+
+    fn heal(&mut self, amount: u32) {
+        self.hp = (self.hp + amount).min(self.max_hp);
+    }
+
+    fn is_alive(&self) -> bool {
+        self.alive && self.hp > 0
     }
 }
 

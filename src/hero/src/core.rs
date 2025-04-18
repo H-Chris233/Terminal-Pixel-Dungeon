@@ -5,12 +5,23 @@ use crate::{
     effects::{Effect, EffectManager, EffectType},
     rng::HeroRng,
 };
-use combat::{Combatant, Trap};
+use crate::HeroBehavior;
+
+
+use dungeon::InteractionEvent;
+use combat::{Combatant};
 use dungeon::trap::TrapEffect;
+use dungeon::trap::Trap;
 use dungeon::Dungeon;
 use thiserror::Error;
 
 use serde::{Deserialize, Serialize};
+
+pub mod events;
+pub mod item;
+
+pub use ::items::*;
+pub use self::events::*;
 
 #[derive(Debug, Error)]
 pub enum HeroError {
@@ -126,7 +137,7 @@ impl Hero {
         }
 
         // 更新效果
-        self.effects.update(self);
+        self.effects.update();
         Ok(())
     }
 
@@ -142,7 +153,13 @@ impl Hero {
         }
     }
 
-    pub fn move_to(&mut self, dx: i32, dy: i32, dungeon: &mut Dungeon) -> Result<(), HeroError> {
+    /// 移动并返回交互事件
+    pub fn move_to(
+        &mut self,
+        dx: i32,
+        dy: i32,
+        dungeon: &mut Dungeon,
+    ) -> Result<Vec<InteractionEvent>, HeroError> {
         if self.is_immobilized() {
             return Err(HeroError::Immobilized);
         }
@@ -150,17 +167,20 @@ impl Hero {
         let new_x = self.x.saturating_add(dx);
         let new_y = self.y.saturating_add(dy);
 
+        // 基础验证
         if !dungeon.current_level().in_bounds(new_x, new_y) {
             return Err(HeroError::ActionFailed);
         }
-
-        if !dungeon.current_level().is_passable(new_x, new_y) {
+        if !dungeon.is_passable(new_x, new_y) {
             return Err(HeroError::ActionFailed);
         }
 
+        // 更新位置
         self.x = new_x;
         self.y = new_y;
-        Ok(())
+
+        // 触发地图交互
+        Ok(dungeon.on_hero_enter(self, new_x, new_y))
     }
 
     pub fn gain_exp(&mut self, exp: u32) {
@@ -215,5 +235,58 @@ impl Hero {
 impl Default for Hero {
     fn default() -> Self {
         Self::new(Class::default())
+    }
+}
+
+impl HeroBehavior for Hero {
+    /// 创建新英雄
+    fn new(class: Class) -> Self
+    where
+        Self: Sized,
+    {
+        Hero::new(class)
+    }
+
+    /// 带种子创建英雄
+    fn with_seed(class: Class, seed: u64) -> Self
+    where
+        Self: Sized,
+    {
+        Hero::with_seed(class, seed)
+    }
+
+    /// 每回合更新
+    fn on_turn(&mut self) -> Result<(), HeroError> {
+        self.on_turn()
+    }
+
+    /// 移动英雄
+    fn move_to(&mut self, dx: i32, dy: i32, dungeon: &mut Dungeon) -> Result<(), String> {
+        match Hero::move_to(self, dx, dy, dungeon) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+
+    /// 使用物品
+    fn use_item(&mut self, category: ItemCategory, index: usize) -> Result<(), HeroError> {
+        // TODO: Implement actual item usage logic
+        // For now, just return ActionFailed as a placeholder
+        Err(HeroError::ActionFailed)
+    }
+
+    /// 获取经验
+    fn gain_exp(&mut self, exp: u32) {
+        self.gain_exp(exp)
+    }
+
+    /// 获取当前生命值
+    fn hp(&self) -> u32 {
+        self.hp
+    }
+
+    /// 获取最大生命值
+    fn max_hp(&self) -> u32 {
+        self.max_hp
     }
 }

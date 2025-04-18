@@ -1,21 +1,10 @@
+
 // src/hero/src/bag.rs
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use thiserror::Error;
 
-use crate::Hero;
-use crate::HeroError;
-use crate::InventorySystem;
-
-// 子模块定义
-pub mod equipment; // 装备管理
-pub mod inventory; // 物品库存管理
-
-use crate::bag::{
-    equipment::{EquipError, Equipment},
-    inventory::{Inventory, InventoryError},
-};
 use items::{
     armor::Armor,
     food::Food,
@@ -29,6 +18,13 @@ use items::{
     weapon::Weapon,
     Item, ItemKind,
 };
+
+// 子模块定义
+pub mod equipment; // 装备管理
+pub mod inventory; // 物品库存管理
+
+use equipment::{EquipError, Equipment};
+use inventory::{Inventory, InventoryError};
 
 /// 完整的背包系统（遵循破碎的像素地牢机制）
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
@@ -89,12 +85,11 @@ impl Bag {
         }
     }
 
-    /// 金币管理
+    /* ================== 金币管理 ================== */
     pub fn add_gold(&mut self, amount: u32) {
         self.gold += amount;
     }
 
-    /// 花费金币
     pub fn spend_gold(&mut self, amount: u32) -> Result<(), BagError> {
         if self.gold >= amount {
             self.gold -= amount;
@@ -104,7 +99,7 @@ impl Bag {
         }
     }
 
-    /// 统一的物品使用接口
+    /* ================== 物品使用 ================== */
     pub fn use_item(&mut self, index: usize) -> Result<Item, BagError> {
         let item = self.get_item_by_index(index)?;
 
@@ -129,8 +124,8 @@ impl Bag {
         }
     }
 
-    /// 统一的装备接口
-    fn equip_item(&mut self, index: usize, strength: u8) -> Result<Option<Item>, BagError> {
+    /* ================== 装备系统 ================== */
+    pub fn equip_item(&mut self, index: usize, strength: u8) -> Result<Option<Item>, BagError> {
         let item = self.get_item_by_index(index)?;
 
         match &item.kind {
@@ -138,27 +133,31 @@ impl Bag {
                 let old_weapon = self.equipment.equip_weapon(weapon.clone(), strength)?;
                 self.remove_item(index)?;
                 if let Some(w) = old_weapon {
-                    self.add_item(w.into())
-                        .map_err(|_| HeroError::InventoryFull)?;
+                    self.add_item(w.into())?;
                 }
                 Ok(old_weapon.map(Item::from))
             }
             ItemKind::Armor(armor) => {
                 let old_armor = self.equipment.equip_armor(armor.clone(), strength)?;
                 self.remove_item(index)?;
+                if let Some(ref a) = old_armor {
+                    self.add_item(a.into())?;
+                }
                 Ok(old_armor.map(Item::from))
             }
             ItemKind::Ring(ring) => {
                 let slot = self.find_available_ring_slot();
                 let old_ring = self.equipment.equip_ring(ring.clone(), slot)?;
                 self.remove_item(index)?;
+                if let Some(ref r) = old_ring {
+                    self.add_item(r.into())?;
+                }
                 Ok(old_ring.map(Item::from))
             }
             _ => Err(BagError::CannotEquipItem),
         }
     }
 
-    /// 武器升级系统
     pub fn upgrade_weapon(&mut self) -> Result<(), BagError> {
         let scroll_idx = self.find_upgrade_scroll()?;
         self.scrolls.remove(scroll_idx)?;
@@ -166,24 +165,70 @@ impl Bag {
         Ok(())
     }
 
-    /// 查找第一个可用的升级卷轴
-    fn find_upgrade_scroll(&self) -> Result<usize, BagError> {
-        self.scrolls
-            .find(|s| matches!(s.kind, ScrollKind::Upgrade))
-            .ok_or(BagError::NoUpgradeScroll)
-    }
-
-    /// 查找可用的戒指槽位(0或1)
-    fn find_available_ring_slot(&self) -> usize {
-        if self.equipment.rings[0].is_none() {
-            0
-        } else {
-            1
+    /* ================== 物品管理 ================== */
+    pub fn add_item(&mut self, item: Item) -> Result<(), BagError> {
+        match item.kind {
+            ItemKind::Weapon(w) => self
+                .weapons
+                .add_sorted(w, |a, b| b.upgrade_level.cmp(&a.upgrade_level)),
+            ItemKind::Armor(a) => self
+                .armors
+                .add_sorted(a, |a, b| b.upgrade_level.cmp(&a.upgrade_level)),
+            ItemKind::Potion(p) => self.potions.add(p),
+            ItemKind::Scroll(s) => self.scrolls.add(s),
+            ItemKind::Wand(w) => self.wands.add_sorted(w, |a, b| b.level.cmp(&a.level)),
+            ItemKind::Ring(r) => self.rings.add(r),
+            ItemKind::Seed(s) => self.seeds.add(s),
+            ItemKind::Stone(s) => self.stones.add(s),
+            ItemKind::Food(f) => self.food.add(f),
+            ItemKind::Misc(m) => match m.kind {
+                MiscKind::Gold(amount) => {
+                    self.add_gold(amount);
+                    Ok(())
+                }
+                _ => self.misc.add(m),
+            },
         }
+        .map_err(Into::into)
     }
 
-    /// 通过全局索引获取物品（跨所有库存）
-    fn get_item_by_index(&self, index: usize) -> Result<Item, BagError> {
+    pub fn remove_item(&mut self, index: usize) -> Result<(), BagError> {
+        let mut idx = index;
+
+        if idx < self.weapons.len() {
+            return self.weapons.remove(idx).map(|_| ()).map_err(Into::into);
+        }
+        idx -= self.weapons.len();
+
+        if idx < self.armors.len() {
+            return self.armors.remove(idx).map(|_| ()).map_err(Into::into);
+        }
+        idx -= self.armors.len();
+
+        if idx < self.potions.len() {
+            return self.potions.remove(idx).map(|_| ()).map_err(Into::into);
+        }
+        idx -= self.potions.len();
+
+        if idx < self.scrolls.len() {
+            return self.scrolls.remove(idx).map(|_| ()).map_err(Into::into);
+        }
+        idx -= self.scrolls.len();
+
+        if idx < self.rings.len() {
+            return self.rings.remove(idx).map(|_| ()).map_err(Into::into);
+        }
+        idx -= self.rings.len();
+
+        if idx < self.food.len() {
+            return self.food.remove(idx).map(|_| ()).map_err(Into::into);
+        }
+
+        Err(BagError::InvalidIndex)
+    }
+
+    /* ================== 查询方法 ================== */
+    pub fn get_item_by_index(&self, index: usize) -> Result<Item, BagError> {
         let mut idx = index;
 
         // 检查武器
@@ -248,70 +293,21 @@ impl Bag {
         Err(BagError::InvalidIndex)
     }
 
-    /// 自动分类添加物品
-    fn add_item(&mut self, item: Item) -> Result<(), BagError> {
-        match item.kind {
-            ItemKind::Weapon(w) => self
-                .weapons
-                .add_sorted(w, |a, b| b.upgrade_level.cmp(&a.upgrade_level)),
-            ItemKind::Armor(a) => self
-                .armors
-                .add_sorted(a, |a, b| b.upgrade_level.cmp(&a.upgrade_level)),
-            ItemKind::Potion(p) => self.potions.add(p),
-            ItemKind::Scroll(s) => self.scrolls.add(s),
-            ItemKind::Wand(w) => self.wands.add_sorted(w, |a, b| b.level.cmp(&a.level)),
-            ItemKind::Ring(r) => self.rings.add(r),
-            ItemKind::Seed(s) => self.seeds.add(s),
-            ItemKind::Stone(s) => self.stones.add(s),
-            ItemKind::Food(f) => self.food.add(f),
-            ItemKind::Misc(m) => match m.kind {
-                MiscKind::Gold(amount) => {
-                    self.add_gold(amount);
-                    Ok(())
-                }
-                _ => self.misc.add(m),
-            },
-        }
-        .map_err(Into::into)
+    fn find_upgrade_scroll(&self) -> Result<usize, BagError> {
+        self.scrolls
+            .find(|s| matches!(s.kind, ScrollKind::Upgrade))
+            .ok_or(BagError::NoUpgradeScroll)
     }
 
-    /// 移除物品
-    fn remove_item(&mut self, index: usize) -> Result<(), BagError> {
-        let mut idx = index;
-
-        if idx < self.weapons.len() {
-            return self.weapons.remove(idx).map(|_| ()).map_err(Into::into);
+    fn find_available_ring_slot(&self) -> usize {
+        if self.equipment.rings[0].is_none() {
+            0
+        } else {
+            1
         }
-        idx -= self.weapons.len();
-
-        if idx < self.armors.len() {
-            return self.armors.remove(idx).map(|_| ()).map_err(Into::into);
-        }
-        idx -= self.armors.len();
-
-        if idx < self.potions.len() {
-            return self.potions.remove(idx).map(|_| ()).map_err(Into::into);
-        }
-        idx -= self.potions.len();
-
-        if idx < self.scrolls.len() {
-            return self.scrolls.remove(idx).map(|_| ()).map_err(Into::into);
-        }
-        idx -= self.scrolls.len();
-
-        if idx < self.rings.len() {
-            return self.rings.remove(idx).map(|_| ()).map_err(Into::into);
-        }
-        idx -= self.rings.len();
-
-        if idx < self.food.len() {
-            return self.food.remove(idx).map(|_| ()).map_err(Into::into);
-        }
-
-        Err(BagError::InvalidIndex)
     }
 
-    /// 排序功能
+    /* ================== 排序功能 ================== */
     pub fn sort_weapons(&mut self) {
         self.weapons.sort_by(|a, b| {
             b.upgrade_level
@@ -332,7 +328,7 @@ impl Bag {
         self.rings.sort_by(|a, b| b.level.cmp(&a.level));
     }
 
-    /// 获取方法（用于UI）
+    /* ================== 获取方法 ================== */
     pub fn gold(&self) -> u32 {
         self.gold
     }
@@ -364,37 +360,17 @@ impl Bag {
     pub fn food(&self) -> &Inventory<Food> {
         &self.food
     }
-}
 
-impl InventorySystem for Hero {
-    /// 添加物品到英雄背包，自动分类存储
-    ///
-    /// # 错误
-    /// 返回`BagError::InventoryFull`当对应类别背包已满
-    pub fn add_item(&mut self, item: Item) -> Result<(), BagError> {
-        self.bag.add_item(item).map_err(|e| {
-            debug!("添加物品失败: {:?}", e);
-            e
-        })
+    /* ================== 装备属性计算 ================== */
+    pub fn armor_defense(&self) -> u32 {
+        self.equipment.armor.as_ref().map_or(0, |a| a.defense)
     }
 
-    /// 移除指定索引的物品
-    ///
-    /// # 注意
-    /// 使用全局索引系统，需通过`hero.bag().items()`获取正确索引
-    pub fn remove_item(&mut self, index: usize) -> Result<(), BagError> {
-        self.bag.remove_item(index)
+    pub fn crit_bonus(&self) -> f32 {
+        self.equipment.weapon.as_ref().map_or(1.0, |w| w.crit_modifier)
     }
 
-    /// 装备指定物品，返回之前装备的同类型物品(如果有)
-    ///
-    /// # 参数
-    /// - `strength`: 英雄当前力量值，用于检查装备需求
-    pub fn equip_item(&mut self, index: usize, strength: u8) -> Result<Option<Item>, BagError> {
-        self.bag.equip_item(index, strength).inspect(|old_item| {
-            if let Some(item) = old_item {
-                debug!("卸下装备: {}", item.name());
-            }
-        })
+    pub fn evasion_penalty(&self) -> u32 {
+        self.equipment.armor.as_ref().map_or(0, |a| a.evasion_penalty)
     }
 }
