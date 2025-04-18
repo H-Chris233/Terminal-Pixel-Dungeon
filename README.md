@@ -1,6 +1,6 @@
 # Terminal Pixel Dungeon
 
-## [Working in process]
+## [Working in progress]
 
 Terminal edition for Shattered Pixel Dungeon.
 
