@@ -130,7 +130,7 @@ impl Bag {
     }
 
     /// 统一的装备接口
-    pub fn equip_item(&mut self, index: usize, strength: u8) -> Result<Option<Item>, BagError> {
+    fn equip_item(&mut self, index: usize, strength: u8) -> Result<Option<Item>, BagError> {
         let item = self.get_item_by_index(index)?;
 
         match &item.kind {
@@ -276,7 +276,7 @@ impl Bag {
     }
 
     /// 移除物品
-    pub fn remove_item(&mut self, index: usize) -> Result<(), BagError> {
+    fn remove_item(&mut self, index: usize) -> Result<(), BagError> {
         let mut idx = index;
 
         if idx < self.weapons.len() {
@@ -371,7 +371,7 @@ impl InventorySystem for Hero {
     ///
     /// # 错误
     /// 返回`BagError::InventoryFull`当对应类别背包已满
-    fn add_item(&mut self, item: Item) -> Result<(), BagError> {
+    pub fn add_item(&mut self, item: Item) -> Result<(), BagError> {
         self.bag.add_item(item).map_err(|e| {
             debug!("添加物品失败: {:?}", e);
             e
@@ -382,7 +382,7 @@ impl InventorySystem for Hero {
     ///
     /// # 注意
     /// 使用全局索引系统，需通过`hero.bag().items()`获取正确索引
-    fn remove_item(&mut self, index: usize) -> Result<(), BagError> {
+    pub fn remove_item(&mut self, index: usize) -> Result<(), BagError> {
         self.bag.remove_item(index)
     }
 
@@ -390,7 +390,7 @@ impl InventorySystem for Hero {
     ///
     /// # 参数
     /// - `strength`: 英雄当前力量值，用于检查装备需求
-    fn equip_item(&mut self, index: usize, strength: u8) -> Result<Option<Item>, BagError> {
+    pub fn equip_item(&mut self, index: usize, strength: u8) -> Result<Option<Item>, BagError> {
         self.bag.equip_item(index, strength).inspect(|old_item| {
             if let Some(item) = old_item {
                 debug!("卸下装备: {}", item.name());
