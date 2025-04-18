@@ -19,6 +19,8 @@ use crate::EffectSystem;
 use crate::HeroBehavior;
 use crate::Hero;
 use crate::InventorySystem;
+use crate::HeroError;
+
 
 impl Hero {
     /// 使用物品
@@ -199,7 +201,7 @@ impl InventorySystem for Hero {
         self.bag.equip_item(index, strength)
     }
 
-    fn use_item(&mut self, category: ItemCategory, index: usize) -> Result<Item, BagError> {
+    fn use_item(&mut self, index: usize) -> Result<Item, BagError> {
         self.bag.use_item(index)
     }
 }

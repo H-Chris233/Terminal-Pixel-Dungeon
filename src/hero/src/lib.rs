@@ -14,6 +14,7 @@ pub mod class;
 
 // 标准库导入
 use std::fmt;
+use anyhow::Result;
 
 // 外部crate导入
 use bincode::{Decode, Encode};
@@ -32,6 +33,9 @@ pub use self::{
 use crate::class::Class;
 use combat::effect::Effect;
 use combat::effect::EffectType;
+use dungeon::trap::Trap;
+use items::Weapon;
+
 
 // 游戏系统导入
 use dungeon::Dungeon;
@@ -140,6 +144,108 @@ impl FullHero {
             bag: Bag::new(),
         }
     }
+    
+    /// 获取英雄名称
+    pub fn name(&self) -> &str {
+        &self.core.name
+    }
+
+    /// 设置英雄名称
+    pub fn set_name(&mut self, name: String) {
+        self.core.name = name;
+    }
+
+    /// 获取当前等级
+    pub fn level(&self) -> u32 {
+        self.core.level
+    }
+
+    /// 获取当前经验值
+    pub fn experience(&self) -> u32 {
+        self.core.experience
+    }
+
+    /// 获取当前金币
+    pub fn gold(&self) -> u32 {
+        self.core.gold
+    }
+
+    /// 添加金币
+    pub fn add_gold(&mut self, amount: u32) {
+        self.core.gold += amount;
+    }
+
+    /// 消耗金币
+    pub fn spend_gold(&mut self, amount: u32) -> Result<(), HeroError> {
+        if self.core.gold >= amount {
+            self.core.gold -= amount;
+            Ok(())
+        } else {
+            Err(HeroError::Underpowered)
+        }
+    }
+
+    /// 获取当前饱食度
+    pub fn satiety(&self) -> u8 {
+        self.core.satiety
+    }
+
+    /// 增加饱食度
+    pub fn feed(&mut self, amount: u8) {
+        self.core.satiety = (self.core.satiety + amount).min(10);
+    }
+
+    /// 获取当前回合数
+    pub fn turns(&self) -> u32 {
+        self.core.turns
+    }
+
+    /// 获取英雄职业
+    pub fn class(&self) -> &Class {
+        &self.core.class
+    }
+
+    /// 获取英雄位置
+    pub fn position(&self) -> (i32, i32) {
+        (self.core.x, self.core.y)
+    }
+
+    /// 设置英雄位置
+    pub fn set_position(&mut self, x: i32, y: i32) {
+        self.core.x = x;
+        self.core.y = y;
+    }
+
+    /// 检查英雄是否被控制（无法移动）
+    pub fn is_immobilized(&self) -> bool {
+        self.core.is_immobilized()
+    }
+
+    /// 执行攻击
+    pub fn perform_attack(&mut self, target: &mut dyn Combatant) -> (bool, u32) {
+        self.core.perform_attack(target)
+    }
+
+    /// 计算命中概率
+    pub fn hit_probability(&self, target: &dyn Combatant) -> f32 {
+        self.core.hit_probability(target)
+    }
+
+    /// 尝试闪避攻击
+    pub fn try_evade(&mut self, attacker: &dyn Combatant) -> bool {
+        self.core.try_evade(attacker)
+    }
+
+    /// 触发陷阱
+    pub fn trigger_trap(&mut self, trap: &mut Trap) -> Result<(), HeroError> {
+        self.core.trigger_trap(trap)
+    }
+
+    /// 升级武器
+    pub fn upgrade_weapon(&mut self) -> Result<(), HeroError> {
+        self.core.upgrade_weapon()
+    }
+    
 }
 
 impl HeroBehavior for FullHero {
@@ -198,42 +304,7 @@ impl CombatSystem for FullHero {
     fn is_alive(&self) -> bool {
         self.core.is_alive()
     }
-}
-
-impl EffectSystem for FullHero {
-    fn add_effect(&mut self, effect: Effect) {
-        self.effects.add(effect)
-    }
-
-    fn remove_effect(&mut self, effect_type: EffectType) {
-        self.effects.remove(effect_type)
-    }
-
-    fn has_effect(&self, effect_type: EffectType) -> bool {
-        self.effects.has(effect_type)
-    }
-
-    fn update_effects(&mut self) {
-        self.effects.update();
-    }
-}
-
-impl InventorySystem for FullHero {
-    fn add_item(&mut self, item: Item) -> Result<(), BagError> {
-        self.core.add_item(item)
-    }
-
-    fn remove_item(&mut self, index: usize) -> Result<(), BagError> {
-        self.core.remove_item(index)
-    }
-
-    fn equip_item(&mut self, index: usize, strength: u8) -> Result<Option<Item>, BagError> {
-        self.core.equip_item(index, strength)
-    }
-
-    fn use_item(&mut self, index: usize) -> Result<Item, BagError> {
-        self.core.use_item(index)
-    }
+    
 }
 
 /// 默认战斗系统实现
@@ -265,54 +336,5 @@ impl CombatSystem for DefaultCombatSystem {
 
     fn is_alive(&self) -> bool {
         true // 基础实现总是存活
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    struct MockHero {
-        hp: u32,
-    }
-
-    impl HeroBehavior for MockHero {
-        fn new(_class: Class) -> Self {
-            MockHero { hp: 100 }
-        }
-
-        fn with_seed(_class: Class, _seed: u64) -> Self {
-            MockHero { hp: 100 }
-        }
-
-        fn on_turn(&mut self) -> Result<(), HeroError> {
-            Ok(())
-        }
-
-        fn move_to(&mut self, _dx: i32, _dy: i32, _dungeon: &mut Dungeon) -> Result<(), String> {
-            Ok(())
-        }
-
-        fn use_item(&mut self, _category: ItemCategory, _index: usize) -> Result<(), HeroError> {
-            Ok(())
-        }
-
-        fn gain_exp(&mut self, _exp: u32) {}
-
-        fn hp(&self) -> u32 {
-            self.hp
-        }
-
-        fn max_hp(&self) -> u32 {
-            100
-        }
-    }
-
-    #[test]
-    fn test_mock_hero() {
-        let mut hero = MockHero::new(Class::Warrior);
-        assert_eq!(hero.hp(), 100);
-        assert_eq!(hero.max_hp(), 100);
-        assert!(hero.on_turn().is_ok());
     }
 }

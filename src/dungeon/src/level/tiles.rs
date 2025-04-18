@@ -1,7 +1,9 @@
-
 // src/dungeon/src/level/tiles/tiles.rs
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
+
+use crate::trap::Trap;
+use crate::TrapEffect;
 
 /// 表示游戏中的一个地图格子
 /// 使用#[repr(C)]优化内存布局，字段按从大到小排列减少padding
@@ -22,9 +24,9 @@ impl Tile {
         Self { x, y, info }
     }
 
-    /// 检查格子是否可通行(有敌人的格子不可通行)
+    /// 检查格子是否可通行(有敌人的格子不可通行，陷阱永远可通行)
     pub fn is_passable(&self) -> bool {
-        self.info.passable && !self.info.has_enemy
+        !self.info.has_enemy
     }
 
     /// 检查格子是否阻挡视线
@@ -47,15 +49,37 @@ impl Tile {
         self.info.is_visible = visible;
     }
 
+    /// 检查是否有陷阱(无论是否被发现或触发)
+    pub fn has_trap(&self) -> bool {
+        if let TerrainType::Trap(trap) = &self.info.terrain_type {
+            trap.is_active() || trap.is_triggered()
+        } else {
+            false
+        }
+    }
+
+    /// 获取陷阱引用(如果存在)
+    pub fn get_trap(&self) -> Option<&Trap> {
+        if let TerrainType::Trap(trap) = &self.info.terrain_type {
+            Some(trap)
+        } else {
+            None
+        }
+    }
+
+    /// 获取可变陷阱引用(如果存在)
+    pub fn get_trap_mut(&mut self) -> Option<&mut Trap> {
+        if let TerrainType::Trap(trap) = &mut self.info.terrain_type {
+            Some(trap)
+        } else {
+            None
+        }
+    }
+
     /// 检查是否是门
     pub fn is_door(&self) -> bool {
         matches!(self.info.terrain_type, TerrainType::Door(_))
     }
-
-    /// 检查是否是陷阱
-    pub fn is_trap(&self) -> bool {
-    matches!(self.info.terrain_type, TerrainType::Trap(..))
-}
 
     /// 尝试开门(返回操作是否成功)
     pub fn try_open_door(&mut self) -> bool {
@@ -75,14 +99,34 @@ impl Tile {
         }
     }
 
-    /// 触发陷阱(返回陷阱类型)
-    pub fn trigger_trap(&mut self) -> Option<TrapType> {
-        if let TerrainType::Trap(state, trap_type) = &mut self.info.terrain_type {
-            *state = TrapState::Triggered;
-            self.info.passable = true; // 触发后的陷阱通常可通行
-            Some(*trap_type)
+    /// 触发陷阱(返回陷阱效果)
+    /// 触发后陷阱会被标记为已触发状态并变为可见
+    pub fn trigger_trap(&mut self) -> Option<TrapEffect> {
+        if let TerrainType::Trap(trap) = &mut self.info.terrain_type {
+            if !trap.is_triggered() && trap.is_active() {
+                let effect = trap.force_trigger();
+                Some(effect)
+            } else {
+                None
+            }
         } else {
             None
+        }
+    }
+
+    /// 尝试发现陷阱(基于玩家感知值)
+    pub fn try_discover_trap(&mut self, perception: u8) -> bool {
+        if let TerrainType::Trap(trap) = &mut self.info.terrain_type {
+            trap.try_discover(perception)
+        } else {
+            false
+        }
+    }
+
+    /// 强制发现陷阱(无视难度)
+    pub fn force_discover_trap(&mut self) {
+        if let TerrainType::Trap(trap) = &mut self.info.terrain_type {
+            trap.force_discover();
         }
     }
 }
@@ -110,11 +154,7 @@ pub struct TileInfo {
 
 impl TileInfo {
     /// 创建一个新的TileInfo实例
-    pub fn new(
-        passable: bool,
-        blocks_sight: bool,
-        terrain_type: TerrainType,
-    ) -> Self {
+    pub fn new(passable: bool, blocks_sight: bool, terrain_type: TerrainType) -> Self {
         Self {
             terrain_type,
             passable,
@@ -128,7 +168,7 @@ impl TileInfo {
 }
 
 /// 地形类型枚举
-#[derive(Copy, Clone, Debug, Encode, Decode, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TerrainType {
     /// 普通地板
     Floor,
@@ -140,8 +180,8 @@ pub enum TerrainType {
     Grass,
     /// 门(可开关)
     Door(DoorState),
-    /// 陷阱(隐藏或可见)
-    Trap(TrapState, TrapType),
+    /// 陷阱
+    Trap(Trap),
     /// 楼梯(上下层)
     Stair(StairDirection),
     /// 特殊地形(如祭坛等)
@@ -157,32 +197,6 @@ pub enum DoorState {
     Open,
     /// 锁定状态
     Locked,
-}
-
-/// 陷阱的状态
-#[derive(Copy, Clone, Debug, Encode, Decode, Serialize, Deserialize, PartialEq, Eq)]
-pub enum TrapState {
-    /// 隐藏的陷阱
-    Hidden,
-    /// 可见的陷阱
-    Visible,
-    /// 已触发的陷阱
-    Triggered,
-}
-
-/// 陷阱类型
-#[derive(Copy, Clone, Debug, Encode, Decode, Serialize, Deserialize, PartialEq, Eq)]
-pub enum TrapType {
-    /// 伤害陷阱
-    Damage(u8),
-    /// 减速陷阱
-    Slow(u8),
-    /// 毒陷阱
-    Poison(u8),
-    /// 警报陷阱
-    Alarm,
-    /// 传送陷阱
-    Teleport,
 }
 
 /// 楼梯方向
