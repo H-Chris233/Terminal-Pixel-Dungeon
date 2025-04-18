@@ -89,16 +89,16 @@ pub trait CombatSystem {
 /// 效果系统接口
 pub trait EffectSystem {
     /// 添加效果
-    fn add_effect(&mut self, effect: Effect);
+    fn add(&mut self, effect: Effect);
 
     /// 移除效果
-    fn remove_effect(&mut self, effect_type: EffectType);
+    fn remove(&mut self, effect_type: EffectType);
 
     /// 检查效果
-    fn has_effect(&self, effect_type: EffectType) -> bool;
+    fn has(&self, effect_type: EffectType) -> bool;
 
     /// 更新效果
-    fn update_effects(&mut self);
+    fn update(&mut self);
 }
 
 /// 物品系统接口
@@ -202,37 +202,37 @@ impl CombatSystem for FullHero {
 
 impl EffectSystem for FullHero {
     fn add_effect(&mut self, effect: Effect) {
-        self.effects.add_effect(effect)
+        self.effects.add(effect)
     }
 
     fn remove_effect(&mut self, effect_type: EffectType) {
-        self.effects.remove_effect(effect_type)
+        self.effects.remove(effect_type)
     }
 
     fn has_effect(&self, effect_type: EffectType) -> bool {
-        self.effects.has_effect(effect_type)
+        self.effects.has(effect_type)
     }
 
     fn update_effects(&mut self) {
-        self.effects.update_effects()
+        self.effects.update();
     }
 }
 
 impl InventorySystem for FullHero {
     fn add_item(&mut self, item: Item) -> Result<(), BagError> {
-        self.bag.add_item(item)
+        self.core.add_item(item)
     }
 
     fn remove_item(&mut self, index: usize) -> Result<(), BagError> {
-        self.bag.remove_item(index)
+        self.core.remove_item(index)
     }
 
     fn equip_item(&mut self, index: usize, strength: u8) -> Result<Option<Item>, BagError> {
-        self.bag.equip_item(index, strength)
+        self.core.equip_item(index, strength)
     }
 
     fn use_item(&mut self, index: usize) -> Result<Item, BagError> {
-        self.bag.use_item(index)
+        self.core.use_item(index)
     }
 }
 

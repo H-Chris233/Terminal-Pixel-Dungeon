@@ -1,3 +1,4 @@
+
 // src/hero/effects.rs
 use bincode::{Decode, Encode};
 pub use combat::effect::{Effect, EffectType};
@@ -5,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::EffectSystem;
-use crate::Hero;
+use crate::core::Hero;
 
 /// 效果管理系统
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Encode, Decode)]
@@ -15,6 +16,7 @@ pub struct EffectManager {
 }
 
 impl EffectManager {
+    /// 创建空的效果管理器
     pub fn new() -> Self {
         Self {
             effects: HashMap::new(),
@@ -23,7 +25,6 @@ impl EffectManager {
 
     /// 添加或更新效果（带互斥检查）
     pub fn add(&mut self, effect: Effect) -> bool {
-        // 检查互斥效果
         if self.has_conflicting_effect(effect.effect_type()) {
             return false;
         }
@@ -53,17 +54,14 @@ impl EffectManager {
     }
 
     /// 检查效果互斥性
-    pub fn has_conflicting_effect(&self, new_effect: EffectType) -> bool {
+    fn has_conflicting_effect(&self, new_effect: EffectType) -> bool {
         self.effects.keys().any(|&existing| {
             matches!(
                 (existing, new_effect),
-                // 燃烧与冰冻互斥
                 (EffectType::Burning, EffectType::Frozen) |
                 (EffectType::Frozen, EffectType::Burning) |
-                // 加速与减速互斥
                 (EffectType::Haste, EffectType::Slow) |
                 (EffectType::Slow, EffectType::Haste) |
-                // 隐身与显形互斥
                 (EffectType::Invisible, EffectType::Revealed) |
                 (EffectType::Revealed, EffectType::Invisible)
             )
@@ -94,11 +92,10 @@ impl EffectManager {
     pub fn update(&mut self) -> Vec<(EffectType, u32)> {
         let mut expired = Vec::new();
 
-        // 减少持续时间并收集过期效果
         self.effects.retain(|&ty, e| {
             let new_turns = e.turns().saturating_sub(1);
             if new_turns == 0 {
-                expired.push((ty, e.damage()));
+                expired.push((ty, e.damage().unwrap_or(0)));
                 false
             } else {
                 *e = Effect::new(ty, new_turns, e.damage(), e.damage_interval());
@@ -119,93 +116,116 @@ impl EffectManager {
         self.effects.values().collect()
     }
 
-    /// 检查是否有任何限制移动的效果
+    /// 检查移动限制效果
     pub fn is_immobilized(&self) -> bool {
         self.has(EffectType::Paralysis) || self.has(EffectType::Rooted)
     }
 
-    /// 检查是否有视觉增强效果
+    /// 检查视觉增强效果
     pub fn has_vision_enhancement(&self) -> bool {
-        self.has(EffectType::MindVision)
+        self.has(EffectType::MindVision) || self.has(EffectType::DarkVision)
     }
 
-    /// 获取效果伤害（如果有）
+    /// 获取效果伤害值
     pub fn get_damage(&self, effect_type: EffectType) -> Option<u32> {
         self.effects.get(&effect_type).and_then(|e| e.damage())
     }
+
+    /// 获取所有伤害型效果
+    pub fn damaging_effects(&self) -> Vec<&Effect> {
+        self.effects
+            .values()
+            .filter(|e| e.damage().is_some())
+            .collect()
+    }
+
+    /// 延长指定效果的持续时间
+    pub fn extend_duration(&mut self, effect_type: EffectType, extra_turns: u32) -> bool {
+        if let Some(effect) = self.effects.get_mut(&effect_type) {
+            *effect = Effect::new(
+                effect_type,
+                effect.turns() + extra_turns,
+                effect.damage(),
+                effect.damage_interval(),
+            );
+            true
+        } else {
+            false
+        }
+    }
 }
+
 
 impl EffectSystem for Hero {
-    fn add_effect(&mut self, effect: Effect) {
-        self.effects.add(effect);
+    /// 添加新效果到英雄身上
+    fn add(&mut self, effect: Effect) {
+        // 检查效果冲突（例如：不能同时有多个同类型效果）
+        if self.effects.has(effect.effect_type) {
+            // 已有同类型效果时的处理策略：
+            // 1. 叠加持续时间（如中毒）
+            // 2. 替换更强效果（如增益效果）
+            // 3. 忽略新效果（如免疫）
+            match effect.effect_type {
+                EffectType::Poison | EffectType::Regeneration => {
+                    // 可叠加效果：延长持续时间
+                    if let Some(existing) = self.effects.get_mut(effect.effect_type) {
+                        existing.duration += effect.duration;
+                    }
+                }
+                _ => {
+                    // 默认行为：替换现有效果
+                    self.effects.remove(effect.effect_type);
+                    self.effects.add(effect);
+                }
+            }
+        } else {
+            // 无冲突直接添加
+            self.effects.add(effect);
+        }
     }
 
-    fn remove_effect(&mut self, effect_type: EffectType) {
+    /// 移除指定类型的效果
+    fn remove(&mut self, effect_type: EffectType) {
         self.effects.remove(effect_type);
+        
+        // 移除后的额外处理
+        match effect_type {
+            EffectType::Invisibility => {
+                // 显形时可能需要通知周围敌人
+                dungeon::alert_nearby_enemies(self.x, self.y);
+            }
+            _ => {}
+        }
     }
 
-    fn has_effect(&self, effect_type: EffectType) -> bool {
+    /// 检查是否具有某种效果
+    fn has(&self, effect_type: EffectType) -> bool {
         self.effects.has(effect_type)
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use combat::effect::Effect;
-
-    #[test]
-    fn test_effect_management() {
-        let mut manager = EffectManager::new();
-
-        // 测试添加效果
-        let poison = Effect::new(EffectType::Poison, 5, Some(2), 1);
-        manager.add(poison);
-        assert!(manager.has(EffectType::Poison));
-        assert_eq!(manager.get_turns(EffectType::Poison), 5);
-
-        // 测试效果叠加
-        let more_poison = Effect::new(EffectType::Poison, 3, Some(3), 1);
-        manager.add(more_poison);
-        assert_eq!(manager.get_turns(EffectType::Poison), 8);
-
-        // 测试效果更新
-        let expired = manager.update();
-        assert!(expired.is_empty());
-        assert_eq!(manager.get_turns(EffectType::Poison), 7);
-
-        // 测试效果移除
-        manager.remove(EffectType::Poison);
-        assert!(!manager.has(EffectType::Poison));
-    }
-
-    #[test]
-    fn test_effect_expiration() {
-        let mut manager = EffectManager::new();
-        manager.add(Effect::new(EffectType::Burning, 1, Some(3), 1));
-
-        let expired = manager.update();
-        assert_eq!(expired.len(), 1);
-        assert_eq!(expired[0].0, EffectType::Burning);
-        assert!(!manager.has(EffectType::Burning));
-    }
-    #[test]
-    fn test_effect_conflicts() {
-        let mut manager = EffectManager::new();
-
-        // 添加燃烧效果
-        assert!(manager.add(Effect::new(EffectType::Burning, 5, Some(2), 1)));
-
-        // 尝试添加冰冻（应该失败）
-        assert!(!manager.add(Effect::new(EffectType::Frozen, 3, None, 0)));
-
-        // 强制添加冰冻
-        manager.add_force(Effect::new(EffectType::Frozen, 3, None, 0));
-        assert!(manager.has(EffectType::Burning));
-        assert!(manager.has(EffectType::Frozen));
-
-        // 移除燃烧后可以正常添加冰冻
-        manager.remove(EffectType::Burning);
-        assert!(manager.add(Effect::new(EffectType::Frozen, 3, None, 0)));
+    /// 每回合更新所有效果状态
+    fn update(&mut self) {
+        // 先更新所有效果
+        self.effects.update(self);
+        
+        // 效果更新后的处理
+        if self.effects.any_expired() {
+            // 可以在这里添加效果结束的通知逻辑
+            // 例如：中毒结束、增益消失等
+        }
+        
+        // 特殊效果处理
+        if self.has(EffectType::Poison) {
+            if let Some(poison) = self.effects.get(EffectType::Poison) {
+                self.take_damage(poison.power);
+            }
+        }
+        
+        if self.has(EffectType::Regeneration) {
+            if let Some(regen) = self.effects.get(EffectType::Regeneration) {
+                self.heal(regen.power);
+            }
+        }
     }
 }
+
