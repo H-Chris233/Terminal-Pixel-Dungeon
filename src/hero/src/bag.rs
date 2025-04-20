@@ -85,8 +85,10 @@ impl Bag {
     }
 
     /* ================== 金币管理 ================== */
-    pub fn add_gold(&mut self, amount: u32) {
-        self.gold += amount;
+    pub fn add_gold(&mut self, amount: u32) -> Result<(), BagError> {
+        self.gold = self.gold.checked_add(amount)
+            .ok_or(BagError::InventoryFull)?;
+        Ok(())
     }
 
     pub fn spend_gold(&mut self, amount: u32) -> Result<(), BagError> {
@@ -118,6 +120,14 @@ impl Bag {
             ItemKind::Seed(_) => {
                 let seed = self.seeds.remove(index)?;
                 Ok(Item::from(seed))
+            }
+            ItemKind::Wand(_) => {
+                let wand = self.wands.remove(index)?;
+                Ok(Item::from(wand))
+            }
+            ItemKind::Stone(_) => {
+                let stone = self.stones.remove(index)?;
+                Ok(Item::from(stone))
             }
             _ => Err(BagError::CannotUseItem),
         }
@@ -221,6 +231,27 @@ impl Bag {
 
         if idx < self.food.len() {
             return self.food.remove(idx).map(|_| ()).map_err(Into::into);
+        }
+        idx -= self.food.len();
+
+        // 添加缺失的检查
+        if idx < self.wands.len() {
+            return self.wands.remove(idx).map(|_| ()).map_err(Into::into);
+        }
+        idx -= self.wands.len();
+
+        if idx < self.seeds.len() {
+            return self.seeds.remove(idx).map(|_| ()).map_err(Into::into);
+        }
+        idx -= self.seeds.len();
+
+        if idx < self.stones.len() {
+            return self.stones.remove(idx).map(|_| ()).map_err(Into::into);
+        }
+        idx -= self.stones.len();
+
+        if idx < self.misc.len() {
+            return self.misc.remove(idx).map(|_| ()).map_err(Into::into);
         }
 
         Err(BagError::InvalidIndex)
