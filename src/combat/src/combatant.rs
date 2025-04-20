@@ -67,7 +67,7 @@ impl Combatant for Enemy {
     }
 
     fn attack_power(&self) -> u32 {
-        self.attack + self.weapon.as_ref().map_or(0, |w| w.damage_bonus() as u32)
+        self.attack + self.weapon.as_ref().map_or(0, |w| w.damage_bonus().round() as u32)  // 添加round确保精度
     }
 
     fn defense(&self) -> u32 {
@@ -89,7 +89,7 @@ impl Combatant for Enemy {
         base + self
             .weapon
             .as_ref()
-            .map_or(0, |w| w.accuracy_bonus() as u32)
+            .map_or(0, |w| w.accuracy_bonus().round() as u32)  // 添加round确保精度
     }
 
     fn evasion(&self) -> u32 {
@@ -139,8 +139,8 @@ impl Combatant for Enemy {
     }
 
     fn take_damage(&mut self, amount: u32) -> bool {
-        let actual_damage = (amount - self.defense as u32).max(1);
-        self.hp = (self.hp as u32 - actual_damage).max(0);
+        let actual_damage = amount.saturating_sub(self.defense).max(1);  // 使用saturating_sub防止下溢
+        self.hp = self.hp.saturating_sub(actual_damage);  // 同样使用saturating_sub
         self.is_alive()
     }
 
@@ -148,6 +148,10 @@ impl Combatant for Enemy {
         self.hp = (self.hp + amount).min(self.max_hp);
     }
     fn experience_value(&self) -> Option<u32> {
-        Some(self.exp_value)
+        if self.exp_value > 0 {  // 添加条件判断
+            Some(self.exp_value)
+        } else {
+            None
+        }
     }
 }
