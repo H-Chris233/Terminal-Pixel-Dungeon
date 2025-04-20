@@ -4,7 +4,7 @@ use crate::class::Class;
 use crate::BagError;
 use crate::CombatSystem;
 
-use combat::{effect::EffectType, Combat, Combatant};
+pub use combat::{effect::EffectType, Combat, Combatant};
 use items::{armor::Armor, ring::Ring, weapon::Weapon};
 use rand::Rng;
 

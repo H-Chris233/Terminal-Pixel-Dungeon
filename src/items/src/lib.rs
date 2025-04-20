@@ -4,6 +4,8 @@
 
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
+use serde::de::DeserializeOwned;
+
 
 pub use crate::armor::Armor;
 pub use crate::food::Food;
@@ -267,9 +269,13 @@ impl From<Stone> for Item {
 
 
 /// 物品特性约束
-pub trait ItemTrait: PartialEq + Clone + Serialize + std::fmt::Debug {
+pub trait ItemTrait: PartialEq + Clone + Serialize + std::fmt::Debug + DeserializeOwned {
     /// 是否可堆叠（药水/卷轴等可堆叠，武器/护甲不可）
     fn is_stackable(&self) -> bool;
+    
+    fn max_stack(&self) -> u8 {
+        99
+    }
 
     /// 显示名称（用于UI渲染）
     fn display_name(&self) -> String;
