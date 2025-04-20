@@ -8,6 +8,7 @@ pub mod effect;
 pub mod enemy;
 
 pub use crate::combatant::Combatant;
+pub use crate::effect::*;
 use crate::enemy::Enemy;
 use items::Weapon;
 

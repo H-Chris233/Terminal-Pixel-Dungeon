@@ -13,8 +13,8 @@ mod rng;
 pub mod class;
 
 // 标准库导入
-use std::fmt;
 use anyhow::Result;
+use std::fmt;
 
 // 外部crate导入
 use bincode::{Decode, Encode};
@@ -24,18 +24,16 @@ use thiserror::Error;
 // 重新导出主要类型
 pub use self::{
     bag::{Bag, BagError},
-    combat::Combatant,
     core::{Hero, HeroError},
     effects::EffectManager,
     rng::HeroRng,
 };
 
 use crate::class::Class;
-use combat::effect::Effect;
-use combat::effect::EffectType;
+use combat::effect::*;
+use combat::Combatant;
 use dungeon::trap::Trap;
 use items::Weapon;
-
 
 // 游戏系统导入
 use dungeon::Dungeon;
@@ -144,7 +142,7 @@ impl FullHero {
             bag: Bag::new(),
         }
     }
-    
+
     /// 获取英雄名称
     pub fn name(&self) -> &str {
         &self.core.name
@@ -245,7 +243,6 @@ impl FullHero {
     pub fn upgrade_weapon(&mut self) -> Result<(), HeroError> {
         self.core.upgrade_weapon()
     }
-    
 }
 
 impl HeroBehavior for FullHero {
@@ -304,7 +301,6 @@ impl CombatSystem for FullHero {
     fn is_alive(&self) -> bool {
         self.core.is_alive()
     }
-    
 }
 
 /// 默认战斗系统实现

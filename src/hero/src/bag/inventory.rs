@@ -13,8 +13,6 @@ pub enum InventoryError {
     Full,
     #[error("物品不可堆叠")]
     NotStackable,
-    #[error("背包已满")]
-    InventoryFull,
     #[error("未知物品类型")]
     UnknownItemType,
     #[error("无效索引")]
@@ -23,14 +21,14 @@ pub enum InventoryError {
 
 /// 通用库存系统（优化实现）
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
-pub struct Inventory<T: ItemTrait> {
+pub struct Inventory<T: ItemTrait + PartialEq + Serialize + DeserializeOwned> {
     slots: Vec<InventorySlot<T>>, // 使用独立槽位设计
     capacity: usize,
 }
 
 /// 库存槽位（支持单物品或多数量）
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
-enum InventorySlot<T: ItemTrait> {
+enum InventorySlot<T: ItemTrait + Serialize + DeserializeOwned> {
     Single(T),         // 不可堆叠物品
     Stackable(T, u32), // 可堆叠物品（类型+数量）
 }
@@ -45,25 +43,28 @@ impl<T: ItemTrait> Inventory<T> {
     }
 
     /// 添加物品（自动处理堆叠逻辑）
-    pub fn add(&mut self, item: T) -> Result<(), InventoryError> {
+    pub fn add(&mut self, item: T) -> Result<(), InventoryError>
+    where
+        T: PartialEq, // 添加 PartialEq 约束
+    {
         if self.slots.len() >= self.capacity {
             return Err(InventoryError::Full);
         }
 
         if item.is_stackable() {
-            // 尝试合并到现有堆叠
+            let max_stack = item.max_stack();
+            // 查找可堆叠的槽位
             for slot in &mut self.slots {
-                if let InventorySlot::Stackable(existing, count) = slot {
-                    if existing == &item {
+                if let InventorySlot::Stackable(existing_item, ref mut count) = slot {
+                    if existing_item == &item && *count < max_stack {
                         *count += 1;
                         return Ok(());
                     }
                 }
             }
-            // 新建堆叠
+            // 没有找到可堆叠的槽位，创建新堆叠
             self.slots.push(InventorySlot::Stackable(item, 1));
         } else {
-            // 添加单物品
             self.slots.push(InventorySlot::Single(item));
         }
         Ok(())
@@ -82,16 +83,22 @@ impl<T: ItemTrait> Inventory<T> {
     pub fn get(&self, index: usize) -> Option<&T> {
         self.items().get(index)
     }
-    pub fn remove(&mut self, index: usize) -> Result<T, InventoryError> {
-        if index < self.items().len() {
-            Ok(self.items().remove(index))
-        } else {
-            Err(InventoryError::IndexOutOfBounds)
+    pub fn remove_stack(&mut self, index: usize) -> Result<T, InventoryError> {
+        if index >= self.slots.len() {
+            return Err(InventoryError::InvalidIndex);
+        }
+        let slot = self.slots.remove(index);
+        match slot {
+            InventorySlot::Single(item) => Ok(item),
+            InventorySlot::Stackable(item, _) => Ok(item),
         }
     }
 
     /// 整理背包（按分类和排序值）
-    pub fn organize(&mut self) {
+    pub fn organize(&mut self)
+    where
+        T: Ord, // 添加排序所需的 trait 约束
+    {
         self.slots.sort_by(|a, b| match (a, b) {
             (InventorySlot::Single(a), InventorySlot::Single(b))
             | (InventorySlot::Stackable(a, _), InventorySlot::Stackable(b, _)) => a
@@ -151,4 +158,67 @@ impl<T: ItemTrait> Inventory<T> {
     }
 }
 
-impl<T> Inventory<T> {}
+
+impl<T: ItemTrait> Inventory<T> {
+    /// 实现其他不依赖具体类型的通用方法
+    /// 例如批量添加的扩展方法：
+    
+    /// 批量添加物品
+    pub fn add_multiple(&mut self, item: T, quantity: u32) -> Result<(), InventoryError> 
+    where
+        T: Clone,
+    {
+        if item.is_stackable() {
+            let max_stack = item.max_stack();
+            let remaining = self.try_add_to_existing(&item, quantity, max_stack)?;
+            self.add_new_stacks(item, remaining, max_stack)
+        } else {
+            if self.slots.len() + quantity as usize > self.capacity {
+                return Err(InventoryError::Full);
+            }
+            for _ in 0..quantity {
+                self.slots.push(InventorySlot::Single(item.clone()));
+            }
+            Ok(())
+        }
+    }
+
+    /// 尝试添加到现有堆叠
+    fn try_add_to_existing(&mut self, item: &T, mut quantity: u32, max_stack: u32) -> Result<u32, InventoryError> {
+        for slot in &mut self.slots {
+            if let InventorySlot::Stackable(existing, count) = slot {
+                if existing == item && *count < max_stack {
+                    let available_space = max_stack - *count;
+                    let add_amount = quantity.min(available_space);
+                    *count += add_amount;
+                    quantity -= add_amount;
+                    if quantity == 0 {
+                        return Ok(0);
+                    }
+                }
+            }
+        }
+        Ok(quantity)
+    }
+
+    /// 添加新堆叠
+    fn add_new_stacks(&mut self, item: T, mut remaining: u32, max_stack: u32) -> Result<(), InventoryError> {
+        let stacks_needed = (remaining + max_stack - 1) / max_stack;  // 向上取整
+        if self.slots.len() + stacks_needed as usize > self.capacity {
+            return Err(InventoryError::Full);
+        }
+
+        while remaining > 0 {
+            let amount = remaining.min(max_stack);
+            self.slots.push(InventorySlot::Stackable(item.clone(), amount));
+            remaining -= amount;
+        }
+        Ok(())
+    }
+
+    /// 清空库存
+    pub fn clear(&mut self) {
+        self.slots.clear();
+    }
+}
+

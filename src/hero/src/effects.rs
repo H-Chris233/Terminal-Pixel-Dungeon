@@ -1,12 +1,11 @@
-
 // src/hero/effects.rs
 use bincode::{Decode, Encode};
 pub use combat::effect::{Effect, EffectType};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::EffectSystem;
 use crate::core::Hero;
+use crate::EffectSystem;
 
 /// 效果管理系统
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Encode, Decode)]
@@ -58,12 +57,12 @@ impl EffectManager {
         self.effects.keys().any(|&existing| {
             matches!(
                 (existing, new_effect),
-                (EffectType::Burning, EffectType::Frozen) |
-                (EffectType::Frozen, EffectType::Burning) |
-                (EffectType::Haste, EffectType::Slow) |
-                (EffectType::Slow, EffectType::Haste) |
-                (EffectType::Invisible, EffectType::Revealed) |
-                (EffectType::Revealed, EffectType::Invisible)
+                (EffectType::Burning, EffectType::Frozen)
+                    | (EffectType::Frozen, EffectType::Burning)
+                    | (EffectType::Haste, EffectType::Slow)
+                    | (EffectType::Slow, EffectType::Haste)
+                    | (EffectType::Invisible, EffectType::Revealed)
+                    | (EffectType::Revealed, EffectType::Invisible)
             )
         })
     }
@@ -155,7 +154,6 @@ impl EffectManager {
     }
 }
 
-
 impl EffectSystem for Hero {
     /// 添加新效果到英雄身上
     fn add(&mut self, effect: Effect) {
@@ -187,7 +185,7 @@ impl EffectSystem for Hero {
     /// 移除指定类型的效果
     fn remove(&mut self, effect_type: EffectType) {
         self.effects.remove(effect_type);
-        
+
         // 移除后的额外处理
         match effect_type {
             EffectType::Invisibility => {
@@ -207,20 +205,20 @@ impl EffectSystem for Hero {
     fn update(&mut self) {
         // 先更新所有效果
         self.effects.update(self);
-        
+
         // 效果更新后的处理
         if self.effects.any_expired() {
             // 可以在这里添加效果结束的通知逻辑
             // 例如：中毒结束、增益消失等
         }
-        
+
         // 特殊效果处理
         if self.has(EffectType::Poison) {
             if let Some(poison) = self.effects.get(EffectType::Poison) {
                 self.take_damage(poison.power);
             }
         }
-        
+
         if self.has(EffectType::Regeneration) {
             if let Some(regen) = self.effects.get(EffectType::Regeneration) {
                 self.heal(regen.power);
@@ -228,4 +226,3 @@ impl EffectSystem for Hero {
         }
     }
 }
-

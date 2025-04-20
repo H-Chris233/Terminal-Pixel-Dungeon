@@ -1,4 +1,3 @@
-
 // src/hero/src/bag.rs
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
@@ -367,10 +366,16 @@ impl Bag {
     }
 
     pub fn crit_bonus(&self) -> f32 {
-        self.equipment.weapon.as_ref().map_or(1.0, |w| w.crit_modifier)
+        self.equipment
+            .weapon
+            .as_ref()
+            .map_or(1.0, |w| w.crit_modifier)
     }
 
     pub fn evasion_penalty(&self) -> u32 {
-        self.equipment.armor.as_ref().map_or(0, |a| a.evasion_penalty)
+        self.equipment
+            .armor
+            .as_ref()
+            .map_or(0, |a| a.evasion_penalty)
     }
 }

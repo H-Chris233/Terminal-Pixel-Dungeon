@@ -4,7 +4,8 @@ use crate::{
     effects::{Effect, EffectManager, EffectType},
     rng::HeroRng,
 };
-use combat::{Combatant, Trap};
+use combat::Combatant;
+use dungeon::trap::Trap;
 use dungeon::trap::TrapEffect;
 use dungeon::Dungeon;
 use items::scroll::ScrollKind;
@@ -16,11 +17,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::BagError;
 use crate::EffectSystem;
-use crate::HeroBehavior;
 use crate::Hero;
-use crate::InventorySystem;
+use crate::HeroBehavior;
 use crate::HeroError;
-
+use crate::InventorySystem;
 
 impl Hero {
     /// 使用物品
@@ -34,7 +34,7 @@ impl Hero {
             _ => Err(HeroError::UnusableItem),
         }
     }
-    
+
     /// 药水使用逻辑
     fn use_potion(&mut self, index: usize) -> Result<(), HeroError> {
         let potion = self
@@ -183,10 +183,7 @@ impl Hero {
 
         Ok(())
     }
-    
-    
 }
-
 
 impl InventorySystem for Hero {
     fn add_item(&mut self, item: Item) -> Result<(), BagError> {
@@ -205,7 +202,3 @@ impl InventorySystem for Hero {
         self.bag.use_item(index)
     }
 }
-
-
-
-

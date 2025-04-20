@@ -1,18 +1,16 @@
-
 // src/hero/core.rs
+use crate::HeroBehavior;
 use crate::{
     class::Class,
     effects::{Effect, EffectManager, EffectType},
     rng::HeroRng,
 };
-use crate::HeroBehavior;
 
-
-use dungeon::InteractionEvent;
-use combat::{Combatant};
-use dungeon::trap::TrapEffect;
+use combat::Combatant;
 use dungeon::trap::Trap;
+use dungeon::trap::TrapEffect;
 use dungeon::Dungeon;
+use dungeon::InteractionEvent;
 use thiserror::Error;
 
 use serde::{Deserialize, Serialize};
@@ -20,8 +18,8 @@ use serde::{Deserialize, Serialize};
 pub mod events;
 pub mod item;
 
-pub use ::items::*;
 pub use self::events::*;
+pub use items::*;
 
 #[derive(Debug, Error)]
 pub enum HeroError {
