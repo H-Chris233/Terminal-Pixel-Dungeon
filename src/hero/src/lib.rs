@@ -13,13 +13,11 @@ mod rng;
 pub mod class;
 
 // 标准库导入
-use anyhow::Result;
 use std::fmt;
 
 // 外部crate导入
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 
 // 重新导出主要类型
 pub use self::{
@@ -30,7 +28,6 @@ pub use self::{
 };
 
 use crate::class::Class;
-use combat::effect::*;
 use combat::Combatant;
 use dungeon::trap::Trap;
 use items::Weapon;
@@ -40,7 +37,7 @@ use dungeon::Dungeon;
 use items::{Item, ItemCategory};
 
 /// 英雄系统主接口
-pub trait HeroBehavior: fmt::Debug {
+pub trait HeroBehavior: Combatant + fmt::Debug {
     /// 创建新英雄
     fn new(class: Class) -> Self
     where
@@ -55,38 +52,25 @@ pub trait HeroBehavior: fmt::Debug {
     fn on_turn(&mut self) -> Result<(), HeroError>;
 
     /// 移动英雄
-    fn move_to(&mut self, dx: i32, dy: i32, dungeon: &mut Dungeon) -> Result<(), String>;
+    fn move_to(&mut self, dx: i32, dy: i32, dungeon: &mut Dungeon) -> bool;
 
     /// 使用物品
     fn use_item(&mut self, category: ItemCategory, index: usize) -> Result<(), HeroError>;
 
     /// 获取经验
     fn gain_exp(&mut self, exp: u32);
-
-    /// 获取当前生命值
-    fn hp(&self) -> u32;
-
-    /// 获取最大生命值
-    fn max_hp(&self) -> u32;
 }
 
-/// 战斗系统接口
-pub trait CombatSystem {
-    /// 计算攻击力
-    fn attack_power(&self) -> u32;
-
-    /// 计算防御力
-    fn defense(&self) -> u32;
-
-    /// 承受伤害
-    fn take_damage(&mut self, amount: u32) -> bool;
-
-    /// 治疗
-    fn heal(&mut self, amount: u32);
-
-    /// 是否存活
-    fn is_alive(&self) -> bool;
+// 实现模块组合
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
+pub struct FullHero {
+    core: Hero,
+    effects: EffectManager,
+    rng: HeroRng,
+    bag: Bag,
 }
+
+
 
 /// 效果系统接口
 pub trait EffectSystem {
@@ -118,15 +102,6 @@ pub trait InventorySystem {
     fn use_item(&mut self, index: usize) -> Result<Item, BagError>;
 }
 
-// 实现模块组合
-#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
-pub struct FullHero {
-    core: Hero,
-    combat: Box<dyn CombatSystem>,
-    effects: EffectManager,
-    rng: HeroRng,
-    bag: Bag,
-}
 
 impl FullHero {
     pub fn new(class: Class) -> Self {
@@ -243,6 +218,30 @@ impl FullHero {
     pub fn upgrade_weapon(&mut self) -> Result<(), HeroError> {
         self.core.upgrade_weapon()
     }
+    fn handle_events(&mut self, events: Vec<InteractionEvent>) {
+        for event in events {
+            match event {
+                InteractionEvent::TrapTriggered(effect) => {
+                    self.apply_trap_effect(effect);
+                }
+                InteractionEvent::ItemFound(item) => {
+                    let _ = self.bag.add_item(item);
+                }
+                InteractionEvent::EnemyEncounter(enemy) => {
+                    self.enter_combat(enemy);
+                }
+                // 其他事件类型处理...
+                _ => {}
+            }
+        }
+    }
+    fn apply_trap_effect(&mut self, effect: TrapEffect) {
+        // 陷阱效果实现
+    }
+
+    fn enter_combat(&mut self, enemy: Enemy) {
+        // 进入战斗逻辑
+    }
 }
 
 impl HeroBehavior for FullHero {
@@ -260,8 +259,20 @@ impl HeroBehavior for FullHero {
         Ok(())
     }
 
-    fn move_to(&mut self, dx: i32, dy: i32, dungeon: &mut Dungeon) -> Result<(), String> {
-        self.core.move_to(dx, dy, dungeon)
+    fn move_to(&mut self, dx: i32, dy: i32, dungeon: &mut Dungeon) -> bool {
+        // 调用核心逻辑并处理结果
+        match self.core.move_to(dx, dy, dungeon) {
+            Ok(events) => {
+                // 处理所有交互事件
+                self.handle_events(events);
+                true
+            }
+            Err(e) => {
+                // 记录错误日志（可选）
+                eprintln!("移动失败: {}", e);
+                false
+            }
+        }
     }
 
     fn use_item(&mut self, category: ItemCategory, index: usize) -> Result<(), HeroError> {
@@ -272,22 +283,17 @@ impl HeroBehavior for FullHero {
         self.core.gain_exp(exp)
     }
 
-    fn hp(&self) -> u32 {
-        self.core.hp
-    }
-
-    fn max_hp(&self) -> u32 {
-        self.core.max_hp
-    }
 }
 
-impl CombatSystem for FullHero {
+impl Combatant for FullHero {
     fn attack_power(&self) -> u32 {
-        self.core.attack_power() + self.combat.attack_power()
+        // 直接使用核心属性
+        self.core.attack_power() 
     }
 
     fn defense(&self) -> u32 {
-        self.core.defense() + self.combat.defense()
+        // 直接使用核心属性
+        self.core.defense()
     }
 
     fn take_damage(&mut self, amount: u32) -> bool {
@@ -303,34 +309,3 @@ impl CombatSystem for FullHero {
     }
 }
 
-/// 默认战斗系统实现
-#[derive(Default)]
-struct DefaultCombatSystem;
-
-impl DefaultCombatSystem {
-    fn new() -> Self {
-        Self
-    }
-}
-
-impl CombatSystem for DefaultCombatSystem {
-    fn attack_power(&self) -> u32 {
-        0 // 基础实现无额外加值
-    }
-
-    fn defense(&self) -> u32 {
-        0 // 基础实现无额外防御
-    }
-
-    fn take_damage(&mut self, _amount: u32) -> bool {
-        false // 基础实现不处理伤害
-    }
-
-    fn heal(&mut self, _amount: u32) {
-        // 基础实现不处理治疗
-    }
-
-    fn is_alive(&self) -> bool {
-        true // 基础实现总是存活
-    }
-}

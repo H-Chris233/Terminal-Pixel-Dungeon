@@ -278,13 +278,4 @@ impl HeroBehavior for Hero {
         self.gain_exp(exp)
     }
 
-    /// 获取当前生命值
-    fn hp(&self) -> u32 {
-        self.hp
-    }
-
-    /// 获取最大生命值
-    fn max_hp(&self) -> u32 {
-        self.max_hp
-    }
 }

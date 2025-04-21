@@ -1,5 +1,6 @@
 // src/hero/src/bag/inventory.rs
 use bincode::{Decode, Encode};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use thiserror::Error;
@@ -219,6 +220,51 @@ impl<T: ItemTrait> Inventory<T> {
     /// 清空库存
     pub fn clear(&mut self) {
         self.slots.clear();
+    }
+    
+    /// 移除单个物品（如果是堆叠则减少数量）
+    pub fn remove(&mut self, index: usize) -> Result<T, InventoryError>
+    where
+        T: Clone,
+    {
+        // 边界检查
+        if index >= self.slots.len() {
+            return Err(InventoryError::InvalidIndex);
+        }
+
+        // 获取可变引用并匹配槽位类型
+        match &mut self.slots[index] {
+            // 处理单个物品槽位
+            InventorySlot::Single(_) => {
+                let slot = self.slots.remove(index);
+                if let InventorySlot::Single(item) = slot {
+                    Ok(item)
+                } else {
+                    unreachable!() // 类型已匹配，不可能执行到这里
+                }
+            }
+
+            // 处理可堆叠物品槽位
+            InventorySlot::Stackable(item, ref mut count) => {
+                // 数量安全检查
+                if *count == 0 {
+                    return Err(InventoryError::InvalidIndex);
+                }
+
+                // 克隆物品用于返回
+                let cloned_item = item.clone();
+
+                // 减少堆叠数量
+                *count -= 1;
+
+                // 如果数量归零则移除整个槽位
+                if *count == 0 {
+                    self.slots.remove(index);
+                }
+
+                Ok(cloned_item)
+            }
+        }
     }
 }
 

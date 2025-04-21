@@ -67,7 +67,7 @@ impl Combatant for Enemy {
     }
 
     fn attack_power(&self) -> u32 {
-        self.attack + self.weapon.as_ref().map_or(0, |w| w.damage_bonus().round() as u32)  // 添加round确保精度
+        self.attack + self.weapon.as_ref().map_or(0, |w| w.damage_bonus() as u32)
     }
 
     fn defense(&self) -> u32 {
@@ -89,7 +89,7 @@ impl Combatant for Enemy {
         base + self
             .weapon
             .as_ref()
-            .map_or(0, |w| w.accuracy_bonus().round() as u32)  // 添加round确保精度
+            .map_or(0, |w| w.accuracy_bonus() as u32)
     }
 
     fn evasion(&self) -> u32 {

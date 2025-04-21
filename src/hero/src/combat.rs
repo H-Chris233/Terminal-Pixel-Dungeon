@@ -2,7 +2,6 @@
 use super::core::{Hero, HeroError};
 use crate::class::Class;
 use crate::BagError;
-use crate::CombatSystem;
 
 pub use combat::{effect::EffectType, Combat, Combatant};
 use items::{armor::Armor, ring::Ring, weapon::Weapon};
@@ -20,9 +19,13 @@ impl Combatant for Hero {
 
     /// 计算攻击力（包含武器加成和等级加成）
     fn attack_power(&self) -> u32 {
-        let weapon_bonus = self.bag.weapon().map_or(0, |w| w.damage_bonus() as u32);
+        let weapon_bonus = self
+            .bag
+            .equipment()
+            .weapon
+            .as_ref()
+            .map_or(0, |w| w.damage_bonus() as u32);
 
-        // SPD公式：基础攻击 + 武器加成 × (100 + 等级)/100
         (self.base_attack + weapon_bonus) * (100 + self.level) / 100
     }
 
@@ -181,51 +184,6 @@ impl Hero {
     }
 }
 
-impl CombatSystem for Hero {
-    fn attack_power(&self) -> u32 {
-        let weapon_bonus = self
-            .bag
-            .equipment()
-            .weapon
-            .as_ref()
-            .map_or(0, |w| w.damage_bonus() as u32);
-
-        (self.base_attack + weapon_bonus) * (100 + self.level) / 100
-    }
-
-    fn defense(&self) -> u32 {
-        let armor_bonus = self
-            .bag
-            .equipment()
-            .armor
-            .as_ref()
-            .map_or(0, |a| a.defense() as u32);
-
-        self.base_defense + armor_bonus
-    }
-
-    fn take_damage(&mut self, amount: u32) -> bool {
-        // 使用英雄的RNG计算防御随机性
-        let defense_roll = self.defense() as f32 * (0.7 + self.rng.gen_range(0.0..0.6));
-        let actual_damage = (amount as f32 - defense_roll).max(1.0) as u32;
-
-        self.hp = self.hp.saturating_sub(actual_damage);
-        self.alive = self.hp > 0;
-
-        if !self.alive {
-            self.notify("你死了...".into());
-        }
-        self.alive
-    }
-
-    fn heal(&mut self, amount: u32) {
-        self.hp = (self.hp + amount).min(self.max_hp);
-    }
-
-    fn is_alive(&self) -> bool {
-        self.alive && self.hp > 0
-    }
-}
 
 #[cfg(test)]
 mod tests {
