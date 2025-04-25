@@ -158,3 +158,10 @@ impl Default for ScrollKind {
         ScrollKind::Identify  // 默认鉴定卷轴类型
     }
 }
+
+
+impl From<ScrollKind> for Scroll {
+    fn from(kind: ScrollKind) -> Self {
+        Scroll::new(kind)
+    }
+}

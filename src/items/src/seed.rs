@@ -159,3 +159,10 @@ impl Default for SeedKind {
         SeedKind::Earthroot  // 默认地根草类型
     }
 }
+
+
+impl From<SeedKind> for Seed {
+    fn from(kind: SeedKind) -> Self {
+        Seed::new(kind)
+    }
+}

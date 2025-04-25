@@ -159,13 +159,12 @@ impl<T: ItemTrait> Inventory<T> {
     }
 }
 
-
 impl<T: ItemTrait> Inventory<T> {
     /// 实现其他不依赖具体类型的通用方法
     /// 例如批量添加的扩展方法：
-    
+
     /// 批量添加物品
-    pub fn add_multiple(&mut self, item: T, quantity: u32) -> Result<(), InventoryError> 
+    pub fn add_multiple(&mut self, item: T, quantity: u32) -> Result<(), InventoryError>
     where
         T: Clone,
     {
@@ -185,7 +184,12 @@ impl<T: ItemTrait> Inventory<T> {
     }
 
     /// 尝试添加到现有堆叠
-    fn try_add_to_existing(&mut self, item: &T, mut quantity: u32, max_stack: u32) -> Result<u32, InventoryError> {
+    fn try_add_to_existing(
+        &mut self,
+        item: &T,
+        mut quantity: u32,
+        max_stack: u32,
+    ) -> Result<u32, InventoryError> {
         for slot in &mut self.slots {
             if let InventorySlot::Stackable(existing, count) = slot {
                 if existing == item && *count < max_stack {
@@ -203,15 +207,21 @@ impl<T: ItemTrait> Inventory<T> {
     }
 
     /// 添加新堆叠
-    fn add_new_stacks(&mut self, item: T, mut remaining: u32, max_stack: u32) -> Result<(), InventoryError> {
-        let stacks_needed = (remaining + max_stack - 1) / max_stack;  // 向上取整
+    fn add_new_stacks(
+        &mut self,
+        item: T,
+        mut remaining: u32,
+        max_stack: u32,
+    ) -> Result<(), InventoryError> {
+        let stacks_needed = (remaining + max_stack - 1) / max_stack; // 向上取整
         if self.slots.len() + stacks_needed as usize > self.capacity {
             return Err(InventoryError::Full);
         }
 
         while remaining > 0 {
             let amount = remaining.min(max_stack);
-            self.slots.push(InventorySlot::Stackable(item.clone(), amount));
+            self.slots
+                .push(InventorySlot::Stackable(item.clone(), amount));
             remaining -= amount;
         }
         Ok(())
@@ -221,7 +231,7 @@ impl<T: ItemTrait> Inventory<T> {
     pub fn clear(&mut self) {
         self.slots.clear();
     }
-    
+
     /// 移除单个物品（如果是堆叠则减少数量）
     pub fn remove(&mut self, index: usize) -> Result<T, InventoryError>
     where
@@ -245,7 +255,7 @@ impl<T: ItemTrait> Inventory<T> {
             }
 
             // 处理可堆叠物品槽位
-            InventorySlot::Stackable(item, ref mut count) => {
+            InventorySlot::Stackable(item, count) => {
                 // 数量安全检查
                 if *count == 0 {
                     return Err(InventoryError::InvalidIndex);
@@ -267,4 +277,3 @@ impl<T: ItemTrait> Inventory<T> {
         }
     }
 }
-

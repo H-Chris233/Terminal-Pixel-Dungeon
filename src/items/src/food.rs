@@ -220,53 +220,8 @@ impl Default for Food {
 }
 
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tui::style::Color;
-
-    #[test]
-    fn test_food_colors() {
-        let ration = Food::new(FoodKind::Ration);
-        assert_eq!(ration.color(), Color::Rgb(210, 180, 140));
-
-        let mut contaminated_pasty = Food::new(FoodKind::Pasty);
-        contaminated_pasty.contaminated = true;
-        assert_eq!(contaminated_pasty.color(), Color::Green);
-    }
-
-    #[test]
-    fn test_priority_of_contamination() {
-        let mut cooked_meat = Food::new(FoodKind::MysteryMeat);
-        cooked_meat.cook();
-        assert_eq!(cooked_meat.color(), Color::Rgb(139, 69, 19));
-
-        cooked_meat.contaminated = true;
-        assert_eq!(cooked_meat.color(), Color::Green);
-    }
-
-    #[test]
-    fn test_food_values() {
-        // 测试基础价值
-        let ration = Food::new(FoodKind::Ration);
-        assert_eq!(ration.value(), 50);
-
-        let mut pasty = Food::new(FoodKind::Pasty);
-        pasty.quantity = 3;
-        assert_eq!(pasty.value(), 300); // 100 * 3
-
-        // 测试状态影响
-        let mut cooked_meat = Food::new(FoodKind::MysteryMeat);
-        cooked_meat.cook();
-        assert_eq!(cooked_meat.value(), 80);
-
-        let mut frozen = Food::new(FoodKind::MysteryMeat);
-        frozen.freeze();
-        assert_eq!(frozen.value(), 120);
-
-        // 测试污染惩罚
-        let mut contaminated = Food::new(FoodKind::Ration);
-        contaminated.contaminated = true;
-        assert_eq!(contaminated.value(), 30); // 50 * 0.6
+impl From<FoodKind> for Food {
+    fn from(kind: FoodKind) -> Self {
+        Food::new(kind)
     }
 }

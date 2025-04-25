@@ -129,3 +129,10 @@ impl Default for MiscItem {
         }
     }
 }
+
+
+impl From<MiscKind> for MiscItem {
+    fn from(kind: MiscKind) -> Self {
+        MiscItem::new(kind)
+    }
+}

@@ -1,11 +1,12 @@
 // src/hero/rng.rs
 use bincode::{Decode, Encode};
+use rand::distr::uniform;
 use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg32;
 use serde::{Deserialize, Serialize};
 
 /// 英雄专用的确定性RNG系统
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Encode, Decode)]
 pub struct HeroRng {
     rng: Pcg32,
     seed: u64,
@@ -46,7 +47,7 @@ impl HeroRng {
         if items.is_empty() {
             None
         } else {
-            let idx = self.gen_range(0, items.len());
+            let idx = self.gen_range(0..items.len());
             Some(&items[idx])
         }
     }
@@ -56,7 +57,7 @@ impl HeroRng {
         if items.is_empty() {
             None
         } else {
-            let idx = self.gen_range(0, items.len());
+            let idx = self.gen_range(0..items.len());
             Some(&mut items[idx])
         }
     }
@@ -68,10 +69,16 @@ impl HeroRng {
 
     /// 计算带随机性的防御值（SPD风格）
     pub fn defense_roll(&mut self, base_defense: u32) -> u32 {
-        let defense_factor = self.gen_range(0.7, 1.3);
+        let defense_factor = self.gen_range(0.7..=1.3);
         (base_defense as f32 * defense_factor) as u32
     }
-    pub fn gen_range(&mut self, range: std::ops::Range<f32>) -> f32 {
+
+    /// 生成指定范围内的随机值
+    pub fn gen_range<T, R>(&mut self, range: R) -> T
+    where
+        T: rand::distributions::uniform::SampleUniform,
+        R: rand::distributions::uniform::SampleRange<T>,
+    {
         self.rng.gen_range(range)
     }
 }

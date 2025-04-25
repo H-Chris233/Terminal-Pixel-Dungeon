@@ -10,9 +10,17 @@ pub mod warrior;
 
 use items::{
     armor::Armor,
+    food::Food,
+    misc::{MiscItem, MiscKind},
+    potion::{Potion, PotionKind},
+    ring::Ring,
+    scroll::{Scroll, ScrollKind},
+    seed::Seed,
+    stone::Stone,
+    wand::Wand,
     weapon::{Weapon, WeaponKind},
+    Item, ItemKind,
 };
-use items::{Item, ItemKind};
 
 /// 英雄职业枚举（SPD核心四职业）
 #[derive(
@@ -127,23 +135,23 @@ impl Class {
         match self {
             Class::Warrior => vec![
                 Item::new(ItemKind::Weapon(Weapon::new(1, WeaponKind::Sword))),
-                Item::new(ItemKind::Armor(Armor::new(1))),
-                Item::new(ItemKind::Potion(1)), // 治疗药水
+                Item::new(ItemKind::Armor(Armor::new(2))),
+                Item::new(ItemKind::Potion(PotionKind::Healing.into())), // 治疗药水
             ],
             Class::Mage => vec![
-                Item::new(ItemKind::Weapon(Weapon::new(1, WeaponKind::Staff))),
-                Item::new(ItemKind::Armor(Armor::new(0))),
-                Item::new(ItemKind::Scroll(1)), // 魔法卷轴
+                Item::new(ItemKind::Weapon(Weapon::new(1, WeaponKind::Sword))),
+                Item::new(ItemKind::Armor(Armor::new(1))),
+                Item::new(ItemKind::Scroll(ScrollKind::Upgrade.into())), // 魔法卷轴
             ],
             Class::Rogue => vec![
                 Item::new(ItemKind::Weapon(Weapon::new(1, WeaponKind::Dagger))),
                 Item::new(ItemKind::Armor(Armor::new(1))),
-                Item::new(ItemKind::Potion(2)), // 隐身药水
+                Item::new(ItemKind::Potion(PotionKind::Invisibility.into())), // 隐身药水
             ],
             Class::Huntress => vec![
-                Item::new(ItemKind::Weapon(Weapon::new(1, WeaponKind::Bow))),
+                Item::new(ItemKind::Weapon(Weapon::new(1, WeaponKind::Sword))),
                 Item::new(ItemKind::Armor(Armor::new(1))),
-                Item::new(ItemKind::Seed(1)), // 自然种子
+                Item::new(ItemKind::Seed(Seed::random_new())), // 自然种子
             ],
         }
     }

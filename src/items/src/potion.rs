@@ -276,3 +276,14 @@ impl Default for PotionKind {
         PotionKind::Healing  // 默认治疗药水类型
     }
 }
+
+impl From<PotionKind> for Potion {
+    fn from(kind: PotionKind) -> Self {
+        let color = kind.standard_color();
+        Potion {
+            kind,
+            identified: false, // Default to unidentified
+            color,
+        }
+    }
+}

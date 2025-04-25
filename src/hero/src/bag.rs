@@ -86,7 +86,9 @@ impl Bag {
 
     /* ================== 金币管理 ================== */
     pub fn add_gold(&mut self, amount: u32) -> Result<(), BagError> {
-        self.gold = self.gold.checked_add(amount)
+        self.gold = self
+            .gold
+            .checked_add(amount)
             .ok_or(BagError::InventoryFull)?;
         Ok(())
     }
