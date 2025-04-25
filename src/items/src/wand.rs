@@ -226,3 +226,10 @@ impl Default for WandKind {
         WandKind::MagicMissile  // 默认魔法飞弹法杖类型
     }
 }
+
+
+impl From<WandKind> for Wand {
+    fn from(kind: WandKind) -> Self {
+        Wand::new(kind, 0) // Default to level 0
+    }
+}

@@ -183,3 +183,10 @@ mod tests {
     }
     
 }
+
+
+impl From<StoneKind> for Stone {
+    fn from(kind: StoneKind) -> Self {
+        Stone::new(kind)
+    }
+}

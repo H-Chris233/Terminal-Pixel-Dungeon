@@ -1,4 +1,5 @@
 // src/hero/core.rs
+use crate::Bag;
 use crate::HeroBehavior;
 use crate::{
     class::Class,
@@ -6,6 +7,7 @@ use crate::{
     rng::HeroRng,
 };
 
+use combat::enemy::Enemy;
 use combat::Combatant;
 use dungeon::trap::Trap;
 use dungeon::trap::TrapEffect;
@@ -13,6 +15,7 @@ use dungeon::Dungeon;
 use dungeon::InteractionEvent;
 use thiserror::Error;
 
+use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 pub mod events;
@@ -33,10 +36,12 @@ pub enum HeroError {
     EffectConflict,
     #[error("被控制效果影响")]
     Immobilized,
+    #[error("背包已满")]
+    BagFull(#[from] BagError),
 }
 
 /// 英雄核心数据结构
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode)]
 pub struct Hero {
     // 基础属性
     pub class: Class,
@@ -50,7 +55,7 @@ pub struct Hero {
     pub experience: u32,
     pub level: u32,
     pub strength: u8,
-    pub satiety: u8, // 0-10, 0=饥饿, 5=正常, 10=饱食
+    pub satiety: u8,
 
     // 游戏进度
     pub gold: u32,
@@ -62,6 +67,7 @@ pub struct Hero {
     // 子系统
     pub effects: EffectManager,
     pub rng: HeroRng,
+    pub bag: Bag,
 }
 
 impl Hero {
@@ -151,34 +157,21 @@ impl Hero {
         }
     }
 
-    /// 移动并返回交互事件
-    pub fn move_to(
-        &mut self,
-        dx: i32,
-        dy: i32,
-        dungeon: &mut Dungeon,
-    ) -> Result<Vec<InteractionEvent>, HeroError> {
-        if self.is_immobilized() {
-            return Err(HeroError::Immobilized);
+    pub fn equip_weapon(&mut self, index: usize) -> Result<Option<Item>, HeroError> {
+        self.bag.equip(index, self.strength).map_err(|e| e.into())
+    }
+
+    /// 增强的事件处理
+    fn handle_events(&mut self, events: Vec<InteractionEvent>) -> Result<(), HeroError> {
+        for event in events {
+            match event {
+                InteractionEvent::TrapTriggered(effect) => self.apply_trap_effect(effect)?,
+                InteractionEvent::ItemFound(item) => self.add_item(item)?,
+                InteractionEvent::EnemyEncounter(enemy) => self.enter_combat(enemy),
+                _ => {}
+            }
         }
-
-        let new_x = self.x.saturating_add(dx);
-        let new_y = self.y.saturating_add(dy);
-
-        // 基础验证
-        if !dungeon.current_level().in_bounds(new_x, new_y) {
-            return Err(HeroError::ActionFailed);
-        }
-        if !dungeon.is_passable(new_x, new_y) {
-            return Err(HeroError::ActionFailed);
-        }
-
-        // 更新位置
-        self.x = new_x;
-        self.y = new_y;
-
-        // 触发地图交互
-        Ok(dungeon.on_hero_enter(self, new_x, new_y))
+        Ok(())
     }
 
     pub fn gain_exp(&mut self, exp: u32) {
@@ -208,35 +201,57 @@ impl Hero {
         Ok(())
     }
 
-    pub fn take_damage(&mut self, amount: u32) -> bool {
-        let defense_roll = self.defense() as f32 * (0.7 + self.rng.gen_range(0.0..0.6));
-        let actual_damage = (amount as f32 - defense_roll).max(1.0) as u32;
-
-        self.hp = self.hp.saturating_sub(actual_damage);
-        self.alive = self.hp > 0;
-        self.alive
-    }
-
     pub fn heal(&mut self, amount: u32) {
         self.hp = (self.hp + amount).min(self.max_hp);
-    }
-
-    pub fn defense(&self) -> u32 {
-        self.base_defense // 装备防御由外部系统计算
     }
 
     pub fn is_immobilized(&self) -> bool {
         self.effects.has(EffectType::Paralysis) || self.effects.has(EffectType::Rooted)
     }
-}
 
-impl Default for Hero {
-    fn default() -> Self {
-        Self::new(Class::default())
+    /// 应用陷阱效果
+    pub fn apply_trap_effect(&mut self, effect: TrapEffect) {
+        match effect {
+            TrapEffect::Damage(dmg) => self.take_damage(dmg),
+            TrapEffect::Poison(dmg, turns) => self.effects.add(Effect::poison(dmg, turns)),
+        }
+    }
+
+    /// 进入战斗状态
+    pub fn enter_combat(&mut self, enemy: Enemy) {
+        // 战斗初始化逻辑
     }
 }
 
 impl HeroBehavior for Hero {
+    pub fn move_to(
+        &mut self,
+        dx: i32,
+        dy: i32,
+        dungeon: &mut Dungeon,
+    ) -> Result<Vec<InteractionEvent>, HeroError> {
+        if self.is_immobilized() {
+            return Err(HeroError::Immobilized);
+        }
+
+        let new_x = self.x.saturating_add(dx);
+        let new_y = self.y.saturating_add(dy);
+
+        // 边界检查
+        if !dungeon.current_level().in_bounds(new_x, new_y) || !dungeon.is_passable(new_x, new_y) {
+            return Err(HeroError::ActionFailed);
+        }
+
+        // 更新位置
+        self.x = new_x;
+        self.y = new_y;
+
+        // 获取事件
+        let events = dungeon.on_hero_enter(self, new_x, new_y);
+        self.handle_events(events.clone())?;
+        Ok(events)
+    }
+
     /// 创建新英雄
     fn new(class: Class) -> Self
     where
@@ -266,16 +281,14 @@ impl HeroBehavior for Hero {
         }
     }
 
-    /// 使用物品
-    fn use_item(&mut self, category: ItemCategory, index: usize) -> Result<(), HeroError> {
-        // TODO: Implement actual item usage logic
-        // For now, just return ActionFailed as a placeholder
-        Err(HeroError::ActionFailed)
-    }
-
     /// 获取经验
     fn gain_exp(&mut self, exp: u32) {
         self.gain_exp(exp)
     }
+}
 
+impl Default for Hero {
+    fn default() -> Self {
+        Self::new(Class::default())
+    }
 }

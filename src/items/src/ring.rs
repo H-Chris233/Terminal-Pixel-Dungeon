@@ -323,3 +323,10 @@ impl fmt::Display for RingKind {
         write!(f, "{}", name)
     }
 }
+
+
+impl From<RingKind> for Ring {
+    fn from(kind: RingKind) -> Self {
+        Ring::new(kind, kind.default_level())
+    }
+}

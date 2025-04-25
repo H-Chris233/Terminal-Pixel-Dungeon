@@ -496,3 +496,10 @@ impl fmt::Display for WeaponEnhance {
         write!(f, "{}", name)
     }
 }
+
+
+impl From<(u32, WeaponKind)> for Weapon {
+    fn from((tier, kind): (u32, WeaponKind)) -> Self {
+        Weapon::new(tier, kind)
+    }
+}
