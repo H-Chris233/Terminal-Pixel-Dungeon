@@ -11,7 +11,6 @@ pub struct Effect {
     effect_type: EffectType,
     turns: u32,      // 剩余回合数
     intensity: u8,   // 效果强度
-    visible: bool,   // 当前是否可见（用于闪烁效果）
 }
 
 impl Effect {
@@ -21,7 +20,6 @@ impl Effect {
             effect_type,
             turns,
             intensity: 3,
-            visible: true,
         }
     }
 
@@ -30,7 +28,6 @@ impl Effect {
             effect_type,
             turns,
             intensity: intensity.clamp(1, 10),
-            visible: true,
         }
     }
 
@@ -69,13 +66,13 @@ impl Effect {
         self.intensity
     }
 
-    /// 计算效果造成的伤害（基于类型和强度）
+    /// 统一伤害计算逻辑（每回合必定触发）
     pub fn damage(&self) -> u32 {
         match self.effect_type {
             EffectType::Burning => (self.intensity as u32) * 2,
             EffectType::Poison => (self.intensity as u32) * 3,
             EffectType::Bleeding => (self.intensity as u32) * 4,
-            _ => 0, // 其他效果不直接造成伤害
+            _ => 0,
         }
     }
 
@@ -89,20 +86,19 @@ impl Effect {
 
     /// 效果是否会被相同类型覆盖（非叠加效果）
     pub fn is_overwritable(&self) -> bool {
-        !self.is_stackable()
-            && !matches!(
-                self.effect_type,
-                EffectType::MindVision | EffectType::Invisibility
-            )
+        !self.is_stackable() && !matches!(
+            self.effect_type,
+            EffectType::MindVision | EffectType::Invisibility
+        )
     }
 
     /// 获取效果描述（用于UI显示）
     pub fn description(&self) -> String {
         let base = match self.effect_type {
-            EffectType::Burning => format!("燃烧中(每回合-{}HP)", self.damage()),
+            EffectType::Burning => format!("燃烧(每回合-{}HP)", self.damage()),
             EffectType::Poison => format!("中毒(每回合-{}HP)", self.damage()),
+            EffectType::Bleeding => format!("流血(每回合-{}HP)", self.damage()), // 修改为每回合触发
             EffectType::Paralysis => "麻痹无法行动".to_string(),
-            EffectType::Bleeding => format!("流血(移动时-{}HP)", self.damage()),
             EffectType::Invisibility => "隐身中".to_string(),
             EffectType::Levitation => "漂浮中".to_string(),
             EffectType::Slow => "减速".to_string(),
@@ -126,37 +122,15 @@ impl Effect {
         }
     }
 
-    /// 更新视觉效果状态（返回是否需要重绘）
-    pub fn update_visual(&mut self, elapsed_ms: u64) -> bool {
-        let visual = self.effect_type.visual_style();
-        
-        if visual.blink_interval > 0 {
-            // 简单实现：每N回合闪烁一次
-            if self.turns % 2 == 0 {
-                self.visible = !self.visible;
-                return true;
-            }
-        }
-        false
-    }
-
-    /// 获取当前视觉样式
+    
+    /// 获取当前视觉样式（始终可见）
     pub fn current_style(&self) -> Style {
-        let visual = self.effect_type.visual_style();
-        let mut style = visual.to_style();
-        if !self.visible {
-            style = style.fg(Color::Reset).bg(Color::Reset);
-        }
-        style
+        self.effect_type.visual_style().to_style()
     }
 
-    /// 获取覆盖字符（如果有）
+    /// 获取始终可见的覆盖字符
     pub fn overlay_char(&self) -> Option<char> {
-        if self.visible {
-            self.effect_type.visual_style().overlay_char
-        } else {
-            None
-        }
+        self.visual_config().overlay_char()
     }
 
     /// 获取状态栏显示样式
@@ -165,6 +139,22 @@ impl Effect {
             .fg(self.effect_type.status_color().into())
             .add_modifier(tui::style::Modifier::BOLD)
     }
+    
+    /// 获取视觉配置的方法
+    pub fn visual_config(&self) -> VisualEffect {
+        self.effect_type.visual_style()
+    }
+    
+    /// 更新后的视觉效果状态方法（供UI查询刷新需求）
+    pub fn should_blink(&self, current_turn: u64) -> bool {
+    let config = self.visual_config();
+    if config.blink_interval() == 0 {
+        return false;
+    }
+    current_turn % config.blink_interval() == 0
+}
+    
+    
 }
 
 /// 效果类型（包含视觉标记信息）
@@ -175,6 +165,7 @@ impl Effect {
     PartialEq,
     Eq,
     Display,
+    Hash,
     EnumIter,
     EnumString,
     Serialize,
@@ -236,6 +227,25 @@ impl VisualEffect {
         Style::default()
             .fg(self.fg_color.clone().into())
             .bg(self.bg_color.clone().into())
+    }
+    
+    /// 获取闪烁间隔（供UI模块调用）
+    pub fn blink_interval(&self) -> u64 {
+        self.blink_interval
+    }
+
+    /// 获取前景色
+    pub fn foreground(&self) -> &SerializableColor {
+        &self.fg_color
+    }
+
+    /// 获取背景色 
+    pub fn background(&self) -> &SerializableColor {
+        &self.bg_color
+    }
+    
+    pub fn overlay_char(&self) -> Option<char> {
+        self.overlay_char
     }
 }
 
@@ -422,7 +432,11 @@ impl From<Color> for SerializableColor {
             Color::LightMagenta => Self::LightMagenta,
             Color::LightCyan => Self::LightCyan,
             Color::Rgb(r, g, b) => Self::Rgb(r, g, b),
-            Color::Indexed(_) => todo!(),
+            Color::Indexed(n) => Self::Rgb(
+                ((n >> 16) & 0xFF) as u8,
+                ((n >> 8) & 0xFF) as u8,
+                (n & 0xFF) as u8
+            ),
         }
     }
 }

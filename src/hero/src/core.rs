@@ -1,5 +1,6 @@
 // src/hero/core.rs
 use crate::Bag;
+use crate::BagError;
 use crate::HeroBehavior;
 use crate::{
     class::Class,
