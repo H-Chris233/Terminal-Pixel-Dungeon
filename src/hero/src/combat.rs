@@ -174,11 +174,10 @@ impl Hero {
             None
         }
     }
-    /// 武器升级（需要添加到Hero实现中）
+    /// 武器升级
     pub fn upgrade_weapon(&mut self) -> Result<(), HeroError> {
         self.bag.upgrade_weapon().map_err(|e| match e {
             BagError::NoWeaponEquipped => HeroError::Underpowered,
-            BagError::NoUpgradeScroll => HeroError::IdentifyFailed,
             _ => HeroError::from(e),
         })
     }

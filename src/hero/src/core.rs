@@ -7,7 +7,10 @@ use crate::{
     effects::{Effect, EffectManager, EffectType},
     rng::HeroRng,
 };
+use crate::InventorySystem;
 
+
+use combat::EffectType::Poison;
 use combat::enemy::Enemy;
 use combat::Combatant;
 use dungeon::trap::Trap;
@@ -95,6 +98,7 @@ impl Hero {
             turns: 0,
             effects: EffectManager::new(),
             rng: HeroRng::new(seed),
+            bag: Bag::new(),
         };
 
         // 根据职业初始化属性
@@ -157,16 +161,12 @@ impl Hero {
             self.strength += 1;
         }
     }
-
-    pub fn equip_weapon(&mut self, index: usize) -> Result<Option<Item>, HeroError> {
-        self.bag.equip(index, self.strength).map_err(|e| e.into())
-    }
-
+    
     /// 增强的事件处理
     fn handle_events(&mut self, events: Vec<InteractionEvent>) -> Result<(), HeroError> {
         for event in events {
             match event {
-                InteractionEvent::TrapTriggered(effect) => self.apply_trap_effect(effect)?,
+                InteractionEvent::TrapTriggered(effect) => self.apply_trap_effect(effect),
                 InteractionEvent::ItemFound(item) => self.add_item(item)?,
                 InteractionEvent::EnemyEncounter(enemy) => self.enter_combat(enemy),
                 _ => {}
@@ -188,17 +188,8 @@ impl Hero {
             return Err(HeroError::ActionFailed);
         }
 
-        let effect = trap.trigger(&mut self.rng);
-        match effect {
-            TrapEffect::Damage(amount) => {
-                self.take_damage(amount);
-            }
-            TrapEffect::Poison(dmg, turns) => {
-                self.effects.add(Effect::poison(dmg, turns));
-            }
-            _ => {}
-        }
-
+        if let Some(effect) = trap.trigger(&mut self.rng);
+        self.apply_trap_effect(effect);
         Ok(())
     }
 
@@ -213,14 +204,19 @@ impl Hero {
     /// 应用陷阱效果
     pub fn apply_trap_effect(&mut self, effect: TrapEffect) {
         match effect {
-            TrapEffect::Damage(dmg) => self.take_damage(dmg),
-            TrapEffect::Poison(dmg, turns) => self.effects.add(Effect::poison(dmg, turns)),
-        }
+            TrapEffect::Damage(damage) => {self.take_damage(damage);},
+            TrapEffect::Poison(_, turn) => {self.effects.add(Effect::new(EffectType::Poison, turn));},
+            _ => {},
+        };
     }
 
     /// 进入战斗状态
     pub fn enter_combat(&mut self, enemy: Enemy) {
         // 战斗初始化逻辑
+    }
+    
+    pub fn notify(&self, msg: &str) {
+        todo!();
     }
 }
 
@@ -239,7 +235,7 @@ impl HeroBehavior for Hero {
         let new_y = self.y.saturating_add(dy);
 
         // 边界检查
-        if !dungeon.current_level().in_bounds(new_x, new_y) || !dungeon.is_passable(new_x, new_y) {
+        if !dungeon.is_passable(new_x, new_y) {
             return Err(HeroError::ActionFailed);
         }
 
@@ -248,7 +244,7 @@ impl HeroBehavior for Hero {
         self.y = new_y;
 
         // 获取事件
-        let events = dungeon.on_hero_enter(self, new_x, new_y);
+        let events = dungeon.on_hero_enter(new_x, new_y);
         self.handle_events(events.clone())?;
         Ok(events)
     }
