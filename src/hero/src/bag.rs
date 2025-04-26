@@ -338,6 +338,10 @@ impl Bag {
             1
         }
     }
+    
+    pub fn remove_curse(&self) {
+        self.equipment
+    }
 
     /* ================== 排序功能 ================== */
     pub fn sort_weapons(&mut self) {

@@ -123,12 +123,12 @@ impl Trap {
 pub enum TrapKind {
     /// 飞镖陷阱 - 触发时造成伤害
     Dart {
-        damage: i32, // 伤害值
+        damage: u32, // 伤害值
     },
     /// 毒镖陷阱 - 触发时造成中毒效果
     Poison {
-        damage: i32,   // 每回合伤害
-        duration: i32, // 持续时间(回合数)
+        damage: u32,   // 每回合伤害
+        duration: u32, // 持续时间(回合数)
     },
     /// 警报陷阱 - 触发时警告附近敌人
     Alarm,
@@ -136,19 +136,19 @@ pub enum TrapKind {
     Teleport,
     /// 麻痹陷阱 - 触发时使玩家麻痹
     Paralyze {
-        duration: i32, // 麻痹持续时间(回合数)
+        duration: u32, // 麻痹持续时间(回合数)
     },
     /// 召唤陷阱 - 触发时在周围召唤敌人
     Summon,
     /// 火焰陷阱 - 触发时点燃玩家
     Fire {
-        damage: i32, // 火焰伤害
+        damage: u32, // 火焰伤害
     },
     /// 陷坑陷阱 - 触发时将玩家掉落至下层
     Pitfall,
     /// 束缚陷阱 - 触发时将玩家固定在原地
     Gripping {
-        duration: i32, // 束缚持续时间(回合数)
+        duration: u32, // 束缚持续时间(回合数)
     },
     /// 解除陷阱 - 触发时解除本层其他陷阱
     Disarming,
@@ -176,23 +176,23 @@ impl TrapKind {
 #[derive(Debug, Clone, Encode, Decode)]
 pub enum TrapEffect {
     /// 直接伤害效果
-    Damage(i32),
+    Damage(u32),
     /// 中毒效果(持续伤害)
-    Poison(i32, i32), // 每回合伤害, 持续时间
+    Poison(u32, u32), // 每回合伤害, 持续时间
     /// 警报效果(吸引敌人)
     Alarm,
     /// 传送效果
     Teleport,
     /// 麻痹效果(无法移动)
-    Paralyze(i32), // 持续时间
+    Paralyze(u32), // 持续时间
     /// 召唤敌人效果
     Summon,
     /// 火焰伤害效果
-    Fire(i32), // 初始伤害
+    Fire(u32), // 初始伤害
     /// 掉落至下层效果
     Pitfall,
     /// 束缚效果(无法移动)
-    Grip(i32), // 持续时间
+    Grip(u32), // 持续时间
     /// 解除其他陷阱效果
     DisarmOtherTraps,
 }

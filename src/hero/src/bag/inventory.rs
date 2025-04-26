@@ -34,7 +34,7 @@ enum InventorySlot<T: ItemTrait + Serialize + DeserializeOwned> {
     Stackable(T, u32), // 可堆叠物品（类型+数量）
 }
 
-impl<T: ItemTrait> Inventory<T> {
+impl<T: ItemTrait + PartialEq + Serialize + DeserializeOwned> Inventory<T> {
     /// 创建新库存
     pub fn new(capacity: usize) -> Self {
         Self {
@@ -44,10 +44,7 @@ impl<T: ItemTrait> Inventory<T> {
     }
 
     /// 添加物品（自动处理堆叠逻辑）
-    pub fn add(&mut self, item: T) -> Result<(), InventoryError>
-    where
-        T: PartialEq, // 添加 PartialEq 约束
-    {
+    pub fn add(&mut self, item: T) -> Result<(), InventoryError>{
         if self.slots.len() >= self.capacity {
             return Err(InventoryError::Full);
         }
@@ -56,8 +53,8 @@ impl<T: ItemTrait> Inventory<T> {
             let max_stack = item.max_stack();
             // 查找可堆叠的槽位
             for slot in &mut self.slots {
-                if let InventorySlot::Stackable(existing_item, ref mut count) = slot {
-                    if existing_item == &item && *count < max_stack {
+                if let InventorySlot::Stackable(existing_item, count) = slot {
+                    if existing_item == &item && *count < max_stack.into() {
                         *count += 1;
                         return Ok(());
                     }
@@ -159,7 +156,7 @@ impl<T: ItemTrait> Inventory<T> {
     }
 }
 
-impl<T: ItemTrait> Inventory<T> {
+impl<T: ItemTrait + PartialEq + Serialize + DeserializeOwned> Inventory<T> {
     /// 实现其他不依赖具体类型的通用方法
     /// 例如批量添加的扩展方法：
 
@@ -170,8 +167,8 @@ impl<T: ItemTrait> Inventory<T> {
     {
         if item.is_stackable() {
             let max_stack = item.max_stack();
-            let remaining = self.try_add_to_existing(&item, quantity, max_stack)?;
-            self.add_new_stacks(item, remaining, max_stack)
+            let remaining = self.try_add_to_existing(&item, quantity, max_stack.into())?;
+            self.add_new_stacks(item, remaining, max_stack.into())
         } else {
             if self.slots.len() + quantity as usize > self.capacity {
                 return Err(InventoryError::Full);

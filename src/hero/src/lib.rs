@@ -94,7 +94,7 @@ pub trait InventorySystem {
     fn remove_item(&mut self, index: usize) -> Result<(), BagError>;
 
     /// 装备物品
-    fn equip_item(&mut self, index: usize, strength: u8) -> Result<Option<Item>, BagError>;
+    fn equip_item(&mut self, index: usize) -> Result<Option<Item>, BagError>;
 
     /// 使用物品
     fn use_item(&mut self, index: usize) -> Result<Item, BagError>;

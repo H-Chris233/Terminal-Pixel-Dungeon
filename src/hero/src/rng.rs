@@ -1,5 +1,7 @@
 // src/hero/rng.rs
 use bincode::{Decode, Encode};
+use bincode::de::{BorrowDecoder, Decoder};
+use bincode::BorrowDecode;
 use rand::distr::uniform;
 use rand::{Rng, SeedableRng};
 use rand::seq::SliceRandom;
@@ -65,7 +67,7 @@ impl HeroRng {
 
     /// 随机打乱切片
     pub fn shuffle<T>(&mut self, slice: &mut [T]) {
-        self.rng.shuffle(slice);
+        slice.shuffle(&mut self.rng);
     }
 
     /// 计算带随机性的防御值（SPD风格）
@@ -117,6 +119,15 @@ impl Encode for HeroRng {
 
 impl Decode for HeroRng {
     fn decode<D: bincode::de::Decoder>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        let seed = u64::decode(decoder)?;
+        Ok(Self::new(seed))
+    }
+}
+
+impl<'de> BorrowDecode<'de> for HeroRng {
+    fn borrow_decode<D: BorrowDecoder<'de>>(
         decoder: &mut D,
     ) -> Result<Self, bincode::error::DecodeError> {
         let seed = u64::decode(decoder)?;
