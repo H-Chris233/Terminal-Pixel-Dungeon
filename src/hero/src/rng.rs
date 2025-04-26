@@ -2,11 +2,12 @@
 use bincode::{Decode, Encode};
 use rand::distr::uniform;
 use rand::{Rng, SeedableRng};
+use rand::seq::SliceRandom;
 use rand_pcg::Pcg32;
 use serde::{Deserialize, Serialize};
 
 /// 英雄专用的确定性RNG系统
-#[derive(Debug, Clone, Encode, Decode)]
+#[derive(Debug, Clone)]
 pub struct HeroRng {
     rng: Pcg32,
     seed: u64,
@@ -39,7 +40,7 @@ impl HeroRng {
 
     /// 生成随机布尔值
     pub fn gen_bool(&mut self, probability: f64) -> bool {
-        self.rng.gen_bool(probability)
+        self.rng.random_bool(probability)
     }
 
     /// 从列表中随机选择
@@ -76,10 +77,10 @@ impl HeroRng {
     /// 生成指定范围内的随机值
     pub fn gen_range<T, R>(&mut self, range: R) -> T
     where
-        T: rand::distributions::uniform::SampleUniform,
-        R: rand::distributions::uniform::SampleRange<T>,
+        T: uniform::SampleUniform,
+        R: uniform::SampleRange<T>,
     {
-        self.rng.gen_range(range)
+        self.rng.random_range(range)
     }
 }
 
@@ -100,6 +101,25 @@ impl<'de> Deserialize<'de> for HeroRng {
         D: serde::Deserializer<'de>,
     {
         let seed = u64::deserialize(deserializer)?;
+        Ok(Self::new(seed))
+    }
+}
+
+// 手动实现 bincode 的编解码
+impl Encode for HeroRng {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        self.seed.encode(encoder)
+    }
+}
+
+impl Decode for HeroRng {
+    fn decode<D: bincode::de::Decoder>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        let seed = u64::decode(decoder)?;
         Ok(Self::new(seed))
     }
 }

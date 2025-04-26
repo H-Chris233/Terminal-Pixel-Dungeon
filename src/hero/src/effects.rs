@@ -5,9 +5,12 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::core::Hero;
-use crate::EffectSystem;
+use crate::dungeon;
 
-/// 效果管理系统
+use combat::Combatant;
+
+
+/// 英雄效果管理系统
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Encode, Decode)]
 pub struct EffectManager {
     #[bincode(with_serde)]
@@ -32,18 +35,18 @@ impl EffectManager {
             .entry(effect.effect_type())
             .and_modify(|e| {
                 if e.is_overwritable() {
-                    *e = Effect::new(
+                    // 覆盖规则：取最大持续时间和强度
+                    *e = Effect::with_intensity(
                         effect.effect_type(),
                         e.turns().max(effect.turns()),
-                        effect.damage().max(e.damage()),
-                        effect.damage_interval(),
+                        e.intensity().max(effect.intensity()),
                     );
                 } else if e.is_stackable() {
-                    *e = Effect::new(
+                    // 叠加规则：持续时间相加，强度取最大值
+                    *e = Effect::with_intensity(
                         effect.effect_type(),
                         e.turns() + effect.turns(),
-                        e.damage().max(effect.damage()),
-                        e.damage_interval().min(effect.damage_interval()),
+                        e.intensity().max(effect.intensity()),
                     );
                 }
             })
@@ -57,12 +60,12 @@ impl EffectManager {
         self.effects.keys().any(|&existing| {
             matches!(
                 (existing, new_effect),
-                (EffectType::Burning, EffectType::Frozen)
-                    | (EffectType::Frozen, EffectType::Burning)
+                (EffectType::Burning, EffectType::Frost)
+                    | (EffectType::Frost, EffectType::Burning)
                     | (EffectType::Haste, EffectType::Slow)
                     | (EffectType::Slow, EffectType::Haste)
-                    | (EffectType::Invisible, EffectType::Revealed)
-                    | (EffectType::Revealed, EffectType::Invisible)
+                    | (EffectType::Invisibility, EffectType::Light)
+                    | (EffectType::Light, EffectType::Invisibility)
             )
         })
     }
@@ -88,18 +91,15 @@ impl EffectManager {
     }
 
     /// 更新所有效果（每回合调用）
-    pub fn update(&mut self) -> Vec<(EffectType, u32)> {
+    pub fn update(&mut self) -> Vec<EffectType> {
         let mut expired = Vec::new();
-
+        
         self.effects.retain(|&ty, e| {
-            let new_turns = e.turns().saturating_sub(1);
-            if new_turns == 0 {
-                expired.push((ty, e.damage().unwrap_or(0)));
-                false
-            } else {
-                *e = Effect::new(ty, new_turns, e.damage(), e.damage_interval());
-                true
+            let keep = e.update();
+            if !keep {
+                expired.push(ty);
             }
+            keep
         });
 
         expired
@@ -122,31 +122,13 @@ impl EffectManager {
 
     /// 检查视觉增强效果
     pub fn has_vision_enhancement(&self) -> bool {
-        self.has(EffectType::MindVision) || self.has(EffectType::DarkVision)
-    }
-
-    /// 获取效果伤害值
-    pub fn get_damage(&self, effect_type: EffectType) -> Option<u32> {
-        self.effects.get(&effect_type).and_then(|e| e.damage())
-    }
-
-    /// 获取所有伤害型效果
-    pub fn damaging_effects(&self) -> Vec<&Effect> {
-        self.effects
-            .values()
-            .filter(|e| e.damage().is_some())
-            .collect()
+        self.has(EffectType::MindVision)
     }
 
     /// 延长指定效果的持续时间
     pub fn extend_duration(&mut self, effect_type: EffectType, extra_turns: u32) -> bool {
         if let Some(effect) = self.effects.get_mut(&effect_type) {
-            *effect = Effect::new(
-                effect_type,
-                effect.turns() + extra_turns,
-                effect.damage(),
-                effect.damage_interval(),
-            );
+            effect.set_turns(effect.turns() + extra_turns);
             true
         } else {
             false
@@ -154,75 +136,79 @@ impl EffectManager {
     }
 }
 
-impl EffectSystem for Hero {
-    /// 添加新效果到英雄身上
-    fn add(&mut self, effect: Effect) {
-        // 检查效果冲突（例如：不能同时有多个同类型效果）
-        if self.effects.has(effect.effect_type) {
-            // 已有同类型效果时的处理策略：
-            // 1. 叠加持续时间（如中毒）
-            // 2. 替换更强效果（如增益效果）
-            // 3. 忽略新效果（如免疫）
-            match effect.effect_type {
-                EffectType::Poison | EffectType::Regeneration => {
-                    // 可叠加效果：延长持续时间
-                    if let Some(existing) = self.effects.get_mut(effect.effect_type) {
-                        existing.duration += effect.duration;
-                    }
-                }
-                _ => {
-                    // 默认行为：替换现有效果
-                    self.effects.remove(effect.effect_type);
-                    self.effects.add(effect);
-                }
-            }
-        } else {
-            // 无冲突直接添加
-            self.effects.add(effect);
+/// 为Hero实现效果处理
+impl Hero {
+    /// 处理效果伤害（每回合调用）
+    pub fn process_effects(&mut self) {
+        let mut damage_total = 0;
+        
+        // 计算所有伤害型效果
+        for effect in self.effects.active_effects() {
+            damage_total += effect.damage();
+        }
+
+        // 应用总伤害
+        if damage_total > 0 {
+            self.take_damage(damage_total);
         }
     }
+}
 
-    /// 移除指定类型的效果
-    fn remove(&mut self, effect_type: EffectType) {
+/// 效果系统trait实现
+pub trait EffectSystem {
+    fn add_effect(&mut self, effect: Effect);
+    fn remove_effect(&mut self, effect_type: EffectType);
+    fn has_effect(&self, effect_type: EffectType) -> bool;
+    fn update_effects(&mut self);
+}
+
+impl EffectSystem for Hero {
+    fn add_effect(&mut self, effect: Effect) {
+        // 优先处理可叠加效果
+        if effect.is_stackable() && self.effects.has(effect.effect_type()) {
+            if let Some(existing) = self.effects.effects.get_mut(&effect.effect_type()) {
+                *existing = Effect::with_intensity(
+                    effect.effect_type(),
+                    existing.turns() + effect.turns(),
+                    existing.intensity().max(effect.intensity()),
+                );
+                return;
+            }
+        }
+        
+        self.effects.add(effect);
+    }
+
+    fn remove_effect(&mut self, effect_type: EffectType) {
         self.effects.remove(effect_type);
-
-        // 移除后的额外处理
+        
+        // 特殊效果移除处理
         match effect_type {
             EffectType::Invisibility => {
-                // 显形时可能需要通知周围敌人
                 dungeon::alert_nearby_enemies(self.x, self.y);
             }
             _ => {}
         }
     }
 
-    /// 检查是否具有某种效果
-    fn has(&self, effect_type: EffectType) -> bool {
+    fn has_effect(&self, effect_type: EffectType) -> bool {
         self.effects.has(effect_type)
     }
 
-    /// 每回合更新所有效果状态
-    fn update(&mut self) {
-        // 先更新所有效果
-        self.effects.update(self);
-
-        // 效果更新后的处理
-        if self.effects.any_expired() {
-            // 可以在这里添加效果结束的通知逻辑
-            // 例如：中毒结束、增益消失等
-        }
-
-        // 特殊效果处理
-        if self.has(EffectType::Poison) {
-            if let Some(poison) = self.effects.get(EffectType::Poison) {
-                self.take_damage(poison.power);
+    fn update_effects(&mut self) {
+        let expired = self.effects.update();
+        
+        // 处理过期效果的特殊逻辑
+        for effect_type in expired {
+            match effect_type {
+                EffectType::Invisibility => {
+                    dungeon::alert_nearby_enemies(self.x, self.y);
+                }
+                _ => {}
             }
         }
-
-        if self.has(EffectType::Regeneration) {
-            if let Some(regen) = self.effects.get(EffectType::Regeneration) {
-                self.heal(regen.power);
-            }
-        }
+        
+        // 处理本回合伤害
+        self.process_effects();
     }
 }
