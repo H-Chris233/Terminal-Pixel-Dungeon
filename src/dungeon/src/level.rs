@@ -287,15 +287,15 @@ impl Level {
 
     /// 检查位置是否可通行
     pub fn is_passable(&self, x: i32, y: i32) -> bool {
-        self.get_tile(x, y).map_or(false, |t| t.is_passable())
+        self.get_tile(x, y).is_some_and(|t| t.is_passable())
     }
 
     pub fn is_door(&self, x: i32, y: i32) -> bool {
-        self.get_tile(x, y).map_or(false, |t| t.is_door())
+        self.get_tile(x, y).is_some_and(|t| t.is_door())
     }
 
     pub fn has_trap(&self, x: i32, y: i32) -> bool {
-        self.get_tile(x, y).map_or(false, |t| t.has_trap())
+        self.get_tile(x, y).is_some_and(|t| t.has_trap())
     }
 
     pub fn get_trap(&self, x: i32, y: i32) -> Option<Trap> {
@@ -419,14 +419,14 @@ impl Level {
 
     /// 检查位置是否是楼梯
     pub fn is_stair(&self, x: i32, y: i32) -> bool {
-        self.get_tile(x, y).map_or(false, |t| {
+        self.get_tile(x, y).is_some_and(|t| {
             matches!(t.info.terrain_type, TerrainType::Stair(_))
         })
     }
 
     /// 检查位置是否已被探索
     pub fn is_explored(&self, x: i32, y: i32) -> bool {
-        self.get_tile(x, y).map_or(false, |t| t.info.explored)
+        self.get_tile(x, y).is_some_and(|t| t.info.explored)
     }
 
     /// 检查位置是否可见
