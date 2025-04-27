@@ -22,11 +22,10 @@ impl Potion {
         let mut rng = rand::rng();
 
         // 随机分配药水类型和颜色（确保不重复）
-        let kind = PotionKind::iter()
+        let kind = *PotionKind::iter()
             .collect::<Vec<_>>()
             .choose(&mut rng)
-            .unwrap()
-            .clone();
+            .unwrap();
         let color = PotionColor::assign_random_color(&kind);
 
         Potion {
@@ -67,13 +66,13 @@ impl Potion {
         };
 
         // 状态修正
-        let mut value = if !self.identified {
+        
+
+        if !self.identified {
             (base_value as f32 * 0.5) as u32 // 未鉴定药水价值减半
         } else {
             base_value
-        };
-
-        value
+        }
     }
 
     /// 获取药水的显示颜色（使用tui::style::Color）
@@ -106,7 +105,9 @@ impl Potion {
 #[derive(
     Debug, Clone, Copy, EnumIter, Eq, Hash, PartialEq, Encode, Decode, Serialize, Deserialize,
 )]
+#[derive(Default)]
 pub enum PotionKind {
+    #[default]
     Healing,      // 治疗
     Experience,   // 经验
     ToxicGas,     // 毒气
@@ -271,11 +272,6 @@ impl Default for Potion {
     }
 }
 
-impl Default for PotionKind {
-    fn default() -> Self {
-        PotionKind::Healing  // 默认治疗药水类型
-    }
-}
 
 impl From<PotionKind> for Potion {
     fn from(kind: PotionKind) -> Self {

@@ -29,8 +29,8 @@ impl Wand {
     pub fn new(kind: WandKind, level: u8) -> Self {
         // 计算最大充能（瓦解法杖2+等级，其他3+等级）
         let max_charges = match kind {
-            WandKind::Disintegration => 2 + level as u8,
-            _ => 3 + level as u8,
+            WandKind::Disintegration => 2 + level,
+            _ => 3 + level,
         };
 
         Self {
@@ -197,7 +197,9 @@ impl Wand {
 
 /// 法杖种类枚举（8种）
 #[derive(Copy, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum WandKind {
+    #[default]
     MagicMissile,   // 魔法飞弹（基础法杖）
     Fireblast,      // 火焰冲击（范围伤害）
     Frost,          // 寒冰（冻结效果）
@@ -221,11 +223,6 @@ impl Default for Wand {
     }
 }
 
-impl Default for WandKind {
-    fn default() -> Self {
-        WandKind::MagicMissile  // 默认魔法飞弹法杖类型
-    }
-}
 
 
 impl From<WandKind> for Wand {

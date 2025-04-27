@@ -61,7 +61,7 @@ impl MiscItem {
             MiscKind::Torch,
             MiscKind::Other,
         ];
-        let kind = kinds[rng.random_range(0..kinds.len())].clone();
+        let kind = kinds[rng.random_range(0..kinds.len())];
         
         let mut item = MiscItem::new(kind);
         

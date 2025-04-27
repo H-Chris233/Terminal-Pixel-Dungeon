@@ -233,15 +233,13 @@ impl Weapon {
 
     /// 添加随机附魔（还原Shattered PD的附魔概率）
     pub fn add_random_enhancement(&mut self) {
-        let enhancements = vec![
-            WeaponEnhance::Burning,    // 25%概率点燃敌人3回合
+        let enhancements = [WeaponEnhance::Burning,    // 25%概率点燃敌人3回合
             WeaponEnhance::Stunning,   // 20%概率眩晕敌人2回合
             WeaponEnhance::Vampiric,   // 恢复造成伤害的10%
             WeaponEnhance::Lucky,      // 暴击率+15%
             WeaponEnhance::Projecting, // 攻击距离+1
             WeaponEnhance::Grim,       // 对生命值低于20%的敌人必杀
-            WeaponEnhance::Chilling,   // 减速敌人
-        ];
+            WeaponEnhance::Chilling];
 
         // 确保100%获得一个随机附魔
         self.enchanted =
@@ -313,7 +311,9 @@ impl Weapon {
 
 /// 武器类型枚举（还原Shattered PD的武器分类）
 #[derive(Copy, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum WeaponKind {
+    #[default]
     Sword,    // 剑类：平衡型
     Dagger,   // 匕首：高速低伤（+25%攻速）
     Greataxe, // 巨斧：低速高伤（+30%伤害）
@@ -324,7 +324,9 @@ pub enum WeaponKind {
 
 /// 武器品阶（还原Shattered PD的5阶系统）
 #[derive(Copy, PartialEq, Debug, Encode, Decode, Serialize, Deserialize, Clone)]
+#[derive(Default)]
 pub enum Tier {
+    #[default]
     One,   // 普通（白色）
     Two,   // 优秀（绿色）
     Three, // 稀有（蓝色）
@@ -390,17 +392,7 @@ impl Default for Weapon {
     }
 }
 
-impl Default for WeaponKind {
-    fn default() -> Self {
-        WeaponKind::Sword  // 默认剑类武器
-    }
-}
 
-impl Default for Tier {
-    fn default() -> Self {
-        Tier::One  // 默认一阶
-    }
-}
 
 impl fmt::Display for Weapon {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

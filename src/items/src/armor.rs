@@ -224,7 +224,7 @@ impl Armor {
             final_penalty = (final_penalty as f32 * 1.5).ceil() as u32;
         }
 
-        final_penalty.max(0) // 确保不会返回负数
+        final_penalty // 确保不会返回负数
     }
 
     /// 获取护甲颜色（用于TUI显示）
