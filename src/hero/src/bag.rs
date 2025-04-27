@@ -398,21 +398,11 @@ impl Bag {
     }
 
     /* ================== 装备属性计算 ================== */
-    pub fn armor_defense(&self) -> u32 {
-        self.equipment.armor.as_ref().map_or(0, |a| a.defense)
-    }
-
-    pub fn crit_bonus(&self) -> f32 {
-        self.equipment
-            .weapon
-            .as_ref()
-            .map_or(1.0, |w| w.crit_modifier)
-    }
-
+    
     pub fn evasion_penalty(&self) -> u32 {
         self.equipment
             .armor
             .as_ref()
-            .map_or(0, |a| a.evasion_penalty)
+            .map_or(0, |a| a.evasion_penalty())
     }
 }

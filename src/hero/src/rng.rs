@@ -41,7 +41,7 @@ impl HeroRng {
     }
 
     /// 生成随机布尔值
-    pub fn gen_bool(&mut self, probability: f64) -> bool {
+    pub fn random_bool(&mut self, probability: f64) -> bool {
         self.rng.random_bool(probability)
     }
 
@@ -50,7 +50,7 @@ impl HeroRng {
         if items.is_empty() {
             None
         } else {
-            let idx = self.gen_range(0..items.len());
+            let idx = self.random_range(0..items.len());
             Some(&items[idx])
         }
     }
@@ -60,7 +60,7 @@ impl HeroRng {
         if items.is_empty() {
             None
         } else {
-            let idx = self.gen_range(0..items.len());
+            let idx = self.random_range(0..items.len());
             Some(&mut items[idx])
         }
     }
@@ -72,12 +72,12 @@ impl HeroRng {
 
     /// 计算带随机性的防御值（SPD风格）
     pub fn defense_roll(&mut self, base_defense: u32) -> u32 {
-        let defense_factor = self.gen_range(0.7..=1.3);
+        let defense_factor = self.random_range(0.7..=1.3);
         (base_defense as f32 * defense_factor) as u32
     }
 
     /// 生成指定范围内的随机值
-    pub fn gen_range<T, R>(&mut self, range: R) -> T
+    pub fn random_range<T, R>(&mut self, range: R) -> T
     where
         T: uniform::SampleUniform,
         R: uniform::SampleRange<T>,
@@ -145,13 +145,13 @@ mod tests {
         let mut rng2 = HeroRng::new(123);
 
         // 相同种子应产生相同序列
-        assert_eq!(rng1.gen_range(0..100), rng2.gen_range(0..100));
-        assert_eq!(rng1.gen_bool(0.5), rng2.gen_bool(0.5));
+        assert_eq!(rng1.random_range(0..100), rng2.random_range(0..100));
+        assert_eq!(rng1.random_bool(0.5), rng2.random_bool(0.5));
 
         // 重置后应恢复相同序列
         rng1.reseed(456);
         rng2.reseed(456);
-        assert_eq!(rng1.gen_range(0..100), rng2.gen_range(0..100));
+        assert_eq!(rng1.random_range(0..100), rng2.random_range(0..100));
     }
 
     #[test]

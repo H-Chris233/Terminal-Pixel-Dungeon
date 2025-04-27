@@ -40,8 +40,8 @@ pub trait Combatant {
     fn attack_distance(&self) -> u32;
 
     /// 获取击败后提供的经验值
-    fn exp_value(&self) -> Option<u32> {
-        None // 默认不提供经验值
+    fn exp_value(&self) -> u32 {
+        0 // 默认不提供经验值
     }
 
     /// 是否为远程战斗者
@@ -147,11 +147,8 @@ impl Combatant for Enemy {
     fn heal(&mut self, amount: u32) {
         self.hp = (self.hp + amount).min(self.max_hp);
     }
-    fn exp_value(&self) -> Option<u32> {
-        if self.exp_value > 0 {  // 添加条件判断
-            Some(self.exp_value)
-        } else {
-            None
-        }
+    
+    fn exp_value(&self) -> u32 {
+        self.exp_value
     }
 }
