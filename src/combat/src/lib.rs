@@ -127,7 +127,7 @@ impl Combat {
             if !defender.is_alive() {
                 result.log(format!("{} defeated {}!", attacker.name(), defender.name()));
                 result.defeated = true;
-                result.experience = defender.experience_value().unwrap_or(0);
+                result.experience = defender.exp_value().unwrap_or(0);
             }
         } else {
             result.log(format!("{} misses {}!", attacker.name(), defender.name()));

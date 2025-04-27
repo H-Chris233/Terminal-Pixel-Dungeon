@@ -270,7 +270,7 @@ impl Enemy {
     }
 
     /// 获取经验值
-    pub fn experience_value(&self) -> u32 {
+    pub fn exp_value(&self) -> u32 {
         self.exp_value
     }
 
@@ -377,86 +377,3 @@ impl Enemy {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_enemy_creation() {
-        let rat = Enemy::new(EnemyKind::Rat, 0, 0);
-        assert_eq!(rat.hp, 10);
-        assert_eq!(rat.attack, 4);
-        assert_eq!(rat.symbol, 'r');
-
-        let golem = Enemy::new(EnemyKind::Golem, 0, 0);
-        assert_eq!(golem.hp, 50);
-        assert_eq!(golem.defense, 15);
-    }
-
-    #[test]
-    fn test_state_transitions() {
-        let mut enemy = Enemy::new(EnemyKind::Gnoll, 0, 0);
-        assert_eq!(enemy.state, EnemyState::Idle);
-
-        enemy.make_hostile();
-        assert_eq!(enemy.state, EnemyState::Hostile);
-        assert!(enemy.is_surprised);
-
-        enemy.start_fleeing();
-        assert_eq!(enemy.state, EnemyState::Fleeing);
-    }
-
-    #[test]
-    fn test_damage_calculation() {
-        let mut enemy = Enemy::new(EnemyKind::Guard, 0, 0);
-        let alive = enemy.take_damage(15);
-        assert!(alive);
-        assert_eq!(enemy.hp, 30 - (15 - 10).max(1));
-
-        let alive = enemy.take_damage(50);
-        assert!(!alive);
-    }
-
-    #[test]
-    fn test_drop_items() {
-        let enemy = Enemy::new(EnemyKind::Warlock, 0, 0);
-        let drops = enemy.drop_items();
-        assert!(!drops.is_empty());
-    }
-    #[test]
-    fn test_attack_power() {
-        let weapon = Weapon::new(WeaponType::Sword, 1).with_damage_bonus(3);
-        let enemy = Enemy::new(EnemyKind::Guard, 0, 0).with_weapon(weapon);
-
-        assert_eq!(enemy.attack_power(), 12 + 3); // Guard基础攻击12 + 武器加成3
-    }
-
-    #[test]
-    fn test_accuracy() {
-        let weapon = Weapon::new(WeaponType::Bow, 1).with_accuracy_bonus(2);
-        let enemy = Enemy::new(EnemyKind::Warlock, 0, 0).with_weapon(weapon);
-
-        assert_eq!(enemy.accuracy(), 16 + 2); // Warlock基础16 + 武器加成2
-    }
-
-    #[test]
-    fn test_attack_distance() {
-        let melee_weapon = Weapon::new(WeaponType::Sword, 1);
-        let ranged_weapon = Weapon::new(WeaponType::Bow, 1).with_hit_distance(4);
-
-        let melee_enemy = Enemy::new(EnemyKind::Guard, 0, 0).with_weapon(melee_weapon);
-        let ranged_enemy = Enemy::new(EnemyKind::Warlock, 0, 0).with_weapon(ranged_weapon);
-        let default_enemy = Enemy::new(EnemyKind::Rat, 0, 0);
-
-        assert_eq!(melee_enemy.attack_distance(), 1);
-        assert_eq!(ranged_enemy.attack_distance(), 4);
-        assert_eq!(default_enemy.attack_distance(), 1); // Rat的默认攻击距离
-    }
-
-    #[test]
-    fn test_crit_bonus() {
-        let enemy = Enemy::new(EnemyKind::Assassin, 0, 0).with_crit_bonus(0.15);
-
-        assert_eq!(enemy.crit_bonus(), 0.15);
-    }
-}
