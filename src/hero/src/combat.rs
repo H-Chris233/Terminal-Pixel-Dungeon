@@ -31,14 +31,14 @@ impl Combatant for Hero {
 
     /// 计算防御力（包含护甲加成）
     fn defense(&self) -> u32 {
-        let armor_bonus = self.bag.armor().map_or(0, |a| a.defense() as u32);
+        let armor_bonus = self.bag.equipment().armor().map_or(0, |a| a.defense() as u32);
 
         self.base_defense + armor_bonus
     }
 
     /// 计算命中率（包含武器加成）
     fn accuracy(&self) -> u32 {
-        let weapon_bonus = self.bag.weapon().map_or(0, |w| w.accuracy_bonus() as u32);
+        let weapon_bonus = self.bag.equipment().weapon().map_or(0, |w| w.accuracy_bonus() as u32);
 
         // SPD基础精度80 + 每级2点 + 武器加成
         80 + (self.level * 2) + weapon_bonus
@@ -46,7 +46,7 @@ impl Combatant for Hero {
 
     /// 计算闪避率（受护甲惩罚）
     fn evasion(&self) -> u32 {
-        let armor_penalty = self.bag.armor().map_or(0, |a| a.evasion_penalty());
+        let armor_penalty = self.bag.equipment().armor().map_or(0, |a| a.evasion_penalty());
 
         // 每级3点 - 护甲惩罚
         (self.level * 3).saturating_sub(armor_penalty)
@@ -61,16 +61,16 @@ impl Combatant for Hero {
             Class::Huntress => 0.07,
         };
 
-        let weapon_bonus = self.bag.weapon().map_or(0.0, |w| w.crit_bonus());
+        let weapon_bonus = self.bag.equipment().weapon().map_or(0.0, |w| w.crit_bonus());
 
-        let ring_bonus: f32 = self.bag.rings().iter().map(|r| r.crit_bonus()).sum();
+        let ring_bonus: f32 = self.bag.equipment().rings().iter().map(|r| r.crit_bonus()).sum();
 
         // 基础10% + 职业加成 + 装备加成
         0.1 + class_bonus + weapon_bonus + ring_bonus
     }
 
     fn weapon(&self) -> Option<&Weapon> {
-        self.bag.weapon()
+        self.bag.equipment().weapon()
     }
 
     fn is_alive(&self) -> bool {
@@ -89,7 +89,7 @@ impl Combatant for Hero {
     /// 承受伤害（SPD防御公式）
     fn take_damage(&mut self, amount: u32) -> bool {
         // SPD防御公式：防御力 × (0.7~1.3随机系数)
-        let defense_roll = self.defense() as f32 * (0.7 + self.rng.gen_range(0.0..0.6));
+        let defense_roll = self.defense() as f32 * (0.7 + self.rng.random_range(0.0..0.6));
 
         // 实际伤害 = 攻击力 - 防御roll值（至少1点）
         let actual_damage = (amount as f32 - defense_roll).max(1.0) as u32;
@@ -113,7 +113,7 @@ impl Combatant for Hero {
 impl Hero {
     /// 执行攻击（返回是否暴击和实际伤害）
     pub fn perform_attack(&mut self, target: &mut dyn Combatant) -> (bool, u32) {
-        let is_crit = self.is_critical();
+        let is_crit = self.rng.random_bool(self.crit_bonus().into());
         let base_damage = self.attack_power();
         let final_damage = if is_crit {
             (base_damage as f32 * 1.5) as u32 // 暴击伤害150%
@@ -142,12 +142,12 @@ impl Hero {
     /// 尝试闪避攻击（返回是否闪避成功）
     pub fn try_evade(&mut self, attacker: &dyn Combatant) -> bool {
         let hit_prob = attacker.accuracy();
-        !self.rng.gen_bool(hit_prob as f64)
+        !self.rng.random_bool(hit_prob as f64)
     }
 
     /// 反击机制（盗贼专属）
     pub fn counter_attack(&mut self, attacker: &mut dyn Combatant) -> Option<(bool, u32)> {
-        if self.class == Class::Rogue && self.rng.gen_bool(0.3) {
+        if self.class == Class::Rogue && self.rng.random_bool(0.3) {
             Some(self.perform_attack(attacker))
         } else {
             None

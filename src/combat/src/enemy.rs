@@ -30,8 +30,9 @@ pub struct Enemy {
 }
 
 /// 敌人种类，影响基础属性和行为
-#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Serialize, Deserialize, PartialEq)]
 pub enum EnemyKind {
+    #[default]
     Rat,
     Snake,
     Gnoll,
@@ -41,12 +42,6 @@ pub enum EnemyKind {
     Guard,
     Warlock,
     Golem,
-}
-
-impl Default for EnemyKind {
-    fn default() -> Self {
-        EnemyKind::Rat
-    }
 }
 
 /// 敌人当前状态
@@ -109,7 +104,7 @@ impl Enemy {
 
     /// 受到伤害
     pub fn take_damage(&mut self, amount: u32) -> bool {
-        let actual_damage = (amount - self.defense).max(1);
+        let actual_damage = (amount - self.defense).max(0);
         self.hp = (self.hp - actual_damage).max(0);
         self.is_alive()
     }
@@ -268,12 +263,7 @@ impl Enemy {
     pub fn defense(&self) -> u32 {
         self.defense
     }
-
-    /// 获取经验值
-    pub fn exp_value(&self) -> u32 {
-        self.exp_value
-    }
-
+    
     /// 获取命中率（考虑武器加成）
     pub fn accuracy(&self) -> i32 {
         let base = match self.kind {
@@ -368,7 +358,7 @@ impl Enemy {
     pub fn attack_distance(&self) -> u32 {
         self.weapon
             .as_ref()
-            .map_or(self.attack_range, |w| w.range().into())
+            .map_or(self.attack_range, |w| w.range())
     }
 
     /// 判断是否为远程敌人

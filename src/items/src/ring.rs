@@ -187,6 +187,20 @@ impl Ring {
         }
     }
     
+    pub fn crit_bonus(&self) -> f32 {
+        if self.cursed {
+            return 0.0;
+        }
+
+        match self.kind {
+            RingKind::Accuracy => self.level as f32 * 0.015,    // 1.5% per level
+            RingKind::Sharpshooting => self.level as f32 * 0.02, // 2% per level
+            RingKind::Furor => self.level as f32 * 0.012,       // 1.2% per level
+            _ => 0.0,
+        }
+    }
+    
+    
 }
 
 /// 戒指类型枚举
