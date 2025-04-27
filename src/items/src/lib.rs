@@ -93,7 +93,8 @@ impl Item {
     }
     /// 获取显示名称（还原游戏内命名规则）
     pub fn name(&self) -> String {
-        let name = match &self.kind {
+        
+        match &self.kind {
             ItemKind::Weapon(w) => w.name.clone(),
             ItemKind::Armor(a) => a.name().clone(),
             ItemKind::Potion(p) => p.name(),
@@ -104,8 +105,7 @@ impl Item {
             ItemKind::Seed(s) => s.name(),
             ItemKind::Stone(s) => s.name(),
             ItemKind::Misc(m) => m.name().clone(),
-        };
-        name
+        }
     }
 
     /// 是否为消耗品（精确匹配游戏机制）
@@ -347,7 +347,7 @@ impl ItemTrait for Item {
             // Weapons sorted by tier then level
             ItemKind::Weapon(w) => (w.tier as u32 * 100) + w.upgrade_level as u32,
             // Armor sorted by tier then level
-            ItemKind::Armor(a) => (a.tier as u32 * 100) + a.upgrade_level as u32,
+            ItemKind::Armor(a) => (a.tier * 100) + a.upgrade_level as u32,
             // Potions sorted by type
             ItemKind::Potion(p) => p.sort_value(),
             // Scrolls sorted by type
@@ -396,7 +396,7 @@ impl ItemTrait for Armor {
         ItemCategory::Armor
     }
     fn sort_value(&self) -> u32 {
-        (self.tier as u32 * 100) + self.upgrade_level as u32
+        (self.tier * 100) + self.upgrade_level as u32
     }
 }
 
@@ -483,9 +483,7 @@ impl ItemTrait for Ring {
         ItemCategory::Ring
     }
     fn sort_value(&self) -> u32 {
-        match self.kind {
-            _ => 100,
-        }
+        100
     }
 }
 
@@ -500,9 +498,7 @@ impl ItemTrait for Seed {
         ItemCategory::Seed
     }
     fn sort_value(&self) -> u32 {
-        match self.kind {
-            _ => 20,
-        }
+        20
     }
 }
 
@@ -517,9 +513,7 @@ impl ItemTrait for Stone {
         ItemCategory::Stone
     }
     fn sort_value(&self) -> u32 {
-        match self.kind {
-            _ => 30,
-        }
+        30
     }
 }
 

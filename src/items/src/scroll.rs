@@ -45,7 +45,7 @@ impl Scroll {
         let mut rng = rand::rng();
         
         let kinds = ScrollKind::iter().collect::<Vec<_>>();
-        let kind = kinds[rng.random_range(0..kinds.len())].clone();
+        let kind = kinds[rng.random_range(0..kinds.len())];
         
         if rng.random_bool(0.1) {
             Scroll::new_exotic(kind)
@@ -130,9 +130,11 @@ impl Scroll {
 
 /// 卷轴种类（对应SPD中的10种卷轴）
 #[derive(Eq, Hash, PartialEq, Debug, Copy, Clone, Encode, Decode, Serialize, Deserialize, EnumIter)]
+#[derive(Default)]
 pub enum ScrollKind {
     Upgrade,       // 强化卷轴 - 强化装备
     RemoveCurse,   // 祛咒卷轴 - 解除装备诅咒
+    #[default]
     Identify,      // 鉴定卷轴 - 鉴定物品
     MagicMapping,  // 地图卷轴 - 显示当前楼层地图
     MirrorImage,   // 镜像卷轴 - 创建分身
@@ -153,11 +155,6 @@ impl Default for Scroll {
     }
 }
 
-impl Default for ScrollKind {
-    fn default() -> Self {
-        ScrollKind::Identify  // 默认鉴定卷轴类型
-    }
-}
 
 
 impl From<ScrollKind> for Scroll {

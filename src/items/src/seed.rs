@@ -11,7 +11,9 @@ pub struct Seed {
 }
 
 #[derive(Copy, Eq, Hash, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum SeedKind {
+    #[default]
     Earthroot,  // 地根草（护盾）
     Fadeleaf,   // 消隐叶（传送）
     Firebloom,  // 火焰花（燃烧）
@@ -154,11 +156,6 @@ impl Default for Seed {
     }
 }
 
-impl Default for SeedKind {
-    fn default() -> Self {
-        SeedKind::Earthroot  // 默认地根草类型
-    }
-}
 
 
 impl From<SeedKind> for Seed {

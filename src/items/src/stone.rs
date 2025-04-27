@@ -112,9 +112,11 @@ impl Stone {
 
 /// 魔法石种类枚举（10种对应卷轴）
 #[derive(Copy, Eq, Hash, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum StoneKind {
     Upgrade,       // 对应强化卷轴
     RemoveCurse,   // 对应祛咒卷轴
+    #[default]
     Identify,      // 对应鉴定卷轴
     MagicMapping,  // 对应地图卷轴
     MirrorImage,   // 对应镜像卷轴
@@ -134,11 +136,6 @@ impl Default for Stone {
     }
 }
 
-impl Default for StoneKind {
-    fn default() -> Self {
-        StoneKind::Identify  // 默认鉴定之石类型
-    }
-}
 
 #[cfg(test)]
 mod tests {

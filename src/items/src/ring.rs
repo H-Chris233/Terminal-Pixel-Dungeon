@@ -17,7 +17,7 @@ impl Ring {
     /// 创建新戒指（可指定等级，默认未鉴定、未诅咒）
     pub fn new(kind: RingKind, level: i32) -> Self {
         Self {
-            kind: kind.clone(),
+            kind: kind,
             level: level.clamp(0, 10),
             cursed: false,
             identified: false,
@@ -28,7 +28,7 @@ impl Ring {
     /// 创建诅咒戒指（陷阱或特殊房间生成）
     pub fn new_cursed(kind: RingKind, level: i32) -> Self {
         Self {
-            kind: kind.clone(),
+            kind: kind,
             level: level.clamp(0, 10),
             cursed: true,
             identified: false,
@@ -69,7 +69,7 @@ impl Ring {
             RingKind::Sharpshooting,
             RingKind::Wealth,
         ];
-        let kind = kinds[rng.random_range(0..kinds.len())].clone();
+        let kind = kinds[rng.random_range(0..kinds.len())];
         let level = rng.random_range(0..=3);
         
         if rng.random_bool(0.05) {
@@ -191,7 +191,9 @@ impl Ring {
 
 /// 戒指类型枚举
 #[derive(Copy, Eq, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum RingKind {
+    #[default]
     Accuracy,      // 提升命中率
     Elements,      // 元素抗性
     Energy,        // 能量恢复
@@ -235,16 +237,11 @@ impl Default for Ring {
     }
 }
 
-impl Default for RingKind {
-    fn default() -> Self {
-        RingKind::Accuracy  // 默认精准之戒类型
-    }
-}
 
 impl fmt::Display for Ring {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // 基础信息
-        let mut info = format!("{}", self.name());
+        let mut info = self.name().to_string();
 
         // 添加价值信息
         info.push_str(&format!("\n价值: {} 金币", self.value()));
