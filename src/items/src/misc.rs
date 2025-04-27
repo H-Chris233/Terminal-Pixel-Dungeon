@@ -91,10 +91,7 @@ impl MiscItem {
 
     /// 判断物品是否可投掷
     pub fn is_throwable(&self) -> bool {
-        match self.kind {
-            MiscKind::Bomb | MiscKind::Honeypot => true,
-            _ => false,
-        }
+        matches!(self.kind, MiscKind::Bomb | MiscKind::Honeypot)
     }
 
     /// 获取物品基础名称

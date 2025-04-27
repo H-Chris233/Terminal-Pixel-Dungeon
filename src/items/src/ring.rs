@@ -17,7 +17,7 @@ impl Ring {
     /// 创建新戒指（可指定等级，默认未鉴定、未诅咒）
     pub fn new(kind: RingKind, level: i32) -> Self {
         Self {
-            kind: kind,
+            kind,
             level: level.clamp(0, 10),
             cursed: false,
             identified: false,
@@ -28,7 +28,7 @@ impl Ring {
     /// 创建诅咒戒指（陷阱或特殊房间生成）
     pub fn new_cursed(kind: RingKind, level: i32) -> Self {
         Self {
-            kind: kind,
+            kind,
             level: level.clamp(0, 10),
             cursed: true,
             identified: false,

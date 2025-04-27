@@ -4,6 +4,7 @@ use bincode::{Decode, Encode};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::cmp::Ordering;
 
 pub mod kind;
 pub mod tier;
@@ -190,10 +191,14 @@ impl Weapon {
         let mut damage = rand::rng().random_range(self.damage.0..=self.damage.1);
 
         // 力量修正（每点差异影响5%伤害）
-        if str_diff > 0 {
-            damage += (damage as f32 * 0.05 * str_diff as f32) as u32;
-        } else if str_diff < 0 {
-            damage = (damage as f32 * (0.9f32).powi(-str_diff)) as u32;
+        match str_diff.cmp(&0) {
+            Ordering::Less => {
+                damage = (damage as f32 * (0.9f32).powi(-str_diff)) as u32;
+            },
+            Ordering::Greater => {
+                damage += (damage as f32 * 0.05 * str_diff as f32) as u32;
+            },
+            _ => {},
         }
 
         // 改造修正

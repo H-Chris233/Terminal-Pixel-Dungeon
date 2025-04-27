@@ -304,12 +304,7 @@ pub enum ItemCategory {
 
 impl ItemTrait for Item {
     fn is_stackable(&self) -> bool {
-        match &self.kind {
-            ItemKind::Potion(_) | ItemKind::Scroll(_) | ItemKind::Food(_) | ItemKind::Seed(_) => {
-                true
-            }
-            _ => false,
-        }
+        matches!(&self.kind, ItemKind::Potion(_) | ItemKind::Scroll(_) | ItemKind::Food(_) | ItemKind::Seed(_))
     }
 
     fn display_name(&self) -> String {
