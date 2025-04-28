@@ -241,7 +241,7 @@ impl ItemTrait for Wand {
 
         let mut hasher = SeaHasher::new();
         let bytes = encode_to_vec(
-            &(
+            (
                 self.kind,
                 self.level,
                 self.cursed,

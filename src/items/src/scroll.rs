@@ -190,7 +190,7 @@ impl ItemTrait for Scroll {
             self.exotic, // 包含异变状态
         );
 
-        let bytes = encode_to_vec(&key, BINCODE_CONFIG).unwrap();
+        let bytes = encode_to_vec(key, BINCODE_CONFIG).unwrap();
         hasher.write(&bytes);
         hasher.finish()
     }

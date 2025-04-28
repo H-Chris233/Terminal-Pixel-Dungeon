@@ -431,7 +431,7 @@ impl ItemTrait for Armor {
 
         let mut hasher = SeaHasher::new();
         let bytes = encode_to_vec(
-            &(
+            (
                 self.tier,
                 self.upgrade_level,
                 &self.glyph,

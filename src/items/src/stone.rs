@@ -197,7 +197,7 @@ impl ItemTrait for Stone {
     /// 生成堆叠标识（包含种类和使用状态）
     fn stacking_id(&self) -> u64 {
         let mut hasher = SeaHasher::new();
-        let bytes = encode_to_vec(&(self.kind, self.used), BINCODE_CONFIG).unwrap();
+        let bytes = encode_to_vec((self.kind, self.used), BINCODE_CONFIG).unwrap();
         hasher.write(&bytes);
         hasher.finish()
     }

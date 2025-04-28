@@ -238,7 +238,7 @@ impl ItemTrait for Food {
         let mut hasher = SeaHasher::new();
         // 关键区分属性：类型 + 烹饪状态 + 污染状态
         let key = (self.kind, self.cooked, self.contaminated);
-        let bytes = encode_to_vec(&key, BINCODE_CONFIG).unwrap();
+        let bytes = encode_to_vec(key, BINCODE_CONFIG).unwrap();
         hasher.write(&bytes);
         hasher.finish()
     }
