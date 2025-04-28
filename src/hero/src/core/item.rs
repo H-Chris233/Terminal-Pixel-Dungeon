@@ -29,23 +29,23 @@ impl Hero {
             ItemCategory::Potion => {
                 self.use_potion(index);
                 Ok(())
-            },
+            }
             ItemCategory::Scroll => {
                 self.use_scroll(index);
                 Ok(())
-            },
+            }
             ItemCategory::Weapon => {
                 self.equip_item(index);
                 Ok(())
-            },
+            }
             ItemCategory::Armor => {
                 self.equip_item(index);
                 Ok(())
-            },
+            }
             ItemCategory::Ring => {
                 self.equip_item(index);
                 Ok(())
-            },
+            }
             _ => Err(HeroError::BagFull(BagError::CannotUseItem)),
         }
     }
@@ -67,7 +67,9 @@ impl Hero {
         match potion.kind {
             PotionKind::Healing => self.heal(self.max_hp / 3),
             PotionKind::Strength => self.strength += 1,
-            PotionKind::MindVision => {self.effects.add(Effect::new(EffectType::MindVision, 20));},
+            PotionKind::MindVision => {
+                self.effects.add(Effect::new(EffectType::MindVision, 20));
+            }
             PotionKind::ToxicGas => {
                 // 对周围敌人造成中毒效果
                 dungeon::affect_adjacent_enemies(self.x, self.y, |e| {
@@ -110,7 +112,7 @@ impl Hero {
                 }
             }
             ScrollKind::RemoveCurse => {
-                self.bag.remove_curse();
+                self.bag.remove_curse_all();
                 self.notify("一股净化之力扫过你的装备".into());
             }
             ScrollKind::MagicMapping => {
@@ -122,7 +124,6 @@ impl Hero {
         self.bag.remove_item(index)?;
         Ok(())
     }
-    
 }
 
 impl InventorySystem for Hero {
@@ -135,7 +136,9 @@ impl InventorySystem for Hero {
     }
 
     pub fn equip_item(&mut self, index: usize) -> Result<Option<Item>, HeroError> {
-        self.bag.equip_item(index, self.strength).map_err(|e| e.into())
+        self.bag
+            .equip_item(index, self.strength)
+            .map_err(|e| e.into())
     }
 
     pub fn use_item(&mut self, index: usize) -> Result<Item, BagError> {

@@ -1,26 +1,33 @@
 //src/items/src/armor.rs
+use bincode::serde::encode_to_vec;
 use bincode::{Decode, Encode};
 use rand::Rng;
+use seahash::SeaHasher;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::hash::Hasher;
 use tui::style::Color;
+
+use crate::ItemCategory;
+use crate::ItemTrait;
+use crate::BINCODE_CONFIG;
 
 /// 护甲数据（精确还原游戏机制）
 #[derive(PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct Armor {
-    pub tier: u32,               // 品阶1-5
+    pub tier: u32,                 // 品阶1-5
     pub defense: u32,              // 基础防御
     pub upgrade_level: u8,         // 强化等级（非负）
     pub glyph: Option<ArmorGlyph>, // 护甲刻印
     pub cursed: bool,              // 是否被诅咒
     pub cursed_known: bool,        // 是否已鉴定出诅咒状态
-    pub str_requirement: u8,      // 力量需求
-    pub base_value: u32,         // 基础价值
+    pub str_requirement: u8,       // 力量需求
+    pub base_value: u32,           // 基础价值
     pub identified: bool,          // 是否已鉴定
 }
 
 /// 护甲刻印类型（全部10种）
-#[derive(PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize, Hash)]
 pub enum ArmorGlyph {
     Affection,   // 魅惑 - 受到攻击时概率魅惑敌人
     AntiEntropy, // 抗熵 - 免疫燃烧和冰冻
@@ -53,18 +60,18 @@ impl Armor {
             identified: false,
         }
     }
-    
+
     pub fn identify(&mut self) {
         self.identified = true;
         self.cursed_known = true; // 鉴定同时会揭示诅咒状态
     }
-    
+
     /// 随机生成新护甲（随机品阶、刻印和诅咒状态）
     pub fn random_new() -> Self {
         let mut rng = rand::rng();
         let tier = rng.random_range(1..=5);
         let mut armor = Armor::new(tier);
-        
+
         // 15%概率有刻印（原版概率）
         if rng.random_bool(0.15) {
             let glyphs = [
@@ -82,12 +89,12 @@ impl Armor {
             let glyph = glyphs[rng.random_range(0..glyphs.len())].clone();
             armor.inscribe(glyph);
         }
-        
+
         // 15%概率被诅咒（原版概率）
         if rng.random_bool(0.15) {
             armor.curse();
         }
-        
+
         armor
     }
 
@@ -115,11 +122,11 @@ impl Armor {
         // 刻印加成（不同类型有不同加成）
         if let Some(glyph) = &self.glyph {
             value = match glyph {
-                ArmorGlyph::Thorns => (value as f32 * 1.5) as u32,    // 荆棘 +50%
+                ArmorGlyph::Thorns => (value as f32 * 1.5) as u32, // 荆棘 +50%
                 ArmorGlyph::Repulsion => (value as f32 * 1.4) as u32, // 排斥 +40%
                 ArmorGlyph::Affection => (value as f32 * 1.3) as u32, // 魅惑 +30%
-                ArmorGlyph::Potential => (value as f32 * 1.25) as u32,// 潜能 +25%
-                _ => (value as f32 * 1.2) as u32,                     // 其他刻印 +20%
+                ArmorGlyph::Potential => (value as f32 * 1.25) as u32, // 潜能 +25%
+                _ => (value as f32 * 1.2) as u32,                  // 其他刻印 +20%
             };
         }
 
@@ -197,16 +204,16 @@ impl Armor {
             cursed_str
         )
     }
-    
+
     /// 获取护甲闪避惩罚（基于品阶和强化等级）
     pub fn evasion_penalty(&self) -> u32 {
         // 基础闪避惩罚（品阶越高惩罚越大）
         let base_penalty = match self.tier {
-            1 => 0,   // 布甲无惩罚
-            2 => 1,   // 皮甲
-            3 => 2,   // 锁甲
-            4 => 3,   // 鳞甲
-            5 => 4,   // 板甲
+            1 => 0, // 布甲无惩罚
+            2 => 1, // 皮甲
+            3 => 2, // 锁甲
+            4 => 3, // 鳞甲
+            5 => 4, // 板甲
             _ => 0,
         };
 
@@ -288,7 +295,7 @@ impl Armor {
         if !self.identified {
             return None;
         }
-        
+
         self.glyph.as_ref().map(|glyph| match glyph {
             ArmorGlyph::Thorns => GlyphEffect::ReflectDamage(1 + self.upgrade_level as u32 / 3),
             ArmorGlyph::Repulsion => GlyphEffect::Knockback(2),
@@ -344,11 +351,7 @@ impl Default for Armor {
 impl fmt::Display for Armor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // 基础信息
-        let mut info = format!(
-            "{} - 防御: {}",
-            self.name(),
-            self.defense()
-        );
+        let mut info = format!("{} - 防御: {}", self.name(), self.defense());
 
         // 添加力量需求
         info.push_str(&format!("\n力量需求: {}", self.str_requirement));
@@ -359,14 +362,22 @@ impl fmt::Display for Armor {
         // 添加鉴定状态
         info.push_str(&format!(
             "\n鉴定状态: {}",
-            if self.identified { "已鉴定" } else { "未鉴定" }
+            if self.identified {
+                "已鉴定"
+            } else {
+                "未鉴定"
+            }
         ));
 
         // 添加诅咒状态（如果已知）
         if self.cursed_known {
             info.push_str(&format!(
                 "\n诅咒状态: {}",
-                if self.cursed { "已诅咒" } else { "未诅咒" }
+                if self.cursed {
+                    "已诅咒"
+                } else {
+                    "未诅咒"
+                }
             ));
         }
 
@@ -394,5 +405,52 @@ fn glyph_description(glyph: &ArmorGlyph) -> String {
         ArmorGlyph::Repulsion => "击退攻击者".to_string(),
         ArmorGlyph::Stone => "免疫毒气和瘫痪效果".to_string(),
         ArmorGlyph::Thorns => "反弹部分近战伤害".to_string(),
+    }
+}
+
+impl ItemTrait for Armor {
+    fn display_name(&self) -> String {
+        self.name()
+    }
+    fn category(&self) -> ItemCategory {
+        ItemCategory::Armor
+    }
+    fn sort_value(&self) -> u32 {
+        (self.tier * 100) + self.upgrade_level as u32
+    }
+
+    /// 护甲现在完全不可堆叠
+    fn is_stackable(&self) -> bool {
+        false
+    }
+
+    /// 生成唯一标识（保持实现但实际不会使用）
+    fn stacking_id(&self) -> u64 {
+        use seahash::SeaHasher;
+        use std::hash::Hasher;
+
+        let mut hasher = SeaHasher::new();
+        let bytes = encode_to_vec(
+            &(
+                self.tier,
+                self.upgrade_level,
+                &self.glyph,
+                self.cursed,
+                self.str_requirement,
+                self.base_value,
+                self.defense,
+                self.identified,
+            ),
+            BINCODE_CONFIG,
+        )
+        .unwrap();
+
+        hasher.write(&bytes);
+        hasher.finish()
+    }
+
+    /// 最大堆叠数量固定为1
+    fn max_stack(&self) -> u32 {
+        1
     }
 }

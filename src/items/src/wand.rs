@@ -4,8 +4,13 @@
 //! 实现了破碎的像素地牢中的8种法杖逻辑
 //! 注意：所有渲染由其他模块处理，这里只处理数据逻辑
 
+use bincode::serde::encode_to_vec;
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
+
+use crate::ItemCategory;
+use crate::ItemTrait;
+use crate::BINCODE_CONFIG;
 
 /// 法杖系统（8种法杖）
 #[derive(PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
@@ -42,12 +47,12 @@ impl Wand {
             identified: false,
         }
     }
-    
+
     /// 随机生成新法杖（5%概率为诅咒法杖）
     pub fn random_new() -> Self {
         use rand::Rng;
         let mut rng = rand::rng();
-        
+
         let kinds = [
             WandKind::MagicMissile,
             WandKind::Fireblast,
@@ -60,7 +65,7 @@ impl Wand {
         ];
         let kind = kinds[rng.random_range(0..kinds.len())];
         let level = rng.random_range(0..=2);
-        
+
         if rng.random_bool(0.05) {
             Wand::new_cursed(kind, level)
         } else {
@@ -196,11 +201,10 @@ impl Wand {
 }
 
 /// 法杖种类枚举（8种）
-#[derive(Copy, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Copy, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize, Default)]
 pub enum WandKind {
     #[default]
-    MagicMissile,   // 魔法飞弹（基础法杖）
+    MagicMissile, // 魔法飞弹（基础法杖）
     Fireblast,      // 火焰冲击（范围伤害）
     Frost,          // 寒冰（冻结效果）
     Lightning,      // 闪电（连锁伤害）
@@ -213,7 +217,7 @@ pub enum WandKind {
 impl Default for Wand {
     fn default() -> Self {
         Wand {
-            kind: WandKind::MagicMissile,  // 默认选择魔法飞弹法杖（基础类型）
+            kind: WandKind::MagicMissile, // 默认选择魔法飞弹法杖（基础类型）
             level: 0,                     // 默认等级0
             charges: 3,                   // 基础充能3
             max_charges: 3,               // 最大充能3
@@ -223,10 +227,79 @@ impl Default for Wand {
     }
 }
 
-
-
 impl From<WandKind> for Wand {
     fn from(kind: WandKind) -> Self {
         Wand::new(kind, 0) // Default to level 0
+    }
+}
+
+impl ItemTrait for Wand {
+    /// 生成唯一堆叠标识（包含所有关键属性）
+    fn stacking_id(&self) -> u64 {
+        use seahash::SeaHasher;
+        use std::hash::Hasher;
+
+        let mut hasher = SeaHasher::new();
+        let bytes = encode_to_vec(
+            &(
+                self.kind,
+                self.level,
+                self.cursed,
+                self.identified,
+                self.max_charges, // 包含最大充能数
+                self.charges,     // 包含当前充能数
+            ),
+            BINCODE_CONFIG,
+        )
+        .unwrap();
+
+        hasher.write(&bytes);
+        hasher.finish()
+    }
+
+    /// 法杖不可堆叠
+    fn is_stackable(&self) -> bool {
+        false
+    }
+
+    /// 最大堆叠数量固定为1
+    fn max_stack(&self) -> u32 {
+        1
+    }
+
+    fn display_name(&self) -> String {
+        self.name()
+    }
+    fn category(&self) -> ItemCategory {
+        ItemCategory::Wand
+    }
+    fn sort_value(&self) -> u32 {
+        // 基础权重 = 等级 * 10（确保高等级法杖优先）
+        let level_weight = self.level as u32 * 10;
+
+        // 按法杖稀有度和战略价值分配基础分值
+        let type_weight = match self.kind {
+            WandKind::Disintegration => 100, // 瓦解法杖（最强攻击）
+            WandKind::Corruption => 95,      // 腐化法杖（战略控制）
+            WandKind::Lightning => 90,       // 闪电法杖（连锁攻击）
+            WandKind::LivingEarth => 85,     // 活体大地（召唤坦克）
+            WandKind::Fireblast => 80,       // 火焰冲击（范围伤害）
+            WandKind::Frost => 75,           // 寒冰法杖（控场能力）
+            WandKind::Regrowth => 70,        // 再生法杖（治疗辅助）
+            WandKind::MagicMissile => 65,    // 魔法飞弹（基础法杖）
+        };
+
+        // 诅咒惩罚（降低排序优先级）
+        let curse_penalty = if self.cursed { 50 } else { 0 };
+
+        // 充能状态加成（满充能提升优先级）
+        let charge_bonus = if self.charges == self.max_charges {
+            (self.max_charges as u32) * 2
+        } else {
+            0
+        };
+
+        // 最终计算公式（确保类型权重主导排序）
+        (type_weight * 100) + level_weight + charge_bonus - curse_penalty
     }
 }

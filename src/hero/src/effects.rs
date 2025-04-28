@@ -9,7 +9,6 @@ use crate::dungeon;
 
 use combat::Combatant;
 
-
 /// 英雄效果管理系统
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Encode, Decode)]
 pub struct EffectManager {
@@ -93,7 +92,7 @@ impl EffectManager {
     /// 更新所有效果（每回合调用）
     pub fn update(&mut self) -> Vec<EffectType> {
         let mut expired = Vec::new();
-        
+
         self.effects.retain(|&ty, e| {
             let keep = e.update();
             if !keep {
@@ -141,7 +140,7 @@ impl Hero {
     /// 处理效果伤害（每回合调用）
     pub fn process_effects(&mut self) {
         let mut damage_total = 0;
-        
+
         // 计算所有伤害型效果
         for effect in self.effects.active_effects() {
             damage_total += effect.damage();
@@ -175,13 +174,13 @@ impl EffectSystem for Hero {
                 return;
             }
         }
-        
+
         self.effects.add(effect);
     }
 
     fn remove_effect(&mut self, effect_type: EffectType) {
         self.effects.remove(effect_type);
-        
+
         // 特殊效果移除处理
         match effect_type {
             EffectType::Invisibility => {
@@ -197,7 +196,7 @@ impl EffectSystem for Hero {
 
     fn update_effects(&mut self) {
         let expired = self.effects.update();
-        
+
         // 处理过期效果的特殊逻辑
         for effect_type in expired {
             match effect_type {
@@ -207,7 +206,7 @@ impl EffectSystem for Hero {
                 _ => {}
             }
         }
-        
+
         // 处理本回合伤害
         self.process_effects();
     }

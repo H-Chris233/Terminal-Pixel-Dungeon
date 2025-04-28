@@ -4,10 +4,17 @@
 //! 实现了破碎的像素地牢(SPD)中的10种卷轴逻辑
 //! 注意：所有渲染由其他模块处理，这里只处理数据逻辑
 
+use bincode::serde::encode_to_vec;
 use bincode::{Decode, Encode};
+use seahash::SeaHasher;
 use serde::{Deserialize, Serialize};
+use std::hash::Hasher;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
+
+use crate::ItemCategory;
+use crate::ItemTrait;
+use crate::BINCODE_CONFIG;
 
 /// 卷轴系统（完整10种）
 #[derive(Eq, Hash, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
@@ -38,41 +45,41 @@ impl Scroll {
             exotic: true,
         }
     }
-    
+
     /// 随机生成新卷轴（10%概率为异变卷轴）
     pub fn random_new() -> Self {
         use rand::Rng;
         let mut rng = rand::rng();
-        
+
         let kinds = ScrollKind::iter().collect::<Vec<_>>();
         let kind = kinds[rng.random_range(0..kinds.len())];
-        
+
         if rng.random_bool(0.1) {
             Scroll::new_exotic(kind)
         } else {
             Scroll::new(kind)
         }
     }
-    
+
     /// 计算卷轴价值（考虑类型、鉴定状态和异变状态）
     pub fn value(&self) -> u32 {
         // 基础价值
         let base_value = match self.kind {
-            ScrollKind::Upgrade => 400,       // 强化装备最有价值
-            ScrollKind::RemoveCurse => 350,   // 解除诅咒次之
+            ScrollKind::Upgrade => 400,     // 强化装备最有价值
+            ScrollKind::RemoveCurse => 350, // 解除诅咒次之
             ScrollKind::Identify => 300,
             ScrollKind::Transmutation => 300, // 改变物品很有价值
             ScrollKind::Recharging => 250,    // 充能魔杖
-            ScrollKind::MagicMapping => 200,   // 地图探索
-            ScrollKind::MirrorImage => 200,    // 分身辅助
-            ScrollKind::Teleportation => 180,  // 传送逃生
-            ScrollKind::Lullaby => 150,        // 控制敌人
-            ScrollKind::Rage => 120,           // 狂暴战术价值较低
+            ScrollKind::MagicMapping => 200,  // 地图探索
+            ScrollKind::MirrorImage => 200,   // 分身辅助
+            ScrollKind::Teleportation => 180, // 传送逃生
+            ScrollKind::Lullaby => 150,       // 控制敌人
+            ScrollKind::Rage => 120,          // 狂暴战术价值较低
         };
 
         // 状态修正
         let mut value = if !self.identified {
-            (base_value as f32 * 0.6) as u32  // 未鉴定卷轴价值降低40%
+            (base_value as f32 * 0.6) as u32 // 未鉴定卷轴价值降低40%
         } else {
             base_value
         };
@@ -129,36 +136,92 @@ impl Scroll {
 }
 
 /// 卷轴种类（对应SPD中的10种卷轴）
-#[derive(Eq, Hash, PartialEq, Debug, Copy, Clone, Encode, Decode, Serialize, Deserialize, EnumIter)]
-#[derive(Default)]
+#[derive(
+    Eq,
+    Hash,
+    PartialEq,
+    Debug,
+    Copy,
+    Clone,
+    Encode,
+    Decode,
+    Serialize,
+    Deserialize,
+    EnumIter,
+    Default,
+)]
 pub enum ScrollKind {
-    Upgrade,       // 强化卷轴 - 强化装备
-    RemoveCurse,   // 祛咒卷轴 - 解除装备诅咒
+    Upgrade,     // 强化卷轴 - 强化装备
+    RemoveCurse, // 祛咒卷轴 - 解除装备诅咒
     #[default]
-    Identify,      // 鉴定卷轴 - 鉴定物品
-    MagicMapping,  // 地图卷轴 - 显示当前楼层地图
-    MirrorImage,   // 镜像卷轴 - 创建分身
+    Identify, // 鉴定卷轴 - 鉴定物品
+    MagicMapping, // 地图卷轴 - 显示当前楼层地图
+    MirrorImage, // 镜像卷轴 - 创建分身
     Teleportation, // 传送卷轴 - 随机传送
-    Lullaby,       // 催眠卷轴 - 使敌人沉睡
-    Rage,          // 狂暴卷轴 - 激怒敌人
-    Recharging,    // 充能卷轴 - 充能魔杖
+    Lullaby,     // 催眠卷轴 - 使敌人沉睡
+    Rage,        // 狂暴卷轴 - 激怒敌人
+    Recharging,  // 充能卷轴 - 充能魔杖
     Transmutation, // 变形卷轴 - 改变物品
 }
 
 impl Default for Scroll {
     fn default() -> Self {
         Scroll {
-            kind: ScrollKind::Identify,  // 默认选择鉴定卷轴（基础类型）
+            kind: ScrollKind::Identify, // 默认选择鉴定卷轴（基础类型）
             identified: false,          // 默认未鉴定
             exotic: false,              // 默认非异变卷轴
         }
     }
 }
 
-
-
 impl From<ScrollKind> for Scroll {
     fn from(kind: ScrollKind) -> Self {
         Scroll::new(kind)
+    }
+}
+
+impl ItemTrait for Scroll {
+    /// 生成堆叠标识（区分普通/异变卷轴和鉴定状态）
+    fn stacking_id(&self) -> u64 {
+        let mut hasher = SeaHasher::new();
+        let key = (
+            self.kind,
+            self.identified,
+            self.exotic, // 包含异变状态
+        );
+
+        let bytes = encode_to_vec(&key, BINCODE_CONFIG).unwrap();
+        hasher.write(&bytes);
+        hasher.finish()
+    }
+
+    /// 保持可堆叠属性
+    fn is_stackable(&self) -> bool {
+        true
+    }
+
+    /// 设置为无限堆叠
+    fn max_stack(&self) -> u32 {
+        u32::MAX // 4,294,967,295
+    }
+    fn display_name(&self) -> String {
+        self.name()
+    }
+    fn category(&self) -> ItemCategory {
+        ItemCategory::Scroll
+    }
+    fn sort_value(&self) -> u32 {
+        match self.kind {
+            ScrollKind::Upgrade => 100,      // 最高优先级（强化装备）
+            ScrollKind::RemoveCurse => 95,   // 解除诅咒非常重要
+            ScrollKind::Identify => 90,      // 基础鉴定功能
+            ScrollKind::Transmutation => 85, // 改变物品有战略价值
+            ScrollKind::Recharging => 80,    // 充能魔杖对法师重要
+            ScrollKind::MagicMapping => 75,  // 探索类优先级中等
+            ScrollKind::MirrorImage => 70,   // 分身战术价值
+            ScrollKind::Teleportation => 65, // 逃生工具
+            ScrollKind::Lullaby => 60,       // 控制类
+            ScrollKind::Rage => 55,          // 战术价值最低
+        }
     }
 }

@@ -31,14 +31,22 @@ impl Combatant for Hero {
 
     /// 计算防御力（包含护甲加成）
     fn defense(&self) -> u32 {
-        let armor_bonus = self.bag.equipment().armor().map_or(0, |a| a.defense() as u32);
+        let armor_bonus = self
+            .bag
+            .equipment()
+            .armor()
+            .map_or(0, |a| a.defense() as u32);
 
         self.base_defense + armor_bonus
     }
 
     /// 计算命中率（包含武器加成）
     fn accuracy(&self) -> u32 {
-        let weapon_bonus = self.bag.equipment().weapon().map_or(0, |w| w.accuracy_bonus() as u32);
+        let weapon_bonus = self
+            .bag
+            .equipment()
+            .weapon()
+            .map_or(0, |w| w.accuracy_bonus() as u32);
 
         // SPD基础精度80 + 每级2点 + 武器加成
         80 + (self.level * 2) + weapon_bonus
@@ -46,7 +54,11 @@ impl Combatant for Hero {
 
     /// 计算闪避率（受护甲惩罚）
     fn evasion(&self) -> u32 {
-        let armor_penalty = self.bag.equipment().armor().map_or(0, |a| a.evasion_penalty());
+        let armor_penalty = self
+            .bag
+            .equipment()
+            .armor()
+            .map_or(0, |a| a.evasion_penalty());
 
         // 每级3点 - 护甲惩罚
         (self.level * 3).saturating_sub(armor_penalty)
@@ -61,9 +73,19 @@ impl Combatant for Hero {
             Class::Huntress => 0.07,
         };
 
-        let weapon_bonus = self.bag.equipment().weapon().map_or(0.0, |w| w.crit_bonus());
+        let weapon_bonus = self
+            .bag
+            .equipment()
+            .weapon()
+            .map_or(0.0, |w| w.crit_bonus());
 
-        let ring_bonus: f32 = self.bag.equipment().rings().iter().map(|r| r.crit_bonus()).sum();
+        let ring_bonus: f32 = self
+            .bag
+            .equipment()
+            .rings()
+            .iter()
+            .map(|r| r.crit_bonus())
+            .sum();
 
         // 基础10% + 职业加成 + 装备加成
         0.1 + class_bonus + weapon_bonus + ring_bonus
@@ -182,4 +204,3 @@ impl Hero {
         })
     }
 }
-

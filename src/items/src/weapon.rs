@@ -1,10 +1,16 @@
 //src/items/src/weapon.rs
 use crate::weapon::kind::*;
+use crate::ItemCategory;
+use crate::ItemTrait;
+use crate::BINCODE_CONFIG;
+use bincode::serde::encode_to_vec;
 use bincode::{Decode, Encode};
 use rand::Rng;
+use seahash::SeaHasher;
 use serde::{Deserialize, Serialize};
-use std::fmt;
 use std::cmp::Ordering;
+use std::fmt;
+use std::hash::Hasher;
 
 pub mod kind;
 pub mod tier;
@@ -38,7 +44,7 @@ pub enum WeaponMod {
 pub struct Weapon {
     pub name: String,                     // 武器名称
     pub tier: Tier,                       // 品阶1-5
-    pub damage: (u32, u32),           // 基础伤害范围(min,max)
+    pub damage: (u32, u32),               // 基础伤害范围(min,max)
     pub hit_chance: f32,                  // 基础命中率(0.0-1.0)
     pub str_requirement: u8,              // 力量需求
     pub enchanted: Option<WeaponEnhance>, // 附魔效果
@@ -77,12 +83,12 @@ impl Weapon {
             base_value: Self::base_value_for_tier(tier), // 根据品阶设置基础价值
         }
     }
-    
+
     /// 随机生成新武器（5%概率为诅咒武器）
     pub fn random_new() -> Self {
         use rand::Rng;
         let mut rng = rand::rng();
-        
+
         let tier = rng.random_range(1..=5);
         let kinds = [
             WeaponKind::Sword,
@@ -93,14 +99,14 @@ impl Weapon {
             WeaponKind::Whip,
         ];
         let kind = kinds[rng.random_range(0..kinds.len())];
-        
+
         let mut weapon = Weapon::new(tier, kind);
-        
+
         // 10%概率有附魔
         if rng.random_bool(0.1) {
             weapon.add_random_enhancement();
         }
-        
+
         // 随机改造方向
         let mods = [
             WeaponMod::Damage,
@@ -109,12 +115,12 @@ impl Weapon {
             WeaponMod::Balanced,
         ];
         weapon.modifier = mods[rng.random_range(0..mods.len())].clone();
-        
+
         // 5%概率被诅咒
         if rng.random_bool(0.05) {
             weapon.cursed = true;
         }
-        
+
         weapon
     }
 
@@ -194,11 +200,11 @@ impl Weapon {
         match str_diff.cmp(&0) {
             Ordering::Less => {
                 damage = (damage as f32 * (0.9f32).powi(-str_diff)) as u32;
-            },
+            }
             Ordering::Greater => {
                 damage += (damage as f32 * 0.05 * str_diff as f32) as u32;
-            },
-            _ => {},
+            }
+            _ => {}
         }
 
         // 改造修正
@@ -216,18 +222,18 @@ impl Weapon {
 
         damage.max(1)
     }
-    
+
     /// 获取武器暴击加成（基于武器类型和附魔效果）
     pub fn crit_bonus(&self) -> f32 {
         let base_bonus = match self.kind {
-            WeaponKind::Dagger => 0.15,   // 匕首有更高暴击率
+            WeaponKind::Dagger => 0.15, // 匕首有更高暴击率
             WeaponKind::Sword => 0.05,
             WeaponKind::Greataxe => 0.10, // 巨斧有较高暴击伤害
             WeaponKind::Spear => 0.03,
             WeaponKind::Mace => 0.0,
             WeaponKind::Whip => 0.07,
         };
-        
+
         // 幸运附魔增加暴击率
         if let Some(WeaponEnhance::Lucky) = self.enchanted {
             base_bonus + 0.15
@@ -238,19 +244,21 @@ impl Weapon {
 
     /// 添加随机附魔（还原Shattered PD的附魔概率）
     pub fn add_random_enhancement(&mut self) {
-        let enhancements = [WeaponEnhance::Burning,    // 25%概率点燃敌人3回合
+        let enhancements = [
+            WeaponEnhance::Burning,    // 25%概率点燃敌人3回合
             WeaponEnhance::Stunning,   // 20%概率眩晕敌人2回合
             WeaponEnhance::Vampiric,   // 恢复造成伤害的10%
             WeaponEnhance::Lucky,      // 暴击率+15%
             WeaponEnhance::Projecting, // 攻击距离+1
             WeaponEnhance::Grim,       // 对生命值低于20%的敌人必杀
-            WeaponEnhance::Chilling];
+            WeaponEnhance::Chilling,
+        ];
 
         // 确保100%获得一个随机附魔
         self.enchanted =
             Some(enhancements[rand::rng().random_range(0..enhancements.len())].clone());
     }
-    
+
     /// 武器鉴定逻辑（还原Shattered PD的鉴定机制）
     pub fn identify(&mut self) {
         self.identified = true;
@@ -260,11 +268,11 @@ impl Weapon {
     pub fn modify(&mut self, direction: WeaponMod) {
         self.modifier = direction;
     }
-    
+
     /// 获取武器伤害加成（基于强化等级和改造方向）
     pub fn damage_bonus(&self) -> u32 {
         let base_bonus = self.upgrade_level as u32;
-        
+
         match self.modifier {
             WeaponMod::Damage => (base_bonus as f32 * 1.3).round() as u32,
             WeaponMod::Speed => (base_bonus as f32 * 0.8).round() as u32,
@@ -283,13 +291,14 @@ impl Weapon {
             WeaponKind::Mace => -2,
             WeaponKind::Whip => 3,
         };
-        
-        base_bonus + match self.modifier {
-            WeaponMod::Damage => 0,
-            WeaponMod::Speed => 1,
-            WeaponMod::Accuracy => 3,
-            WeaponMod::Balanced => 1,
-        }
+
+        base_bonus
+            + match self.modifier {
+                WeaponMod::Damage => 0,
+                WeaponMod::Speed => 1,
+                WeaponMod::Accuracy => 3,
+                WeaponMod::Balanced => 1,
+            }
     }
 
     /// 获取武器攻击距离
@@ -298,7 +307,7 @@ impl Weapon {
             WeaponKind::Spear => 2,
             _ => 1,
         };
-        
+
         // 如果有投射附魔则增加1距离
         if let Some(WeaponEnhance::Projecting) = self.enchanted {
             base_range + 1
@@ -311,15 +320,13 @@ impl Weapon {
     pub fn is_ranged(&self) -> bool {
         self.range() > 1
     }
-    
 }
 
 /// 武器类型枚举（还原Shattered PD的武器分类）
-#[derive(Copy, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Copy, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize, Default)]
 pub enum WeaponKind {
     #[default]
-    Sword,    // 剑类：平衡型
+    Sword, // 剑类：平衡型
     Dagger,   // 匕首：高速低伤（+25%攻速）
     Greataxe, // 巨斧：低速高伤（+30%伤害）
     Spear,    // 长矛：中距攻击（攻击范围+1）
@@ -328,11 +335,10 @@ pub enum WeaponKind {
 }
 
 /// 武器品阶（还原Shattered PD的5阶系统）
-#[derive(Copy, PartialEq, Debug, Encode, Decode, Serialize, Deserialize, Clone)]
-#[derive(Default)]
+#[derive(Copy, PartialEq, Debug, Encode, Decode, Serialize, Deserialize, Clone, Default)]
 pub enum Tier {
     #[default]
-    One,   // 普通（白色）
+    One, // 普通（白色）
     Two,   // 优秀（绿色）
     Three, // 稀有（蓝色）
     Four,  // 史诗（紫色）
@@ -382,22 +388,20 @@ impl Default for Weapon {
     fn default() -> Self {
         Weapon {
             name: "短剑".to_string(),
-            tier: Tier::One,              // 一阶武器
-            damage: (1, 6),              // 基础伤害1-6
-            hit_chance: 0.8,             // 80%命中率
-            str_requirement: 10,         // 力量需求10
-            enchanted: None,             // 默认无附魔
+            tier: Tier::One,               // 一阶武器
+            damage: (1, 6),                // 基础伤害1-6
+            hit_chance: 0.8,               // 80%命中率
+            str_requirement: 10,           // 力量需求10
+            enchanted: None,               // 默认无附魔
             modifier: WeaponMod::Balanced, // 平衡改造
-            upgrade_level: 0,            // 未强化
-            cursed: false,               // 未诅咒
-            identified: false,           // 未鉴定
-            kind: WeaponKind::Sword,     // 剑类武器
-            base_value: 300,             // 一阶武器基础价值
+            upgrade_level: 0,              // 未强化
+            cursed: false,                 // 未诅咒
+            identified: false,             // 未鉴定
+            kind: WeaponKind::Sword,       // 剑类武器
+            base_value: 300,               // 一阶武器基础价值
         }
     }
 }
-
-
 
 impl fmt::Display for Weapon {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -440,13 +444,21 @@ impl fmt::Display for Weapon {
         // 添加鉴定状态
         info.push_str(&format!(
             "\n鉴定状态: {}",
-            if self.identified { "已鉴定" } else { "未鉴定" }
+            if self.identified {
+                "已鉴定"
+            } else {
+                "未鉴定"
+            }
         ));
 
         // 添加诅咒状态
         info.push_str(&format!(
             "\n诅咒状态: {}",
-            if self.cursed { "已诅咒" } else { "未诅咒" }
+            if self.cursed {
+                "已诅咒"
+            } else {
+                "未诅咒"
+            }
         ));
 
         write!(f, "{}", info)
@@ -494,9 +506,54 @@ impl fmt::Display for WeaponEnhance {
     }
 }
 
-
 impl From<(u32, WeaponKind)> for Weapon {
     fn from((tier, kind): (u32, WeaponKind)) -> Self {
         Weapon::new(tier, kind)
+    }
+}
+
+impl ItemTrait for Weapon {
+    /// 武器始终不可堆叠
+    fn is_stackable(&self) -> bool {
+        false
+    }
+
+    /// 生成唯一标识（虽然不可堆叠但仍需实现）
+    fn stacking_id(&self) -> u64 {
+        // 包含所有属性的哈希计算
+        let mut hasher = SeaHasher::new();
+        let bytes = encode_to_vec(
+            &(
+                self.tier.to_u32(),
+                self.upgrade_level,
+                &self.enchanted,
+                &self.modifier,
+                self.cursed,
+                self.kind,
+                self.damage,
+                self.str_requirement,
+                self.base_value,
+                self.hit_chance.to_bits(), // 精确处理浮点数
+            ),
+            BINCODE_CONFIG,
+        )
+        .unwrap();
+
+        hasher.write(&bytes);
+        hasher.finish()
+    }
+
+    /// 最大堆叠数量始终为1
+    fn max_stack(&self) -> u32 {
+        1
+    }
+    fn display_name(&self) -> String {
+        self.name.clone()
+    }
+    fn category(&self) -> ItemCategory {
+        ItemCategory::Weapon
+    }
+    fn sort_value(&self) -> u32 {
+        (self.tier as u32 * 100) + self.upgrade_level as u32
     }
 }

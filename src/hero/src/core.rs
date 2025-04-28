@@ -2,17 +2,16 @@
 use crate::Bag;
 use crate::BagError;
 use crate::HeroBehavior;
+use crate::InventorySystem;
 use crate::{
     class::Class,
     effects::{Effect, EffectManager, EffectType},
     rng::HeroRng,
 };
-use crate::InventorySystem;
 
-
-use combat::EffectType::Poison;
 use combat::enemy::Enemy;
 use combat::Combatant;
+use combat::EffectType::Poison;
 use dungeon::trap::Trap;
 use dungeon::trap::TrapEffect;
 use dungeon::Dungeon;
@@ -161,7 +160,7 @@ impl Hero {
             self.strength += 1;
         }
     }
-    
+
     /// 增强的事件处理
     fn handle_events(&mut self, events: Vec<InteractionEvent>) -> Result<(), HeroError> {
         for event in events {
@@ -188,9 +187,10 @@ impl Hero {
             return Err(HeroError::ActionFailed);
         }
 
-        if let Some(effect) = trap.trigger(&mut self.rng);
-        self.apply_trap_effect(effect);
-        Ok(())
+        if let Some(effect) = trap.trigger(&mut self.rng) {
+            self.apply_trap_effect(effect);
+            Ok(())
+        }
     }
 
     pub fn heal(&mut self, amount: u32) {
@@ -204,9 +204,13 @@ impl Hero {
     /// 应用陷阱效果
     pub fn apply_trap_effect(&mut self, effect: TrapEffect) {
         match effect {
-            TrapEffect::Damage(damage) => {self.take_damage(damage);},
-            TrapEffect::Poison(_, turn) => {self.effects.add(Effect::new(EffectType::Poison, turn));},
-            _ => {},
+            TrapEffect::Damage(damage) => {
+                self.take_damage(damage);
+            }
+            TrapEffect::Poison(_, turn) => {
+                self.effects.add(Effect::new(EffectType::Poison, turn));
+            }
+            _ => {}
         };
     }
 
@@ -214,7 +218,7 @@ impl Hero {
     pub fn enter_combat(&mut self, enemy: Enemy) {
         // 战斗初始化逻辑
     }
-    
+
     pub fn notify(&self, msg: &str) {
         todo!();
     }

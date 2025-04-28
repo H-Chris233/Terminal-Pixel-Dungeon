@@ -1,10 +1,10 @@
 // src/hero/rng.rs
-use bincode::{Decode, Encode};
 use bincode::de::{BorrowDecoder, Decoder};
 use bincode::BorrowDecode;
+use bincode::{Decode, Encode};
 use rand::distr::uniform;
-use rand::{Rng, SeedableRng};
 use rand::seq::SliceRandom;
+use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg32;
 use serde::{Deserialize, Serialize};
 

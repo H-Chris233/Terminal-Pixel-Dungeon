@@ -2,12 +2,9 @@
 use bincode::{Decode, Encode};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use std::cmp::Ordering;
+use std::{cmp::Ordering, collections::HashMap, convert::TryInto, sync::Arc};
 use thiserror::Error;
 
-use items::ItemTrait;
-
-/// 库存系统错误类型
 #[derive(Debug, Error, PartialEq)]
 pub enum InventoryError {
     #[error("背包已满")]
@@ -18,92 +15,245 @@ pub enum InventoryError {
     UnknownItemType,
     #[error("无效索引")]
     InvalidIndex,
+    #[error("数量转换失败")] // FIXED: 新增错误类型
+    QuantityConversion,
 }
 
-/// 通用库存系统（优化实现）
+/// 库存槽位（支持智能指针）
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
-pub struct Inventory<T: ItemTrait + PartialEq + Serialize + DeserializeOwned> {
-    slots: Vec<InventorySlot<T>>, // 使用独立槽位设计
+enum InventorySlot<T: ItemTrait + Serialize + DeserializeOwned> {
+    Single(Arc<T>),
+    Stackable(Arc<T>, u32),
+}
+
+/// 优化后的库存系统
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
+pub struct Inventory<T: ItemTrait + Serialize + DeserializeOwned> {
+    slots: Vec<InventorySlot<T>>,
+    stack_map: HashMap<u64, Vec<usize>>, // 堆叠索引加速
     capacity: usize,
 }
 
-/// 库存槽位（支持单物品或多数量）
-#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
-enum InventorySlot<T: ItemTrait + Serialize + DeserializeOwned> {
-    Single(T),         // 不可堆叠物品
-    Stackable(T, u32), // 可堆叠物品（类型+数量）
-}
-
-impl<T: ItemTrait + PartialEq + Serialize + DeserializeOwned> Inventory<T> {
+impl<T: ItemTrait + Serialize + DeserializeOwned> Inventory<T> {
     /// 创建新库存
     pub fn new(capacity: usize) -> Self {
         Self {
             slots: Vec::with_capacity(capacity),
+            stack_map: HashMap::new(),
             capacity,
         }
     }
 
-    /// 添加物品（自动处理堆叠逻辑）
-    pub fn add(&mut self, item: T) -> Result<(), InventoryError>{
-        if self.slots.len() >= self.capacity {
-            return Err(InventoryError::Full);
-        }
-
+    /// 安全添加物品（带类型转换检查）
+    pub fn add(&mut self, item: T) -> Result<(), InventoryError> {
+        let item = Arc::new(item);
         if item.is_stackable() {
             let max_stack = item.max_stack();
-            // 查找可堆叠的槽位
-            for slot in &mut self.slots {
-                if let InventorySlot::Stackable(existing_item, count) = slot {
-                    if existing_item == &item && *count < max_stack.into() {
-                        *count += 1;
-                        return Ok(());
+            let stack_id = item.stacking_id();
+            if stack_id == 0 {
+                return Err(InventoryError::UnknownItemType);
+            }
+
+            if let Some(indices) = self.stack_map.get_mut(&stack_id) {
+                // 反向遍历优先检查最近添加的堆叠
+                for &i in indices.iter().rev() {
+                    if let InventorySlot::Stackable(_, ref mut count) = &mut self.slots[i] {
+                        if *count < max_stack {
+                            *count += 1;
+
+                            // 自动清理已满堆叠的索引
+                            if *count == max_stack {
+                                indices.retain(|&x| x != i);
+                            }
+                            return Ok(());
+                        }
                     }
                 }
             }
-            // 没有找到可堆叠的槽位，创建新堆叠
-            self.slots.push(InventorySlot::Stackable(item, 1));
+
+            // 容量检查
+            if self.slots.len() >= self.capacity {
+                return Err(InventoryError::Full);
+            }
+
+            // 更新索引
+            let new_index = self.slots.len();
+            self.slots.push(InventorySlot::Stackable(item.clone(), 1));
+            self.stack_map.entry(stack_id).or_default().push(new_index);
         } else {
+            // 安全类型转换
+            let quantity: usize = 1
+                .try_into()
+                .map_err(|_| InventoryError::QuantityConversion)?;
+
+            if self.slots.len() + quantity > self.capacity {
+                return Err(InventoryError::Full);
+            }
+
             self.slots.push(InventorySlot::Single(item));
         }
         Ok(())
     }
 
-    /// 添加并排序物品
-    pub fn add_sorted<F>(&mut self, item: T, compare: F) -> Result<(), InventoryError>
-    where
-        F: FnMut(&T, &T) -> Ordering,
-    {
-        self.add(item)?;
-        self.sort_by(compare);
+    /// 批量添加优化实现
+    pub fn add_multiple(&mut self, item: T, quantity: u32) -> Result<(), InventoryError> {
+        let item = Arc::new(item);
+        let stack_id = item.stacking_id();
+
+        let quantity_usize = quantity
+            .try_into()
+            .map_err(|_| InventoryError::QuantityConversion)?;
+
+        if item.is_stackable() {
+            let max_stack = item.max_stack();
+            let mut remaining = quantity;
+
+            // 增强的堆叠填充逻辑
+            if let Some(indices) = self.stack_map.get_mut(&stack_id) {
+                let mut i = 0;
+                while i < indices.len() {
+                    let index = indices[i];
+                    if let InventorySlot::Stackable(_, ref mut count) = self.slots[index] {
+                        let available = max_stack - *count;
+                        if available > 0 {
+                            let add = remaining.min(available);
+                            *count += add;
+                            remaining -= add;
+
+                            if *count == max_stack {
+                                indices.remove(i);
+                                continue;
+                            }
+                        }
+                    }
+                    i += 1;
+                }
+            }
+
+            // 预计算所需空间
+            let needed_slots = (remaining + max_stack - 1) / max_stack;
+            if self.slots.len() + needed_slots as usize > self.capacity {
+                return Err(InventoryError::Full);
+            }
+
+            // 批量添加优化
+            let new_items = (remaining + max_stack - 1) / max_stack;
+            self.slots.reserve(new_items as usize);
+
+            let start_index = self.slots.len();
+            let mut current = remaining;
+            while current > 0 {
+                let amount = current.min(max_stack);
+                self.slots
+                    .push(InventorySlot::Stackable(item.clone(), amount));
+                current -= amount;
+            }
+            self.update_stack_map(stack_id, start_index..self.slots.len());
+        } else {
+            // 内存预分配
+            if self.slots.len() + quantity_usize > self.capacity {
+                return Err(InventoryError::Full);
+            }
+            self.slots.reserve(quantity_usize);
+
+            for _ in 0..quantity {
+                self.slots.push(InventorySlot::Single(item.clone()));
+            }
+        }
         Ok(())
     }
 
-    pub fn get(&self, index: usize) -> Option<&T> {
-        self.items().get(index)
-    }
-    pub fn remove_stack(&mut self, index: usize) -> Result<T, InventoryError> {
+    /// 更新后的移除方法
+    pub fn remove(&mut self, index: usize) -> Result<Arc<T>, InventoryError> {
         if index >= self.slots.len() {
             return Err(InventoryError::InvalidIndex);
         }
+
+        // 获取堆叠ID并准备更新索引
+        let stack_id = match &self.slots[index] {
+            InventorySlot::Single(item) => item.stacking_id(),
+            InventorySlot::Stackable(item, _) => item.stacking_id(),
+        };
+
+        let result = match &mut self.slots[index] {
+            InventorySlot::Single(_) => {
+                let slot = self.slots.remove(index);
+                self.update_indexes_after_removal(index);
+                self.cleanup_stack_map(stack_id, index);
+                match slot {
+                    InventorySlot::Single(item) => Ok(item),
+                    _ => unreachable!(),
+                }
+            }
+            InventorySlot::Stackable(item, count) => {
+                // 预检查堆叠数量
+                if *count == 0 {
+                    return Err(InventoryError::InvalidIndex);
+                }
+
+                let cloned_item = item.clone();
+                *count -= 1; // 减少堆叠数量
+
+                match *count {
+                    0 => {
+                        // 完全移除空堆叠
+                        self.slots.remove(index);
+                        self.update_indexes_after_removal(index);
+                        self.cleanup_stack_map(stack_id, index);
+                    }
+                    _ => {
+                        // 更新可堆叠索引列表
+                        let indices = self.stack_map.entry(stack_id).or_default();
+
+                        // 使用二分查找保持有序插入
+                        match indices.binary_search(&index) {
+                            Ok(_) => {} // 已存在则保留
+                            Err(pos) => indices.insert(pos, index),
+                        }
+                    }
+                }
+
+                Ok(cloned_item)
+            }
+        };
+
+        result
+    }
+
+    /// 移除整个槽位
+    pub fn remove_slot(&mut self, index: usize) -> Result<Arc<T>, InventoryError> {
+        // FIXED: 返回Arc<T>
+        if index >= self.slots.len() {
+            return Err(InventoryError::InvalidIndex);
+        }
+
+        // 获取堆叠ID并准备更新索引
+        let stack_id = match &self.slots[index] {
+            InventorySlot::Single(item) => item.stacking_id(),
+            InventorySlot::Stackable(item, _) => item.stacking_id(),
+        };
+
         let slot = self.slots.remove(index);
+        self.update_indexes_after_removal(index);
+        self.cleanup_stack_map(stack_id, index); // FIXED: 增加索引清理
+
         match slot {
             InventorySlot::Single(item) => Ok(item),
             InventorySlot::Stackable(item, _) => Ok(item),
         }
     }
 
-    /// 整理背包（按分类和排序值）
-    pub fn organize(&mut self)
-    where
-        T: Ord, // 添加排序所需的 trait 约束
-    {
-        self.slots.sort_by(|a, b| match (a, b) {
+    /// 整理背包
+    pub fn organize(&mut self) {
+        // 使用统一的排序逻辑
+        self.sort_by(|a, b| match (a, b) {
             (InventorySlot::Single(a), InventorySlot::Single(b))
             | (InventorySlot::Stackable(a, _), InventorySlot::Stackable(b, _)) => a
                 .category()
                 .cmp(&b.category())
                 .then_with(|| b.sort_value().cmp(&a.sort_value())),
-            _ => Ordering::Equal,
+            (InventorySlot::Single(_), InventorySlot::Stackable(_, _)) => Ordering::Less,
+            (InventorySlot::Stackable(_, _), InventorySlot::Single(_)) => Ordering::Greater,
         });
     }
 
@@ -112,11 +262,27 @@ impl<T: ItemTrait + PartialEq + Serialize + DeserializeOwned> Inventory<T> {
     where
         F: FnMut(&T, &T) -> Ordering,
     {
+        // 原地排序代替克隆
         self.slots.sort_by(|a, b| match (a, b) {
             (InventorySlot::Single(a), InventorySlot::Single(b))
             | (InventorySlot::Stackable(a, _), InventorySlot::Stackable(b, _)) => compare(a, b),
-            _ => Ordering::Equal,
+            (InventorySlot::Single(_), InventorySlot::Stackable(_, _)) => Ordering::Less,
+            (InventorySlot::Stackable(_, _), InventorySlot::Single(_)) => Ordering::Greater,
         });
+
+        // 重建索引映射
+        let mut new_stack_map = HashMap::new();
+        for (new_idx, slot) in self.slots.iter().enumerate() {
+            let stack_id = match slot {
+                InventorySlot::Single(i) => i.stacking_id(),
+                InventorySlot::Stackable(i, _) => i.stacking_id(),
+            };
+            new_stack_map
+                .entry(stack_id)
+                .or_insert_with(Vec::new)
+                .push(new_idx);
+        }
+        self.stack_map = new_stack_map;
     }
 
     /// 查找物品索引
@@ -129,6 +295,55 @@ impl<T: ItemTrait + PartialEq + Serialize + DeserializeOwned> Inventory<T> {
         })
     }
 
+    /// 添加并排序物品
+    pub fn add_sorted<F>(&mut self, item: T, compare: F) -> Result<(), InventoryError>
+    where
+        F: FnMut(&T, &T) -> Ordering,
+    {
+        self.add(item)?;
+        self.sort_by(compare);
+        Ok(())
+    }
+
+    /// 更新移除位置之后的所有索引
+    fn update_indexes_after_removal(&mut self, removed_index: usize) {
+    for indices in self.stack_map.values_mut() {
+        *indices = indices.iter()
+            .filter_map(|&i| {
+                if i == removed_index {
+                    None
+                } else if i > removed_index {
+                    Some(i - 1)
+                } else {
+                    Some(i)
+                }
+            })
+            .collect();
+        indices.sort_unstable();
+    }
+}
+
+    /// 清理特定槽位的索引
+    fn cleanup_stack_map(&mut self, stack_id: u64, removed_index: usize) {
+        if let Some(indices) = self.stack_map.get_mut(&stack_id) {
+            // 二分查找移除索引
+            if let Ok(pos) = indices.binary_search(&removed_index) {
+                indices.remove(pos);
+            }
+            // 清理空条目
+            if indices.is_empty() {
+                self.stack_map.remove(&stack_id);
+            }
+        }
+    }
+
+    /// 更新stack_map索引（用于批量添加）
+    fn update_stack_map(&mut self, stack_id: u64, new_indices: impl Iterator<Item = usize>) {
+        let entry = self.stack_map.entry(stack_id).or_default();
+        entry.extend(new_indices);
+        entry.sort(); // 保持有序便于二分查找
+    }
+
     /// 获取所有物品（用于UI渲染）
     pub fn items(&self) -> Vec<(&T, u32)> {
         self.slots
@@ -138,139 +353,5 @@ impl<T: ItemTrait + PartialEq + Serialize + DeserializeOwned> Inventory<T> {
                 InventorySlot::Stackable(item, count) => (item, *count),
             })
             .collect()
-    }
-
-    /// 当前物品数量
-    pub fn len(&self) -> usize {
-        self.slots.len()
-    }
-
-    /// 检查是否为空
-    pub fn is_empty(&self) -> bool {
-        self.slots.is_empty()
-    }
-
-    /// 获取容量
-    pub fn capacity(&self) -> usize {
-        self.capacity
-    }
-}
-
-impl<T: ItemTrait + PartialEq + Serialize + DeserializeOwned> Inventory<T> {
-    /// 实现其他不依赖具体类型的通用方法
-    /// 例如批量添加的扩展方法：
-
-    /// 批量添加物品
-    pub fn add_multiple(&mut self, item: T, quantity: u32) -> Result<(), InventoryError>
-    where
-        T: Clone,
-    {
-        if item.is_stackable() {
-            let max_stack = item.max_stack();
-            let remaining = self.try_add_to_existing(&item, quantity, max_stack.into())?;
-            self.add_new_stacks(item, remaining, max_stack.into())
-        } else {
-            if self.slots.len() + quantity as usize > self.capacity {
-                return Err(InventoryError::Full);
-            }
-            for _ in 0..quantity {
-                self.slots.push(InventorySlot::Single(item.clone()));
-            }
-            Ok(())
-        }
-    }
-
-    /// 尝试添加到现有堆叠
-    fn try_add_to_existing(
-        &mut self,
-        item: &T,
-        mut quantity: u32,
-        max_stack: u32,
-    ) -> Result<u32, InventoryError> {
-        for slot in &mut self.slots {
-            if let InventorySlot::Stackable(existing, count) = slot {
-                if existing == item && *count < max_stack {
-                    let available_space = max_stack - *count;
-                    let add_amount = quantity.min(available_space);
-                    *count += add_amount;
-                    quantity -= add_amount;
-                    if quantity == 0 {
-                        return Ok(0);
-                    }
-                }
-            }
-        }
-        Ok(quantity)
-    }
-
-    /// 添加新堆叠
-    fn add_new_stacks(
-        &mut self,
-        item: T,
-        mut remaining: u32,
-        max_stack: u32,
-    ) -> Result<(), InventoryError> {
-        let stacks_needed = (remaining + max_stack - 1) / max_stack; // 向上取整
-        if self.slots.len() + stacks_needed as usize > self.capacity {
-            return Err(InventoryError::Full);
-        }
-
-        while remaining > 0 {
-            let amount = remaining.min(max_stack);
-            self.slots
-                .push(InventorySlot::Stackable(item.clone(), amount));
-            remaining -= amount;
-        }
-        Ok(())
-    }
-
-    /// 清空库存
-    pub fn clear(&mut self) {
-        self.slots.clear();
-    }
-
-    /// 移除单个物品（如果是堆叠则减少数量）
-    pub fn remove(&mut self, index: usize) -> Result<T, InventoryError>
-    where
-        T: Clone,
-    {
-        // 边界检查
-        if index >= self.slots.len() {
-            return Err(InventoryError::InvalidIndex);
-        }
-
-        // 获取可变引用并匹配槽位类型
-        match &mut self.slots[index] {
-            // 处理单个物品槽位
-            InventorySlot::Single(_) => {
-                let slot = self.slots.remove(index);
-                if let InventorySlot::Single(item) = slot {
-                    Ok(item)
-                } else {
-                    unreachable!() // 类型已匹配，不可能执行到这里
-                }
-            }
-
-            // 处理可堆叠物品槽位
-            InventorySlot::Stackable(item, count) => {
-                // 数量安全检查
-                if *count == 0 {
-                    return Err(InventoryError::InvalidIndex);
-                }
-
-                // 克隆物品用于返回
-                let cloned_item = item.clone();
-
-                // 减少堆叠数量
-                *count -= 1;
-
-                // 如果数量归零则移除整个槽位
-                if *count == 0 {
-                    self.slots.remove(index);
-                }
-
-                Ok(cloned_item)
-            }
-        }
     }
 }
