@@ -1,8 +1,15 @@
 //src/items/src/food.rs
+use bincode::serde::encode_to_vec;
 use bincode::{Decode, Encode};
+use seahash::SeaHasher;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::hash::Hasher;
 use tui::style::Color;
+
+use crate::ItemCategory;
+use crate::ItemTrait;
+use crate::BINCODE_CONFIG;
 
 /// 食物系统（精确还原游戏机制）
 #[derive(Eq, Hash, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
@@ -52,12 +59,12 @@ impl Food {
             FoodKind::FrozenCarpaccio => "冰冻肉片".to_string(),
         }
     }
-    
+
     /// 随机生成新食物
     pub fn random_new() -> Self {
         use rand::Rng;
         let mut rng = rand::rng();
-        
+
         let kinds = [
             FoodKind::Ration,
             FoodKind::Pasty,
@@ -65,21 +72,21 @@ impl Food {
             FoodKind::FrozenCarpaccio,
         ];
         let kind = kinds[rng.random_range(0..kinds.len())];
-        
+
         let mut food = Food::new(kind);
-        
+
         // 如果是神秘肉，有30%概率已烹饪
         if let FoodKind::MysteryMeat = kind {
             if rng.random_bool(0.3) {
                 food.cook();
             }
         }
-        
+
         // 10%概率被污染
         if rng.random_bool(0.1) {
             food.contaminated = true;
         }
-        
+
         food
     }
 
@@ -210,18 +217,58 @@ impl fmt::Display for Food {
 impl Default for Food {
     fn default() -> Self {
         Food {
-            kind: FoodKind::Ration,  // 默认类型：干粮
-            energy: 350,             // 标准饱食度
-            quantity: 1,             // 单个物品
-            cooked: false,           // 未烹饪（对干粮无意义）
-            contaminated: false,     // 未污染
+            kind: FoodKind::Ration, // 默认类型：干粮
+            energy: 350,            // 标准饱食度
+            quantity: 1,            // 单个物品
+            cooked: false,          // 未烹饪（对干粮无意义）
+            contaminated: false,    // 未污染
         }
     }
 }
 
-
 impl From<FoodKind> for Food {
     fn from(kind: FoodKind) -> Self {
         Food::new(kind)
+    }
+}
+
+impl ItemTrait for Food {
+    /// 生成堆叠标识（基于关键属性）
+    fn stacking_id(&self) -> u64 {
+        let mut hasher = SeaHasher::new();
+        // 关键区分属性：类型 + 烹饪状态 + 污染状态
+        let key = (self.kind, self.cooked, self.contaminated);
+        let bytes = encode_to_vec(&key, BINCODE_CONFIG).unwrap();
+        hasher.write(&bytes);
+        hasher.finish()
+    }
+
+    /// 食物可以堆叠（相同类型和状态）
+    fn is_stackable(&self) -> bool {
+        true
+    }
+
+    /// 设置差异化的最大堆叠数量（基于游戏平衡）
+    fn max_stack(&self) -> u32 {
+        match self.kind {
+            FoodKind::Ration => 8,          // 基础干粮高堆叠
+            FoodKind::Pasty => 4,           // 肉馅饼中等堆叠
+            FoodKind::MysteryMeat => 3,     // 生肉低堆叠
+            FoodKind::FrozenCarpaccio => 2, // 特殊物品最低堆叠
+        }
+    }
+    fn display_name(&self) -> String {
+        self.name()
+    }
+    fn category(&self) -> ItemCategory {
+        ItemCategory::Food
+    }
+    fn sort_value(&self) -> u32 {
+        match self.kind {
+            FoodKind::Ration => 100,
+            FoodKind::Pasty => 90,
+            FoodKind::MysteryMeat => 80,
+            _ => 0,
+        }
     }
 }

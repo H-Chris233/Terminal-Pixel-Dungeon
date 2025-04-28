@@ -1,12 +1,19 @@
 //src/items/src/potion.rs
+use bincode::serde::encode_to_vec;
 use bincode::{Decode, Encode};
 use rand::prelude::IndexedRandom;
 use rand::seq::SliceRandom;
+use seahash::SeaHasher;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::hash::Hasher;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 use tui::style::Color;
+
+use crate::ItemCategory;
+use crate::ItemTrait;
+use crate::BINCODE_CONFIG;
 
 /// 药水系统（完整12种药水）
 #[derive(Eq, Hash, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
@@ -66,7 +73,6 @@ impl Potion {
         };
 
         // 状态修正
-        
 
         if !self.identified {
             (base_value as f32 * 0.5) as u32 // 未鉴定药水价值减半
@@ -97,18 +103,32 @@ impl Potion {
 
     /// 鉴定药水
     pub fn identify(&mut self) {
-        self.identified = true;
+        if !self.identified {
+            self.identified = true;
+            // 鉴定后显示标准颜色
+            self.color = self.kind.standard_color();
+        }
     }
 }
 
 /// 药水类型（完整12种）
 #[derive(
-    Debug, Clone, Copy, EnumIter, Eq, Hash, PartialEq, Encode, Decode, Serialize, Deserialize,
+    Debug,
+    Clone,
+    Copy,
+    EnumIter,
+    Eq,
+    Hash,
+    PartialEq,
+    Encode,
+    Decode,
+    Serialize,
+    Deserialize,
+    Default,
 )]
-#[derive(Default)]
 pub enum PotionKind {
     #[default]
-    Healing,      // 治疗
+    Healing, // 治疗
     Experience,   // 经验
     ToxicGas,     // 毒气
     ParalyticGas, // 麻痹气体
@@ -265,13 +285,12 @@ impl fmt::Display for PotionKind {
 impl Default for Potion {
     fn default() -> Self {
         Potion {
-            kind: PotionKind::Healing,  // 默认类型：治疗药水（最基础类型）
+            kind: PotionKind::Healing, // 默认类型：治疗药水（最基础类型）
             identified: false,         // 默认未鉴定
             color: PotionColor::Red,   // 治疗药水的标准颜色
         }
     }
 }
-
 
 impl From<PotionKind> for Potion {
     fn from(kind: PotionKind) -> Self {
@@ -280,6 +299,59 @@ impl From<PotionKind> for Potion {
             kind,
             identified: false, // Default to unidentified
             color,
+        }
+    }
+}
+
+impl ItemTrait for Potion {
+    /// 生成堆叠标识（保持颜色/类型区分）
+    fn stacking_id(&self) -> u64 {
+        let mut hasher = SeaHasher::new();
+
+        if !self.identified {
+            let key = (&self.color, false);
+            let bytes = encode_to_vec(&key, BINCODE_CONFIG).unwrap();
+            hasher.write(&bytes);
+            hasher.finish()
+        } else {
+            let key = (&self.kind, true);
+            let bytes = encode_to_vec(&key, BINCODE_CONFIG).unwrap();
+            hasher.write(&bytes);
+            hasher.finish()
+        }
+    }
+
+    /// 保持可堆叠属性
+    fn is_stackable(&self) -> bool {
+        true
+    }
+
+    /// 设置为u32最大值模拟无限堆叠
+    fn max_stack(&self) -> u32 {
+        u32::MAX // 4,294,967,295
+    }
+
+    fn display_name(&self) -> String {
+        self.name()
+    }
+    fn category(&self) -> ItemCategory {
+        ItemCategory::Potion
+    }
+    fn sort_value(&self) -> u32 {
+        match self.kind {
+            PotionKind::Healing => 12,
+            PotionKind::Experience => 11,
+            PotionKind::ToxicGas => 10,
+            PotionKind::ParalyticGas => 9,
+            PotionKind::LiquidFlame => 8,
+            PotionKind::Levitation => 7,
+            PotionKind::Invisibility => 6,
+            PotionKind::Purity => 5,
+            PotionKind::Frost => 4,
+            PotionKind::Strength => 3,
+            PotionKind::MindVision => 2,
+            PotionKind::Haste => 1,
+            _ => 0,
         }
     }
 }

@@ -1,7 +1,14 @@
 //src/items/src/ring.rs
+use bincode::serde::encode_to_vec;
 use bincode::{Decode, Encode};
+use seahash::SeaHasher;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::hash::Hasher;
+
+use crate::ItemCategory;
+use crate::ItemTrait;
+use crate::BINCODE_CONFIG;
 
 /// 戒指系统（基于破碎的像素地牢v1.0.1设计）
 #[derive(PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
@@ -51,12 +58,12 @@ impl Ring {
             RingKind::Furor => 600,          // 狂怒之戒
         }
     }
-    
+
     /// 随机生成新戒指（5%概率为诅咒戒指）
     pub fn random_new() -> Self {
         use rand::Rng;
         let mut rng = rand::rng();
-        
+
         let kinds = [
             RingKind::Accuracy,
             RingKind::Elements,
@@ -71,7 +78,7 @@ impl Ring {
         ];
         let kind = kinds[rng.random_range(0..kinds.len())];
         let level = rng.random_range(0..=3);
-        
+
         if rng.random_bool(0.05) {
             Ring::new_cursed(kind, level)
         } else {
@@ -156,7 +163,7 @@ impl Ring {
             base_value * multiplier
         }
     }
-    
+
     /// 更精确的防御加成计算（基于游戏平衡性）
     pub fn defense_bonus(&self) -> f32 {
         if !self.identified || self.cursed {
@@ -186,29 +193,26 @@ impl Ring {
             _ => 0.0,
         }
     }
-    
+
     pub fn crit_bonus(&self) -> f32 {
         if self.cursed {
             return 0.0;
         }
 
         match self.kind {
-            RingKind::Accuracy => self.level as f32 * 0.015,    // 1.5% per level
+            RingKind::Accuracy => self.level as f32 * 0.015, // 1.5% per level
             RingKind::Sharpshooting => self.level as f32 * 0.02, // 2% per level
-            RingKind::Furor => self.level as f32 * 0.012,       // 1.2% per level
+            RingKind::Furor => self.level as f32 * 0.012,    // 1.2% per level
             _ => 0.0,
         }
     }
-    
-    
 }
 
 /// 戒指类型枚举
-#[derive(Copy, Eq, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Copy, Eq, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize, Default)]
 pub enum RingKind {
     #[default]
-    Accuracy,      // 提升命中率
+    Accuracy, // 提升命中率
     Elements,      // 元素抗性
     Energy,        // 能量恢复
     Evasion,       // 闪避几率
@@ -242,7 +246,7 @@ impl RingKind {
 impl Default for Ring {
     fn default() -> Self {
         Ring {
-            kind: RingKind::Accuracy,  // 默认选择精准之戒（基础类型）
+            kind: RingKind::Accuracy, // 默认选择精准之戒（基础类型）
             level: 0,                 // 默认等级0
             cursed: false,            // 默认未诅咒
             identified: false,        // 默认未鉴定
@@ -250,7 +254,6 @@ impl Default for Ring {
         }
     }
 }
-
 
 impl fmt::Display for Ring {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -263,13 +266,21 @@ impl fmt::Display for Ring {
         // 添加鉴定状态
         info.push_str(&format!(
             "\n鉴定状态: {}",
-            if self.identified { "已鉴定" } else { "未鉴定" }
+            if self.identified {
+                "已鉴定"
+            } else {
+                "未鉴定"
+            }
         ));
 
         // 添加诅咒状态
         info.push_str(&format!(
             "\n诅咒状态: {}",
-            if self.cursed { "已诅咒" } else { "未诅咒" }
+            if self.cursed {
+                "已诅咒"
+            } else {
+                "未诅咒"
+            }
         ));
 
         // 如果已鉴定，添加详细效果描述
@@ -285,10 +296,9 @@ impl Ring {
     /// 获取戒指效果的详细描述
     fn effect_description(&self) -> String {
         match self.kind {
-            RingKind::Accuracy => format!(
-                "提升命中率 {:.0}%",
-                (self.effect_value(1.0) - 1.0) * 100.0
-            ),
+            RingKind::Accuracy => {
+                format!("提升命中率 {:.0}%", (self.effect_value(1.0) - 1.0) * 100.0)
+            }
             RingKind::Elements => "提供元素抗性（火焰、冰冻、闪电）".to_string(),
             RingKind::Energy => format!(
                 "加快能量恢复速度 {:.0}%",
@@ -335,9 +345,48 @@ impl fmt::Display for RingKind {
     }
 }
 
-
 impl From<RingKind> for Ring {
     fn from(kind: RingKind) -> Self {
         Ring::new(kind, kind.default_level())
+    }
+}
+
+impl ItemTrait for Ring {
+    /// 生成唯一标识（包含所有属性）
+    fn stacking_id(&self) -> u64 {
+        let mut hasher = SeaHasher::new();
+        let bytes = encode_to_vec(
+            &(
+                self.kind,
+                self.level,
+                self.cursed,
+                self.identified,
+                self.base_value,
+            ),
+            BINCODE_CONFIG,
+        )
+        .unwrap();
+
+        hasher.write(&bytes);
+        hasher.finish()
+    }
+
+    /// 戒指完全不可堆叠
+    fn is_stackable(&self) -> bool {
+        false
+    }
+
+    /// 最大堆叠数量固定为1
+    fn max_stack(&self) -> u32 {
+        1
+    }
+    fn display_name(&self) -> String {
+        self.name()
+    }
+    fn category(&self) -> ItemCategory {
+        ItemCategory::Ring
+    }
+    fn sort_value(&self) -> u32 {
+        100
     }
 }

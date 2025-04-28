@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 use strum::{Display, EnumIter};
 use thiserror::Error;
 
-/// 装备系统错误类型（完全匹配游戏机制）
 #[derive(Debug, Error, PartialEq)]
 pub enum EquipError {
     #[error("装备槽已满")]
@@ -41,7 +40,6 @@ pub struct Equipment {
     pub weapon: Option<Weapon>,
     pub armor: Option<Armor>,
     pub rings: [Option<Ring>; 2],
-    pub cursed: bool, // 全局诅咒状态
 }
 
 impl Default for Equipment {
@@ -57,7 +55,6 @@ impl Equipment {
             weapon: None,
             armor: None,
             rings: [None, None],
-            cursed: false,
         }
     }
 
@@ -67,37 +64,22 @@ impl Equipment {
         weapon: Weapon,
         user_str: u8,
     ) -> Result<Option<Weapon>, EquipError> {
-        // 检查力量需求
         if user_str < weapon.str_requirement {
             return Err(EquipError::StrengthRequirement);
         }
 
-        // 检查诅咒状态
-        if weapon.cursed && self.cursed {
-            return Err(EquipError::CursedItem);
-        }
-
         let old = self.weapon.take();
         self.weapon = Some(weapon);
-        self.update_cursed_status();
         Ok(old)
     }
 
-    /// 装备护甲（完整游戏逻辑）
     pub fn equip_armor(&mut self, armor: Armor, user_str: u8) -> Result<Option<Armor>, EquipError> {
-        // 检查力量需求
         if user_str < armor.str_requirement {
             return Err(EquipError::StrengthRequirement);
         }
 
-        // 检查诅咒状态
-        if armor.cursed && self.cursed {
-            return Err(EquipError::CursedItem);
-        }
-
         let old = self.armor.take();
         self.armor = Some(armor);
-        self.update_cursed_status();
         Ok(old)
     }
 
@@ -107,35 +89,25 @@ impl Equipment {
             return Err(EquipError::IncompatibleType);
         }
 
-        // 检查诅咒状态
-        if ring.cursed && self.cursed {
-            return Err(EquipError::CursedItem);
-        }
-
         let old = self.rings[slot].take();
         self.rings[slot] = Some(ring);
-        self.update_cursed_status();
         Ok(old)
     }
 
     /// 卸下武器（考虑诅咒状态）
     pub fn unequip_weapon(&mut self) -> Result<Option<Weapon>, EquipError> {
-        if self.cursed {
+        if self.weapon.as_ref().map_or(false, |w| w.cursed) {
             return Err(EquipError::CursedItem);
         }
-        let weapon = self.weapon.take();
-        self.update_cursed_status();
-        Ok(weapon)
+        Ok(self.weapon.take())
     }
 
     /// 卸下护甲（考虑诅咒状态）
     pub fn unequip_armor(&mut self) -> Result<Option<Armor>, EquipError> {
-        if self.cursed {
+        if self.armor.as_ref().map_or(false, |a| a.cursed) {
             return Err(EquipError::CursedItem);
         }
-        let armor = self.armor.take();
-        self.update_cursed_status();
-        Ok(armor)
+        Ok(self.armor.take())
     }
 
     /// 卸下指定槽位的戒指（考虑诅咒状态）
@@ -143,37 +115,32 @@ impl Equipment {
         if slot >= 2 {
             return Err(EquipError::IncompatibleType);
         }
-        if self.cursed {
+        if self.rings[slot].as_ref().map_or(false, |r| r.cursed) {
             return Err(EquipError::CursedItem);
         }
-        let ring = self.rings[slot].take();
-        self.update_cursed_status();
-        Ok(ring)
+        Ok(self.rings[slot].take())
     }
 
     /// 强制卸下所有装备（无视诅咒状态，用于特殊场景）
     pub fn force_unequip_all(&mut self) -> (Option<Weapon>, Option<Armor>, [Option<Ring>; 2]) {
-        let weapon = self.weapon.take();
-        let armor = self.armor.take();
-        let rings = std::mem::take(&mut self.rings);
-        self.cursed = false;
-        (weapon, armor, rings)
+        (
+            self.weapon.take(),
+            self.armor.take(),
+            std::mem::take(&mut self.rings),
+        )
     }
 
-    /// 武器强化（无需升级卷轴）
+    /// 武器强化（解除自身诅咒）
     pub fn upgrade_weapon(&mut self) -> Result<(), EquipError> {
-        match &mut self.weapon {
-            Some(weapon) => {
-                if weapon.upgrade_level >= 15 {
-                    return Err(EquipError::MaxUpgrade);
-                }
-                if weapon.cursed {
-                    self.cursed = false;
-                }
-                weapon.upgrade();
-                Ok(())
+        if let Some(weapon) = &mut self.weapon {
+            if weapon.upgrade_level >= 15 {
+                return Err(EquipError::MaxUpgrade);
             }
-            None => Err(EquipError::IncompatibleType),
+            weapon.cursed = false;
+            weapon.upgrade();
+            Ok(())
+        } else {
+            Err(EquipError::IncompatibleType)
         }
     }
 
@@ -188,33 +155,74 @@ impl Equipment {
         ]
     }
 
-    /// 检查全局诅咒状态
-    pub fn is_cursed(&self) -> bool {
-        self.cursed
-    }
-
     /// 计算装备总防御力（护甲+戒指加成）
     pub fn total_defense(&self) -> i32 {
         let armor_def = self.armor.as_ref().map(|a| a.defense).unwrap_or(0);
-        let ring_bonus: i32 = self
-            .rings
+        self.rings
             .iter()
             .filter_map(|r| r.as_ref())
             .map(|r| r.defense_bonus() as i32)
-            .sum();
-
-        armor_def + ring_bonus
+            .sum::<i32>()
+            + armor_def
     }
 
-    /// 更新全局诅咒状态
-    fn update_cursed_status(&mut self) {
-        self.cursed = self.weapon.as_ref().map_or(false, |w| w.cursed)
-            || self.armor.as_ref().map_or(false, |a| a.cursed)
-            || self
-                .rings
-                .iter()
-                .any(|r| r.as_ref().map_or(false, |r| r.cursed));
+    pub fn remove_curse(&mut self, slot: EquipmentSlot) -> Result<(), EquipError> {
+        match slot {
+            EquipmentSlot::Weapon => {
+                if let Some(w) = &mut self.weapon {
+                    w.cursed = false;
+                    Ok(())
+                } else {
+                    Err(EquipError::IncompatibleType)
+                }
+            }
+            EquipmentSlot::Armor => {
+                if let Some(a) = &mut self.armor {
+                    a.cursed = false;
+                    Ok(())
+                } else {
+                    Err(EquipError::IncompatibleType)
+                }
+            }
+            EquipmentSlot::Ring1 => {
+                if let Some(r) = &mut self.rings[0] {
+                    r.cursed = false;
+                    Ok(())
+                } else {
+                    Err(EquipError::IncompatibleType)
+                }
+            }
+            EquipmentSlot::Ring2 => {
+                if let Some(r) = &mut self.rings[1] {
+                    r.cursed = false;
+                    Ok(())
+                } else {
+                    Err(EquipError::IncompatibleType)
+                }
+            }
+        }
     }
+
+    /// 解除所有装备的诅咒状态
+    pub fn remove_curse_all(&mut self) {
+        // 解除武器诅咒
+        if let Some(weapon) = &mut self.weapon {
+            weapon.cursed = false;
+        }
+
+        // 解除护甲诅咒
+        if let Some(armor) = &mut self.armor {
+            armor.cursed = false;
+        }
+
+        // 解除所有戒指诅咒
+        for ring_slot in &mut self.rings {
+            if let Some(ring) = ring_slot {
+                ring.cursed = false;
+            }
+        }
+    }
+
     /// 获取当前装备的武器（如果有）
     pub fn weapon(&self) -> Option<&Weapon> {
         self.weapon.as_ref()
@@ -238,6 +246,4 @@ impl Equipment {
             None
         }
     }
-    
 }
-

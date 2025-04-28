@@ -22,7 +22,7 @@ use items::{
 pub mod equipment; // 装备管理
 pub mod inventory; // 物品库存管理
 
-use equipment::{EquipError, Equipment};
+use equipment::{EquipError, Equipment, EquipmentSlot};
 use inventory::{Inventory, InventoryError};
 
 /// 完整的背包系统（遵循破碎的像素地牢机制）
@@ -143,8 +143,8 @@ impl Bag {
             ItemKind::Weapon(weapon) => {
                 let old_weapon = self.equipment.equip_weapon(weapon.clone(), strength)?;
                 self.remove_item(index)?;
-                if let Some(w) = old_weapon {
-                    self.add_item(w.into())?;
+                if let Some(ref w) = old_weapon {
+                    self.add_item(Item::from(w.clone()))?;
                 }
                 Ok(old_weapon.map(Item::from))
             }
@@ -152,7 +152,7 @@ impl Bag {
                 let old_armor = self.equipment.equip_armor(armor.clone(), strength)?;
                 self.remove_item(index)?;
                 if let Some(ref a) = old_armor {
-                    self.add_item(a.into())?;
+                    self.add_item(Item::from(a.clone()))?;
                 }
                 Ok(old_armor.map(Item::from))
             }
@@ -161,7 +161,7 @@ impl Bag {
                 let old_ring = self.equipment.equip_ring(ring.clone(), slot)?;
                 self.remove_item(index)?;
                 if let Some(ref r) = old_ring {
-                    self.add_item(r.into())?;
+                    self.add_item(Item::from(r.clone()))?;
                 }
                 Ok(old_ring.map(Item::from))
             }
@@ -338,9 +338,13 @@ impl Bag {
             1
         }
     }
-    
-    pub fn remove_curse(&self) {
-        self.equipment
+
+    pub fn remove_curse(&mut self, slot: EquipmentSlot) {
+        self.equipment.remove_curse(slot);
+    }
+
+    pub fn remove_curse_all(&mut self) {
+        self.equipment.remove_curse_all()
     }
 
     /* ================== 排序功能 ================== */
@@ -398,7 +402,7 @@ impl Bag {
     }
 
     /* ================== 装备属性计算 ================== */
-    
+
     pub fn evasion_penalty(&self) -> u32 {
         self.equipment
             .armor
