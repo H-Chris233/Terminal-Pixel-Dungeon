@@ -356,7 +356,7 @@ impl ItemTrait for Ring {
     fn stacking_id(&self) -> u64 {
         let mut hasher = SeaHasher::new();
         let bytes = encode_to_vec(
-            &(
+            (
                 self.kind,
                 self.level,
                 self.cursed,

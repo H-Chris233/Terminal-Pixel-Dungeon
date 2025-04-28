@@ -310,12 +310,12 @@ impl ItemTrait for Potion {
 
         if !self.identified {
             let key = (&self.color, false);
-            let bytes = encode_to_vec(&key, BINCODE_CONFIG).unwrap();
+            let bytes = encode_to_vec(key, BINCODE_CONFIG).unwrap();
             hasher.write(&bytes);
             hasher.finish()
         } else {
             let key = (&self.kind, true);
-            let bytes = encode_to_vec(&key, BINCODE_CONFIG).unwrap();
+            let bytes = encode_to_vec(key, BINCODE_CONFIG).unwrap();
             hasher.write(&bytes);
             hasher.finish()
         }

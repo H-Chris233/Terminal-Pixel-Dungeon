@@ -523,7 +523,7 @@ impl ItemTrait for Weapon {
         // 包含所有属性的哈希计算
         let mut hasher = SeaHasher::new();
         let bytes = encode_to_vec(
-            &(
+            (
                 self.tier.to_u32(),
                 self.upgrade_level,
                 &self.enchanted,

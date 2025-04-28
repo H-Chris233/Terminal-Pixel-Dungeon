@@ -174,7 +174,7 @@ impl ItemTrait for Seed {
     /// 生成堆叠标识（基于种子类型）
     fn stacking_id(&self) -> u64 {
         let mut hasher = SeaHasher::new();
-        let bytes = encode_to_vec(&self.kind, BINCODE_CONFIG).unwrap();
+        let bytes = encode_to_vec(self.kind, BINCODE_CONFIG).unwrap();
         hasher.write(&bytes);
         hasher.finish()
     }
