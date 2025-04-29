@@ -138,7 +138,6 @@ dependencies = [
  "items",
  "rand",
  "rand_pcg",
- "seahash",
  "serde",
  "strum",
  "strum_macros",
@@ -151,6 +150,7 @@ version = "0.1.0"
 dependencies = [
  "bincode",
  "rand",
+ "seahash",
  "serde",
  "strum",
  "strum_macros",

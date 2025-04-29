@@ -1,3 +1,4 @@
+//src/hero/src/core/item.rs
 use crate::{
     bag::{Bag, BagError},
     class::Class,
@@ -54,9 +55,7 @@ impl Hero {
     fn use_potion(&mut self, index: usize) -> Result<(), HeroError> {
         let potion = self
             .bag
-            .potions()
-            .get(index)
-            .ok_or(BagError::InvalidIndex)?;
+            .get_item_by_index(index)?;
 
         if !potion.identified {
             self.notify("你喝下了未知的药水...".into());
@@ -92,9 +91,7 @@ impl Hero {
     fn use_scroll(&mut self, index: usize) -> Result<(), HeroError> {
         let scroll = self
             .bag
-            .scrolls()
-            .get(index)
-            .ok_or(BagError::InvalidIndex)?;
+            .get_item_by_index(index)?;
 
         if !scroll.identified {
             self.notify("你阅读了未知的卷轴...");
@@ -127,21 +124,21 @@ impl Hero {
 }
 
 impl InventorySystem for Hero {
-    pub fn add_item(&mut self, item: Item) -> Result<(), BagError> {
+    fn add_item(&mut self, item: Item) -> Result<(), BagError> {
         self.bag.add_item(item)
     }
 
-    pub fn remove_item(&mut self, index: usize) -> Result<(), BagError> {
+    fn remove_item(&mut self, index: usize) -> Result<(), BagError> {
         self.bag.remove_item(index)
     }
 
-    pub fn equip_item(&mut self, index: usize) -> Result<Option<Item>, HeroError> {
+    fn equip_item(&mut self, index: usize) -> Result<Option<Item>, HeroError> {
         self.bag
             .equip_item(index, self.strength)
             .map_err(|e| e.into())
     }
 
-    pub fn use_item(&mut self, index: usize) -> Result<Item, BagError> {
+    fn use_item(&mut self, index: usize) -> Result<Item, BagError> {
         self.bag.use_item(index)
     }
 }

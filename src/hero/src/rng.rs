@@ -2,6 +2,7 @@
 use bincode::de::{BorrowDecoder, Decoder};
 use bincode::BorrowDecode;
 use bincode::{Decode, Encode};
+use bincode::config::DefaultOptions;
 use rand::distr::uniform;
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
@@ -117,7 +118,7 @@ impl Encode for HeroRng {
     }
 }
 
-impl Decode for HeroRng {
+impl Decode<DefaultOptions> for HeroRng {
     fn decode<D: bincode::de::Decoder>(
         decoder: &mut D,
     ) -> Result<Self, bincode::error::DecodeError> {
@@ -126,11 +127,11 @@ impl Decode for HeroRng {
     }
 }
 
-impl<'de> BorrowDecode<'de> for HeroRng {
-    fn borrow_decode<D: BorrowDecoder<'de>>(
+impl<'de> BorrowDecode<'de, DefaultOptions> for HeroRng {
+    fn borrow_decode<D: bincode::de::BorrowDecoder<'de>>(
         decoder: &mut D,
     ) -> Result<Self, bincode::error::DecodeError> {
-        let seed = u64::decode(decoder)?;
+        let seed = u64::borrow_decode(decoder)?;
         Ok(Self::new(seed))
     }
 }

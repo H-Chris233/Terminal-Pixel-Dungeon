@@ -4,6 +4,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, collections::HashMap, convert::TryInto, sync::Arc};
 use thiserror::Error;
+use items::ItemTrait;
 
 #[derive(Debug, Error, PartialEq)]
 pub enum InventoryError {
@@ -57,7 +58,7 @@ impl<T: ItemTrait + Serialize + DeserializeOwned> Inventory<T> {
             if let Some(indices) = self.stack_map.get_mut(&stack_id) {
                 // 反向遍历优先检查最近添加的堆叠
                 for &i in indices.iter().rev() {
-                    if let InventorySlot::Stackable(_, ref mut count) = &mut self.slots[i] {
+                    if let InventorySlot::Stackable(_, count) = &mut self.slots[i] {
                         if *count < max_stack {
                             *count += 1;
 
@@ -354,4 +355,10 @@ impl<T: ItemTrait + Serialize + DeserializeOwned> Inventory<T> {
             })
             .collect()
     }
+    
+    /// 获取当前使用的槽位数量
+    pub fn len(&self) -> usize {
+        self.slots.len()
+    }
+    
 }
