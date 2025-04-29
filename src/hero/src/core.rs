@@ -187,10 +187,10 @@ impl Hero {
             return Err(HeroError::ActionFailed);
         }
 
-        if let Some(effect) = trap.trigger(&mut self.rng) {
+        if let Some(effect) = trap.trigger() {
             self.apply_trap_effect(effect);
-            Ok(())
         }
+        Ok(())
     }
 
     pub fn heal(&mut self, amount: u32) {
