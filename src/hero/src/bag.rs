@@ -109,27 +109,27 @@ impl Bag {
         match &item.kind {
             ItemKind::Potion(_) => {
                 let potion = self.potions.remove(index)?;
-                Ok(Item::from(potion))
+                Ok(Item::from((*potion).clone()))
             }
             ItemKind::Scroll(_) => {
                 let scroll = self.scrolls.remove(index)?;
-                Ok(Item::from(scroll))
+                Ok(Item::from((*scroll).clone()))
             }
             ItemKind::Food(_) => {
                 let food = self.food.remove(index)?;
-                Ok(Item::from(food))
+                Ok(Item::from((*food).clone()))
             }
             ItemKind::Seed(_) => {
                 let seed = self.seeds.remove(index)?;
-                Ok(Item::from(seed))
+                Ok(Item::from((*seed).clone()))
             }
             ItemKind::Wand(_) => {
                 let wand = self.wands.remove(index)?;
-                Ok(Item::from(wand))
+                Ok(Item::from((*wand).clone()))
             }
             ItemKind::Stone(_) => {
                 let stone = self.stones.remove(index)?;
-                Ok(Item::from(stone))
+                Ok(Item::from((*stone).clone()))
             }
             _ => Err(BagError::CannotUseItem),
         }

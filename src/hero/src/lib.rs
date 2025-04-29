@@ -88,14 +88,14 @@ pub trait EffectSystem {
 /// 物品系统接口
 pub trait InventorySystem {
     /// 添加物品
-    fn add_item(&mut self, item: Item) -> Result<(), BagError>;
+    fn add_item(&mut self, item: Item) -> Result<(), HeroError>;
 
     /// 移除物品
-    fn remove_item(&mut self, index: usize) -> Result<(), BagError>;
+    fn remove_item(&mut self, index: usize) -> Result<(), HeroError>;
 
     /// 装备物品
-    fn equip_item(&mut self, index: usize) -> Result<Option<Item>, BagError>;
+    fn equip_item(&mut self, index: usize) -> Result<Option<Item>, HeroError>;
 
     /// 使用物品
-    fn use_item(&mut self, index: usize) -> Result<Item, BagError>;
+    fn use_item(&mut self, index: usize) -> Result<Item, HeroError>;
 }
