@@ -2,8 +2,7 @@
 #![allow(dead_code)]
 #![allow(unused)]
 
-const BINCODE_CONFIG: bincode::config::Configuration =
-    bincode::config::legacy().with_variable_int_encoding(); // 添加变长整数编码
+const BINCODE_CONFIG: bincode::config::Configuration = bincode::config::legacy().with_variable_int_encoding(); // 添加变长整数编码
 
 use bincode::serde::encode_to_vec;
 use bincode::{Decode, Encode};
@@ -143,6 +142,56 @@ impl Item {
             ItemKind::Stone(s) => s.value(),
             ItemKind::Misc(m) => m.value(),
         }
+    }
+    
+    pub fn as_weapon(&self) -> &Weapon {
+        if let ItemKind::Weapon(ref w) = self.kind { w } 
+        else { panic!("Item is not Weapon: {:?}", self.kind) }
+    }
+
+    pub fn as_armor(&self) -> &Armor {
+        if let ItemKind::Armor(ref a) = self.kind { a } 
+        else { panic!("Item is not Armor: {:?}", self.kind) }
+    }
+
+    pub fn as_potion(&self) -> &Potion {
+        if let ItemKind::Potion(ref p) = self.kind { p } 
+        else { panic!("Item is not Potion: {:?}", self.kind) }
+    }
+
+    pub fn as_scroll(&self) -> &Scroll {
+        if let ItemKind::Scroll(ref s) = self.kind { s } 
+        else { panic!("Item is not Scroll: {:?}", self.kind) }
+    }
+
+    pub fn as_food(&self) -> &Food {
+        if let ItemKind::Food(ref f) = self.kind { f } 
+        else { panic!("Item is not Food: {:?}", self.kind) }
+    }
+
+    pub fn as_wand(&self) -> &Wand {
+        if let ItemKind::Wand(ref w) = self.kind { w } 
+        else { panic!("Item is not Wand: {:?}", self.kind) }
+    }
+
+    pub fn as_ring(&self) -> &Ring {
+        if let ItemKind::Ring(ref r) = self.kind { r } 
+        else { panic!("Item is not Ring: {:?}", self.kind) }
+    }
+
+    pub fn as_seed(&self) -> &Seed {
+        if let ItemKind::Seed(ref s) = self.kind { s } 
+        else { panic!("Item is not Seed: {:?}", self.kind) }
+    }
+
+    pub fn as_stone(&self) -> &Stone {
+        if let ItemKind::Stone(ref s) = self.kind { s } 
+        else { panic!("Item is not Stone: {:?}", self.kind) }
+    }
+
+    pub fn as_misc(&self) -> &MiscItem {
+        if let ItemKind::Misc(ref m) = self.kind { m } 
+        else { panic!("Item is not Misc: {:?}", self.kind) }
     }
 }
 

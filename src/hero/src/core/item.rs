@@ -55,7 +55,8 @@ impl Hero {
     fn use_potion(&mut self, index: usize) -> Result<(), HeroError> {
         let potion = self
             .bag
-            .get_item_by_index(index)?;
+            .get_item_by_index(index)?
+            .as_potion();
 
         if !potion.identified {
             self.notify("你喝下了未知的药水...".into());
@@ -91,7 +92,8 @@ impl Hero {
     fn use_scroll(&mut self, index: usize) -> Result<(), HeroError> {
         let scroll = self
             .bag
-            .get_item_by_index(index)?;
+            .get_item_by_index(index)?
+            .as_scroll();
 
         if !scroll.identified {
             self.notify("你阅读了未知的卷轴...");
