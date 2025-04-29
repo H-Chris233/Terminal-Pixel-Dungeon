@@ -22,7 +22,7 @@ pub enum InventoryError {
 
 /// 库存槽位（支持智能指针）
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
-enum InventorySlot<T: ItemTrait + Serialize + DeserializeOwned> {
+enum InventorySlot<T: ItemTrait + Serialize + Deserialize> {
     Single(Arc<T>),
     Stackable(Arc<T>, u32),
 }
@@ -346,7 +346,7 @@ impl<T: ItemTrait + Serialize + DeserializeOwned> Inventory<T> {
     }
 
     /// 获取所有物品（用于UI渲染）
-    pub fn items(&self) -> Vec<(&T, u32)> {
+    pub fn items(&self) -> Vec<(&Arc<T>, u32)> {
         self.slots
             .iter()
             .map(|slot| match slot {
