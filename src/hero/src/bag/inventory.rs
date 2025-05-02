@@ -86,8 +86,8 @@ impl<'de, T: ItemTrait + Serialize + DeserializeOwned> Deserialize<'de> for Inve
         D: serde::Deserializer<'de>,
     {
         #[derive(Deserialize)]
-        #[serde(bound(deserialize = "T: ItemTrait + Serialize + DeserializeOwned"))]
-        struct Helper<T> {
+          #[serde(bound(deserialize = "T: ItemTrait + Serialize + DeserializeOwned"))]
+        struct Helper<T: ItemTrait + Serialize + DeserializeOwned> {
             slots: Vec<InventorySlot<T>>,
             stack_map: HashMap<u64, Vec<usize>>,
             capacity: usize,

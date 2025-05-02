@@ -16,7 +16,6 @@ use thiserror::Error;
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
-use crate::BagError;
 use crate::EffectSystem;
 use crate::Hero;
 use crate::HeroBehavior;

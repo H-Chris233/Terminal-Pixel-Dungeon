@@ -31,11 +31,10 @@ use crate::class::Class;
 use crate::effects::Effect;
 use crate::effects::EffectType;
 
-use combat::enemy::Enemy;
+use ::combat::enemy::Enemy;
 use combat::Combatant;
 use dungeon::trap::Trap;
 use dungeon::trap::TrapEffect;
-use dungeon::InteractionEvent;
 use dungeon::InteractionEvent;
 use items::Weapon;
 
