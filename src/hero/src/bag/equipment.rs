@@ -163,7 +163,7 @@ impl Equipment {
             .filter_map(|r| r.as_ref())
             .map(|r| r.defense_bonus() as i32)
             .sum::<i32>()
-            + armor_def
+            + armor_def as i32
     }
 
     pub fn remove_curse(&mut self, slot: EquipmentSlot) -> Result<(), EquipError> {
