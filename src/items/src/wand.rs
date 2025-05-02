@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 use crate::ItemCategory;
 use crate::ItemTrait;
 use crate::BINCODE_CONFIG;
+use crate::Item;
+use crate::ItemKind;
 
 /// 法杖系统（8种法杖）
 #[derive(PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]

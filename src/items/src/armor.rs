@@ -11,6 +11,8 @@ use tui::style::Color;
 use crate::ItemCategory;
 use crate::ItemTrait;
 use crate::BINCODE_CONFIG;
+use crate::Item;
+use crate::ItemKind;
 
 /// 护甲数据（精确还原游戏机制）
 #[derive(PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]

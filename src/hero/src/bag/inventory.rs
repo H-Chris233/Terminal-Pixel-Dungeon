@@ -23,7 +23,7 @@ pub enum InventoryError {
 
 /// 库存槽位（支持智能指针）
 #[derive(Clone, Debug, Encode, Decode)]
-enum InventorySlot<T: ItemTrait + Serialize + DeserializeOwned> {
+pub enum InventorySlot<T: ItemTrait + Serialize + DeserializeOwned> {
     Single(Arc<T>),
     Stackable(Arc<T>, u32),
 }
@@ -86,7 +86,7 @@ impl<'de, T: ItemTrait + Serialize + DeserializeOwned> Deserialize<'de> for Inve
         D: serde::Deserializer<'de>,
     {
         #[derive(Deserialize)]
-        #[serde(bound = "T: ItemTrait + Serialize + DeserializeOwned")]
+        #[serde(bound(deserialize = "T: ItemTrait + Serialize + DeserializeOwned"))]
         struct Helper<T> {
             slots: Vec<InventorySlot<T>>,
             stack_map: HashMap<u64, Vec<usize>>,
