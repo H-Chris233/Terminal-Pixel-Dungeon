@@ -227,3 +227,16 @@ impl ItemTrait for Scroll {
         }
     }
 }
+
+impl From<Scroll> for Item {
+    fn from(scroll: Scroll) -> Self {
+        Item {
+            name: scroll.name(),
+            kind: ItemKind::Scroll(scroll),
+            description: "...".to_string(),
+            quantity: 1,
+            x: -1,
+            y: -1,
+        }
+    }
+}

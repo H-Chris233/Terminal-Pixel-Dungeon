@@ -274,3 +274,16 @@ impl ItemTrait for Food {
         }
     }
 }
+
+impl From<Food> for Item {
+    fn from(food: Food) -> Self {
+        Item {
+            name: food.name(),
+            kind: ItemKind::Food(food),
+            description: "...".to_string(),
+            quantity: 1,
+            x: -1,
+            y: -1,
+        }
+    }
+}

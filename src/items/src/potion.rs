@@ -357,3 +357,16 @@ impl ItemTrait for Potion {
         }
     }
 }
+
+impl From<Potion> for Item {
+    fn from(potion: Potion) -> Self {
+        Item {
+            name: potion.name(),
+            kind: ItemKind::Potion(potion),
+            description: "...".to_string(),
+            quantity: 1,
+            x: -1,
+            y: -1,
+        }
+    }
+}

@@ -215,8 +215,8 @@ impl ItemTrait for MiscItem {
 impl From<MiscItem> for Item {
     fn from(misc: MiscItem) -> Self {
         Item {
-            kind: ItemKind::Misc(misc),
             name: misc.name(),
+            kind: ItemKind::Misc(misc),
             description: "...".to_string(),
             quantity: 1,
             x: -1,

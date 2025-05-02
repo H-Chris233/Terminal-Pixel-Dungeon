@@ -305,3 +305,16 @@ impl ItemTrait for Wand {
         (type_weight * 100) + level_weight + charge_bonus - curse_penalty
     }
 }
+
+impl From<Wand> for Item {
+    fn from(wand: Wand) -> Self {
+        Item {
+            name: wand.name(),
+            kind: ItemKind::Wand(wand),
+            description: "...".to_string(),
+            quantity: 1,
+            x: -1,
+            y: -1,
+        }
+    }
+}
