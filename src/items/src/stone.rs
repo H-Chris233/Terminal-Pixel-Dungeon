@@ -228,3 +228,16 @@ impl ItemTrait for Stone {
         30
     }
 }
+
+impl From<Stone> for Item {
+    fn from(stone: Stone) -> Self {
+        Item {
+            name: stone.name(),
+            kind: ItemKind::Stone(stone),
+            description: "...".to_string(),
+            quantity: 1,
+            x: -1,
+            y: -1,
+        }
+    }
+}

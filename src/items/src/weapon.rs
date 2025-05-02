@@ -560,3 +560,13 @@ impl ItemTrait for Weapon {
         (self.tier as u32 * 100) + self.upgrade_level as u32
     }
 }
+
+impl From<Weapon> for Item {
+    fn from(weapon: Weapon) -> Self {
+        Item {
+            kind: ItemKind::Weapon(weapon),
+            // 其他必要的字段
+            ..Default::default()
+        }
+    }
+}

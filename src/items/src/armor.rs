@@ -456,3 +456,13 @@ impl ItemTrait for Armor {
         1
     }
 }
+
+impl From<Armor> for Item {
+    fn from(armor: Armor) -> Self {
+        Item {
+            kind: ItemKind::Armor(armor),
+            // 其他必要的字段
+            ..Default::default()
+        }
+    }
+}

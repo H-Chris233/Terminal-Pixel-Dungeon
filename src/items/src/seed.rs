@@ -195,3 +195,16 @@ impl ItemTrait for Seed {
         20
     }
 }
+
+impl From<Seed> for Item {
+    fn from(seed: Seed) -> Self {
+        Item {
+            name: seed.name(),
+            kind: ItemKind::Seed(seed),
+            description: "...".to_string(),
+            quantity: 1,
+            x: -1,
+            y: -1,
+        }
+    }
+}

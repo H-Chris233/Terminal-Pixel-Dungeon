@@ -392,3 +392,13 @@ impl ItemTrait for Ring {
         100
     }
 }
+
+impl From<Ring> for Item {
+    fn from(ring: Ring) -> Self {
+        Item {
+            kind: ItemKind::Ring(ring),
+            // 其他必要的字段
+            ..Default::default()
+        }
+    }
+}
