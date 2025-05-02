@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, collections::HashMap, convert::TryInto, sync::Arc};
 use thiserror::Error;
 use items::ItemTrait;
+use serde::ser::{SerializeStructVariant, Serializer};
 
 #[derive(Debug, Error, PartialEq)]
 pub enum InventoryError {
@@ -21,18 +22,84 @@ pub enum InventoryError {
 }
 
 /// 库存槽位（支持智能指针）
-#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
+#[derive(Clone, Debug, Encode, Decode)]
 enum InventorySlot<T: ItemTrait + Serialize + DeserializeOwned> {
     Single(Arc<T>),
     Stackable(Arc<T>, u32),
 }
 
+impl<T: ItemTrait + Serialize + DeserializeOwned> Serialize for InventorySlot<T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            InventorySlot::Single(item) => {
+                serializer.serialize_newtype_variant("InventorySlot", 0, "Single", &**item)
+            }
+            InventorySlot::Stackable(item, count) => {
+                let mut state = serializer.serialize_struct_variant(
+                    "InventorySlot",
+                    1,
+                    "Stackable",
+                    2
+                )?;
+                state.serialize_field("item", &**item)?;
+                state.serialize_field("count", count)?;
+                state.end()
+            }
+        }
+    }
+}
+
+impl<'de, T: ItemTrait + Serialize + DeserializeOwned> Deserialize<'de> for InventorySlot<T> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Helper<T> {
+            Single(T),
+            Stackable(T, u32),
+        }
+
+        let helper = Helper::<T>::deserialize(deserializer)?;
+        match helper {
+            Helper::Single(item) => Ok(InventorySlot::Single(Arc::new(item))),
+            Helper::Stackable(item, count) => Ok(InventorySlot::Stackable(Arc::new(item), count)),
+        }
+    }
+}
+
 /// 优化后的库存系统
-#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
+#[derive(Clone, Debug, Encode, Decode, Serialize)]
 pub struct Inventory<T: ItemTrait + Serialize + DeserializeOwned> {
     slots: Vec<InventorySlot<T>>,
-    stack_map: HashMap<u64, Vec<usize>>, // 堆叠索引加速
+    stack_map: HashMap<u64, Vec<usize>>,
     capacity: usize,
+}
+
+impl<'de, T: ItemTrait + Serialize + DeserializeOwned> Deserialize<'de> for Inventory<T> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(bound = "T: ItemTrait + Serialize + DeserializeOwned")]
+        struct Helper<T> {
+            slots: Vec<InventorySlot<T>>,
+            stack_map: HashMap<u64, Vec<usize>>,
+            capacity: usize,
+        }
+
+        let helper = Helper::deserialize(deserializer)?;
+        Ok(Inventory {
+            slots: helper.slots,
+            stack_map: helper.stack_map,
+            capacity: helper.capacity,
+        })
+    }
 }
 
 impl<T: ItemTrait + Serialize + DeserializeOwned> Inventory<T> {
@@ -247,14 +314,11 @@ impl<T: ItemTrait + Serialize + DeserializeOwned> Inventory<T> {
     /// 整理背包
     pub fn organize(&mut self) {
         // 使用统一的排序逻辑
-        self.sort_by(|a, b| match (a, b) {
-            (InventorySlot::Single(a), InventorySlot::Single(b))
-            | (InventorySlot::Stackable(a, _), InventorySlot::Stackable(b, _)) => a
+        self.sort_by(|a: &T, b: &T| match (a, b) {
+            (a, b) => a
                 .category()
                 .cmp(&b.category())
-                .then_with(|| b.sort_value().cmp(&a.sort_value())),
-            (InventorySlot::Single(_), InventorySlot::Stackable(_, _)) => Ordering::Less,
-            (InventorySlot::Stackable(_, _), InventorySlot::Single(_)) => Ordering::Greater,
+                .then_with(|| b.sort_value().cmp(&a.sort_value()))
         });
     }
 
@@ -264,11 +328,14 @@ impl<T: ItemTrait + Serialize + DeserializeOwned> Inventory<T> {
         F: FnMut(&T, &T) -> Ordering,
     {
         // 原地排序代替克隆
-        self.slots.sort_by(|a, b| match (a, b) {
-            (InventorySlot::Single(a), InventorySlot::Single(b))
-            | (InventorySlot::Stackable(a, _), InventorySlot::Stackable(b, _)) => compare(a, b),
-            (InventorySlot::Single(_), InventorySlot::Stackable(_, _)) => Ordering::Less,
-            (InventorySlot::Stackable(_, _), InventorySlot::Single(_)) => Ordering::Greater,
+        self.slots.sort_by(|a, b| {
+            let a_item = match a {
+                InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => item.as_ref(),
+            };
+            let b_item = match b {
+                InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => item.as_ref(),
+            };
+            compare(a_item, b_item)
         });
 
         // 重建索引映射
@@ -345,15 +412,19 @@ impl<T: ItemTrait + Serialize + DeserializeOwned> Inventory<T> {
         entry.sort(); // 保持有序便于二分查找
     }
 
-    /// 获取所有物品（用于UI渲染）
-    pub fn items(&self) -> Vec<(&T, u32)> {
+    /// 获取所有物品
+    pub fn items(&self) -> Vec<(T, u32)> {
         self.slots
             .iter()
             .map(|slot| match slot {
-                InventorySlot::Single(item) => (item, 1),
-                InventorySlot::Stackable(item, count) => (item, *count),
+                InventorySlot::Single(item) => (item.as_ref().clone(), 1),
+                InventorySlot::Stackable(item, count) => (item.as_ref().clone(), *count),
             })
             .collect()
+    }
+
+    pub fn get(&self, index: usize) -> Option<&InventorySlot<T>> {
+        self.slots.get(index)
     }
     
     /// 获取当前使用的槽位数量
@@ -362,3 +433,4 @@ impl<T: ItemTrait + Serialize + DeserializeOwned> Inventory<T> {
     }
     
 }
+

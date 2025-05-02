@@ -126,12 +126,12 @@ impl Hero {
 }
 
 impl InventorySystem for Hero {
-    fn add_item(&mut self, item: Item) -> Result<(), BagError> {
-        self.bag.add_item(item)
+    fn add_item(&mut self, item: Item) -> Result<(), HeroError> {
+        self.bag.add_item(item).map_err(|e| e.into())
     }
 
-    fn remove_item(&mut self, index: usize) -> Result<(), BagError> {
-        self.bag.remove_item(index)
+    fn remove_item(&mut self, index: usize) -> Result<(), HeroError> {
+        self.bag.remove_item(index).map_err(|e| e.into()) 
     }
 
     fn equip_item(&mut self, index: usize) -> Result<Option<Item>, HeroError> {
@@ -140,7 +140,7 @@ impl InventorySystem for Hero {
             .map_err(|e| e.into())
     }
 
-    fn use_item(&mut self, index: usize) -> Result<Item, BagError> {
-        self.bag.use_item(index)
+    fn use_item(&mut self, index: usize) -> Result<Item, HeroError> {
+        self.bag.use_item(index).map_err(|e| e.into())
     }
 }
