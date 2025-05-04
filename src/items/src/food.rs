@@ -10,6 +10,8 @@ use tui::style::Color;
 use crate::ItemCategory;
 use crate::ItemTrait;
 use crate::BINCODE_CONFIG;
+use crate::Item;
+use crate::ItemKind;
 
 /// 食物系统（精确还原游戏机制）
 #[derive(Eq, Hash, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
@@ -269,6 +271,19 @@ impl ItemTrait for Food {
             FoodKind::Pasty => 90,
             FoodKind::MysteryMeat => 80,
             _ => 0,
+        }
+    }
+}
+
+impl From<Food> for Item {
+    fn from(food: Food) -> Self {
+        Item {
+            name: food.name(),
+            kind: ItemKind::Food(food),
+            description: "...".to_string(),
+            quantity: 1,
+            x: -1,
+            y: -1,
         }
     }
 }

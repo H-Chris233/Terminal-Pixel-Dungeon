@@ -156,14 +156,14 @@ impl Equipment {
     }
 
     /// 计算装备总防御力（护甲+戒指加成）
-    pub fn total_defense(&self) -> u32 {
+    pub fn total_defense(&self) -> i32 {
         let armor_def = self.armor.as_ref().map(|a| a.defense).unwrap_or(0);
         self.rings
             .iter()
             .filter_map(|r| r.as_ref())
-            .map(|r| r.defense_bonus() as u32)
-            .sum::<u32>()
-            + armor_def
+            .map(|r| r.defense_bonus() as i32)
+            .sum::<i32>()
+            + armor_def as i32
     }
 
     pub fn remove_curse(&mut self, slot: EquipmentSlot) -> Result<(), EquipError> {

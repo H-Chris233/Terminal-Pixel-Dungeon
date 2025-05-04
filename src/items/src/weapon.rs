@@ -1,8 +1,4 @@
 //src/items/src/weapon.rs
-use crate::weapon::kind::*;
-use crate::ItemCategory;
-use crate::ItemTrait;
-use crate::BINCODE_CONFIG;
 use bincode::serde::encode_to_vec;
 use bincode::{Decode, Encode};
 use rand::Rng;
@@ -11,6 +7,13 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fmt;
 use std::hash::Hasher;
+
+use crate::weapon::kind::*;
+use crate::ItemCategory;
+use crate::ItemTrait;
+use crate::BINCODE_CONFIG;
+use crate::Item;
+use crate::ItemKind;
 
 pub mod kind;
 pub mod tier;
@@ -555,5 +558,15 @@ impl ItemTrait for Weapon {
     }
     fn sort_value(&self) -> u32 {
         (self.tier as u32 * 100) + self.upgrade_level as u32
+    }
+}
+
+impl From<Weapon> for Item {
+    fn from(weapon: Weapon) -> Self {
+        Item {
+            kind: ItemKind::Weapon(weapon),
+            // 其他必要的字段
+            ..Default::default()
+        }
     }
 }

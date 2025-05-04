@@ -9,6 +9,8 @@ use std::hash::Hasher;
 use crate::ItemCategory;
 use crate::ItemTrait;
 use crate::BINCODE_CONFIG;
+use crate::Item;
+use crate::ItemKind;
 
 /// 种子系统（8种植物种子）
 #[derive(Eq, Hash, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
@@ -191,5 +193,18 @@ impl ItemTrait for Seed {
     }
     fn sort_value(&self) -> u32 {
         20
+    }
+}
+
+impl From<Seed> for Item {
+    fn from(seed: Seed) -> Self {
+        Item {
+            name: seed.name(),
+            kind: ItemKind::Seed(seed),
+            description: "...".to_string(),
+            quantity: 1,
+            x: -1,
+            y: -1,
+        }
     }
 }

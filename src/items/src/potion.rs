@@ -14,6 +14,8 @@ use tui::style::Color;
 use crate::ItemCategory;
 use crate::ItemTrait;
 use crate::BINCODE_CONFIG;
+use crate::Item;
+use crate::ItemKind;
 
 /// 药水系统（完整12种药水）
 #[derive(Eq, Hash, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
@@ -352,6 +354,19 @@ impl ItemTrait for Potion {
             PotionKind::MindVision => 2,
             PotionKind::Haste => 1,
             _ => 0,
+        }
+    }
+}
+
+impl From<Potion> for Item {
+    fn from(potion: Potion) -> Self {
+        Item {
+            name: potion.name(),
+            kind: ItemKind::Potion(potion),
+            description: "...".to_string(),
+            quantity: 1,
+            x: -1,
+            y: -1,
         }
     }
 }

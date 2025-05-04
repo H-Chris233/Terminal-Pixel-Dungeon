@@ -8,6 +8,8 @@ use std::hash::Hasher;
 use crate::ItemCategory;
 use crate::ItemTrait;
 use crate::BINCODE_CONFIG;
+use crate::Item;
+use crate::ItemKind;
 
 /// 杂项物品类型，参考破碎的像素地牢游戏逻辑
 #[derive(Copy, Debug, Clone, PartialEq, Serialize, Deserialize, Encode, Decode)]
@@ -206,6 +208,19 @@ impl ItemTrait for MiscItem {
             MiscKind::Torch => 80,
             // ... other misc items
             _ => 0,
+        }
+    }
+}
+
+impl From<MiscItem> for Item {
+    fn from(misc: MiscItem) -> Self {
+        Item {
+            name: misc.name(),
+            kind: ItemKind::Misc(misc),
+            description: "...".to_string(),
+            quantity: 1,
+            x: -1,
+            y: -1,
         }
     }
 }

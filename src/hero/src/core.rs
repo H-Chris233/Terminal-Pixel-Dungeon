@@ -1,6 +1,6 @@
 // src/hero/core.rs
-use crate::Bag;
-use crate::BagError;
+use crate::bag::Bag;
+use crate::bag::BagError;
 use crate::HeroBehavior;
 use crate::InventorySystem;
 use crate::{
@@ -225,7 +225,7 @@ impl Hero {
 }
 
 impl HeroBehavior for Hero {
-    pub fn move_to(
+    fn move_to(
         &mut self,
         dx: i32,
         dy: i32,
@@ -272,14 +272,6 @@ impl HeroBehavior for Hero {
     /// 每回合更新
     fn on_turn(&mut self) -> Result<(), HeroError> {
         self.on_turn()
-    }
-
-    /// 移动英雄
-    fn move_to(&mut self, dx: i32, dy: i32, dungeon: &mut Dungeon) -> Result<(), String> {
-        match Hero::move_to(self, dx, dy, dungeon) {
-            Ok(_) => Ok(()),
-            Err(e) => Err(e.to_string()),
-        }
     }
 
     /// 获取经验
