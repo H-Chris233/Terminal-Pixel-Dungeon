@@ -1,13 +1,13 @@
-// src/hero/rng.rs
+//src/hero/src/rng.rs
 use bincode::{
-    config::Config,
+    config::{Config, Configuration},
     de::{BorrowDecoder, Decoder},
     BorrowDecode, Decode, Encode,
 };
 use rand::{
     distr::uniform,
-    seq::SliceRandom,
     {Rng, SeedableRng},
+    prelude::SliceRandom,
 };
 use rand_pcg::Pcg32;
 use serde::{Deserialize, Serialize};
@@ -121,7 +121,7 @@ impl Encode for HeroRng {
     }
 }
 
-impl Decode<bincode::config::Config> for HeroRng {
+impl Decode<Configuration> for HeroRng {
     fn decode<D: bincode::de::Decoder>(
         decoder: &mut D,
     ) -> Result<Self, bincode::error::DecodeError> {
@@ -130,7 +130,7 @@ impl Decode<bincode::config::Config> for HeroRng {
     }
 }
 
-impl<'de> BorrowDecode<'de, bincode::config::Config> for HeroRng {
+impl<'de> BorrowDecode<'de, Configuration> for HeroRng {
     fn borrow_decode<D: bincode::de::BorrowDecoder<'de>>(
         decoder: &mut D,
     ) -> Result<Self, bincode::error::DecodeError> {
