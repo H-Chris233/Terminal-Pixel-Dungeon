@@ -15,6 +15,8 @@ use strum_macros::EnumIter;
 use crate::ItemCategory;
 use crate::ItemTrait;
 use crate::BINCODE_CONFIG;
+use crate::Item;
+use crate::ItemKind;
 
 /// 卷轴系统（完整10种）
 #[derive(Eq, Hash, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
@@ -222,6 +224,19 @@ impl ItemTrait for Scroll {
             ScrollKind::Teleportation => 65, // 逃生工具
             ScrollKind::Lullaby => 60,       // 控制类
             ScrollKind::Rage => 55,          // 战术价值最低
+        }
+    }
+}
+
+impl From<Scroll> for Item {
+    fn from(scroll: Scroll) -> Self {
+        Item {
+            name: scroll.name(),
+            kind: ItemKind::Scroll(scroll),
+            description: "...".to_string(),
+            quantity: 1,
+            x: -1,
+            y: -1,
         }
     }
 }

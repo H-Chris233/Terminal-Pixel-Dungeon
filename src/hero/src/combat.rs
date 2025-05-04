@@ -1,7 +1,7 @@
 // src/hero/combat.rs
 use super::core::{Hero, HeroError};
 use crate::class::Class;
-use crate::BagError;
+use crate::bag::BagError;
 
 pub use combat::{effect::EffectType, Combat, Combatant};
 use items::{armor::Armor, ring::Ring, weapon::Weapon};

@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 use crate::ItemCategory;
 use crate::ItemTrait;
 use crate::BINCODE_CONFIG;
+use crate::Item;
+use crate::ItemKind;
 
 /// 法杖系统（8种法杖）
 #[derive(PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
@@ -301,5 +303,18 @@ impl ItemTrait for Wand {
 
         // 最终计算公式（确保类型权重主导排序）
         (type_weight * 100) + level_weight + charge_bonus - curse_penalty
+    }
+}
+
+impl From<Wand> for Item {
+    fn from(wand: Wand) -> Self {
+        Item {
+            name: wand.name(),
+            kind: ItemKind::Wand(wand),
+            description: "...".to_string(),
+            quantity: 1,
+            x: -1,
+            y: -1,
+        }
     }
 }

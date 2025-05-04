@@ -23,7 +23,7 @@ pub mod equipment; // 装备管理
 pub mod inventory; // 物品库存管理
 
 use equipment::{EquipError, Equipment, EquipmentSlot};
-use inventory::{Inventory, InventoryError};
+use inventory::{Inventory, InventoryError, InventorySlot};
 
 /// 完整的背包系统（遵循破碎的像素地牢机制）
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
@@ -268,7 +268,10 @@ impl Bag {
             return self
                 .weapons
                 .get(idx)
-                .map(|w| Item::from(w.clone()))
+                .and_then(|slot| match slot {
+                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => 
+                        Some(Item::from(item.as_ref().clone()))
+                })
                 .ok_or(BagError::InvalidIndex);
         }
         idx -= self.weapons.len();
@@ -278,7 +281,10 @@ impl Bag {
             return self
                 .armors
                 .get(idx)
-                .map(|a| Item::from(a.clone()))
+                .and_then(|slot| match slot {
+                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => 
+                        Some(Item::from(item.as_ref().clone()))
+                })
                 .ok_or(BagError::InvalidIndex);
         }
         idx -= self.armors.len();
@@ -288,7 +294,10 @@ impl Bag {
             return self
                 .potions
                 .get(idx)
-                .map(|p| Item::from(p.clone()))
+                .and_then(|slot| match slot {
+                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => 
+                        Some(Item::from(item.as_ref().clone()))
+                })
                 .ok_or(BagError::InvalidIndex);
         }
         idx -= self.potions.len();
@@ -298,7 +307,10 @@ impl Bag {
             return self
                 .scrolls
                 .get(idx)
-                .map(|s| Item::from(s.clone()))
+                .and_then(|slot| match slot {
+                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => 
+                        Some(Item::from(item.as_ref().clone()))
+                })
                 .ok_or(BagError::InvalidIndex);
         }
         idx -= self.scrolls.len();
@@ -308,7 +320,10 @@ impl Bag {
             return self
                 .rings
                 .get(idx)
-                .map(|r| Item::from(r.clone()))
+                .and_then(|slot| match slot {
+                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => 
+                        Some(Item::from(item.as_ref().clone()))
+                })
                 .ok_or(BagError::InvalidIndex);
         }
         idx -= self.rings.len();
@@ -318,7 +333,62 @@ impl Bag {
             return self
                 .food
                 .get(idx)
-                .map(|f| Item::from(f.clone()))
+                .and_then(|slot| match slot {
+                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => 
+                        Some(Item::from(item.as_ref().clone()))
+                })
+                .ok_or(BagError::InvalidIndex);
+        }
+        idx -= self.food.len();
+
+        // 检查法杖
+        if idx < self.wands.len() {
+            return self
+                .wands
+                .get(idx)
+                .and_then(|slot| match slot {
+                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => 
+                        Some(Item::from(item.as_ref().clone()))
+                })
+                .ok_or(BagError::InvalidIndex);
+        }
+        idx -= self.wands.len();
+
+        // 检查种子
+        if idx < self.seeds.len() {
+            return self
+                .seeds
+                .get(idx)
+                .and_then(|slot| match slot {
+                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => 
+                        Some(Item::from(item.as_ref().clone()))
+                })
+                .ok_or(BagError::InvalidIndex);
+        }
+        idx -= self.seeds.len();
+
+        // 检查宝石
+        if idx < self.stones.len() {
+            return self
+                .stones
+                .get(idx)
+                .and_then(|slot| match slot {
+                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => 
+                        Some(Item::from(item.as_ref().clone()))
+                })
+                .ok_or(BagError::InvalidIndex);
+        }
+        idx -= self.stones.len();
+
+        // 检查杂项
+        if idx < self.misc.len() {
+            return self
+                .misc
+                .get(idx)
+                .and_then(|slot| match slot {
+                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => 
+                        Some(Item::from(item.as_ref().clone()))
+                })
                 .ok_or(BagError::InvalidIndex);
         }
 

@@ -13,6 +13,8 @@ use std::hash::Hasher;
 use crate::ItemCategory;
 use crate::ItemTrait;
 use crate::BINCODE_CONFIG;
+use crate::Item;
+use crate::ItemKind;
 
 /// 魔法石系统（10种对应卷轴）
 #[derive(Eq, Hash, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
@@ -224,5 +226,18 @@ impl ItemTrait for Stone {
     }
     fn sort_value(&self) -> u32 {
         30
+    }
+}
+
+impl From<Stone> for Item {
+    fn from(stone: Stone) -> Self {
+        Item {
+            name: stone.name(),
+            kind: ItemKind::Stone(stone),
+            description: "...".to_string(),
+            quantity: 1,
+            x: -1,
+            y: -1,
+        }
     }
 }

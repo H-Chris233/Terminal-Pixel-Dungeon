@@ -11,6 +11,8 @@ use tui::style::Color;
 use crate::ItemCategory;
 use crate::ItemTrait;
 use crate::BINCODE_CONFIG;
+use crate::Item;
+use crate::ItemKind;
 
 /// 护甲数据（精确还原游戏机制）
 #[derive(PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
@@ -452,5 +454,15 @@ impl ItemTrait for Armor {
     /// 最大堆叠数量固定为1
     fn max_stack(&self) -> u32 {
         1
+    }
+}
+
+impl From<Armor> for Item {
+    fn from(armor: Armor) -> Self {
+        Item {
+            kind: ItemKind::Armor(armor),
+            // 其他必要的字段
+            ..Default::default()
+        }
     }
 }

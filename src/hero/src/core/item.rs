@@ -16,7 +16,6 @@ use thiserror::Error;
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
-use crate::BagError;
 use crate::EffectSystem;
 use crate::Hero;
 use crate::HeroBehavior;
@@ -127,11 +126,11 @@ impl Hero {
 
 impl InventorySystem for Hero {
     fn add_item(&mut self, item: Item) -> Result<(), HeroError> {
-        Ok(self.bag.add_item(item)?)
+        self.bag.add_item(item).map_err(|e| e.into())
     }
 
     fn remove_item(&mut self, index: usize) -> Result<(), HeroError> {
-        Ok(self.bag.remove_item(index)?)
+        self.bag.remove_item(index).map_err(|e| e.into()) 
     }
 
     fn equip_item(&mut self, index: usize) -> Result<Option<Item>, HeroError> {
@@ -141,6 +140,6 @@ impl InventorySystem for Hero {
     }
 
     fn use_item(&mut self, index: usize) -> Result<Item, HeroError> {
-        Ok(self.bag.use_item(index)?)
+        self.bag.use_item(index).map_err(|e| e.into())
     }
 }

@@ -9,6 +9,8 @@ use std::hash::Hasher;
 use crate::ItemCategory;
 use crate::ItemTrait;
 use crate::BINCODE_CONFIG;
+use crate::Item;
+use crate::ItemKind;
 
 /// 戒指系统（基于破碎的像素地牢v1.0.1设计）
 #[derive(PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
@@ -388,5 +390,15 @@ impl ItemTrait for Ring {
     }
     fn sort_value(&self) -> u32 {
         100
+    }
+}
+
+impl From<Ring> for Item {
+    fn from(ring: Ring) -> Self {
+        Item {
+            kind: ItemKind::Ring(ring),
+            // 其他必要的字段
+            ..Default::default()
+        }
     }
 }
