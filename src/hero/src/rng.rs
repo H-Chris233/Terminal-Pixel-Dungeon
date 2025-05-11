@@ -1,8 +1,10 @@
 //src/hero/src/rng.rs
 use bincode::{
-    config::{Config, Configuration},
+    config,
     de::{BorrowDecoder, Decoder},
-    BorrowDecode, Decode, Encode,
+    enc::Encoder,
+    error::{DecodeError, EncodeError},
+    BorrowDecode, Decode, Encode
 };
 use rand::{
     distr::uniform,
@@ -88,24 +90,22 @@ impl HeroRng {
     {
         self.rng.random_range(range)
     }
+    
+    #[cfg(test)]
+    pub fn current_state(&self) -> Pcg32 {
+        self.rng.clone()
+    }
 }
 
 // 序列化实现
 impl Serialize for HeroRng {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_u64(self.seed)
     }
 }
 
-// 反序列化实现
 impl<'de> Deserialize<'de> for HeroRng {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let seed = u64::deserialize(deserializer)?;
         Ok(Self::new(seed))
     }
@@ -113,27 +113,24 @@ impl<'de> Deserialize<'de> for HeroRng {
 
 // 手动实现 bincode 的编解码
 impl Encode for HeroRng {
-    fn encode<E: bincode::enc::Encoder>(
-        &self,
-        encoder: &mut E,
-    ) -> Result<(), bincode::error::EncodeError> {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         self.seed.encode(encoder)
     }
 }
 
-impl Decode<Configuration> for HeroRng {
-    fn decode<D: bincode::de::Decoder>(
+impl<Context> Decode<Context> for HeroRng {
+    fn decode<D: Decoder<Context = Context>>(
         decoder: &mut D,
-    ) -> Result<Self, bincode::error::DecodeError> {
+    ) -> Result<Self, DecodeError> {
         let seed = u64::decode(decoder)?;
         Ok(Self::new(seed))
     }
 }
 
-impl<'de> BorrowDecode<'de, Configuration> for HeroRng {
-    fn borrow_decode<D: bincode::de::BorrowDecoder<'de>>(
-        decoder: &mut D,
-    ) -> Result<Self, bincode::error::DecodeError> {
+impl<'de, Context> BorrowDecode<'de, Context> for HeroRng {
+    fn borrow_decode<D: BorrowDecoder<'de, Context = Context>>(
+        decoder: &mut D
+    ) -> Result<Self, DecodeError> {
         let seed = u64::borrow_decode(decoder)?;
         Ok(Self::new(seed))
     }
@@ -142,7 +139,8 @@ impl<'de> BorrowDecode<'de, Configuration> for HeroRng {
 #[cfg(test)]
 mod tests {
     use super::*;
-
+    use bincode::{config, Decode, Encode};
+    
     #[test]
     fn test_deterministic_rng() {
         let mut rng1 = HeroRng::new(123);
@@ -167,5 +165,18 @@ mod tests {
         // 检查防御值在预期范围内 (7-13)
         assert!(roll >= 7);
         assert!(roll <= 13);
+    }
+    
+    #[test]
+    fn test_bincode_roundtrip() {
+        let mut rng = HeroRng::new(123456);
+        
+        // 使用标准配置函数 
+        let config = config::standard();
+        
+        let encoded = bincode::encode_to_vec(&rng, config).unwrap();
+        let decoded: HeroRng = bincode::decode_from_slice(&encoded, config).unwrap().0;
+
+        assert_eq!(rng.seed(), decoded.seed());
     }
 }
