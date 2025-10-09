@@ -1,7 +1,7 @@
 //! Ratatui renderer implementation for the ECS architecture.
 
 use crate::ecs::*;
-use crate::gfx::*;
+
 use ratatui::{
     backend::Backend,
     buffer::Buffer,
@@ -14,6 +14,38 @@ use ratatui::{
 use std::io::{self, Stdout};
 use std::time::Duration;
 use std::collections::HashMap;
+
+/// Trait for rendering the game state
+pub trait Renderer {
+    type Backend: Backend;
+    
+    /// Initialize the renderer
+    fn init(&mut self) -> Result<(), Box<dyn std::error::Error>>;
+    
+    /// Draw the current game state
+    fn draw(&mut self, ecs_world: &mut ECSWorld) -> Result<(), Box<dyn std::error::Error>>;
+    
+    /// Draw UI elements
+    fn draw_ui(&mut self, frame: &mut Frame<'_>, area: Rect);
+    
+    /// Cleanup resources
+    fn cleanup(&mut self) -> Result<(), Box<dyn std::error::Error>>;
+}
+
+/// Trait for time management
+pub trait Clock {
+    /// Get the current time
+    fn now(&self) -> std::time::SystemTime;
+    
+    /// Get elapsed time since a given point
+    fn elapsed(&self, since: std::time::SystemTime) -> Duration;
+    
+    /// Sleep for duration
+    fn sleep(&self, duration: Duration);
+    
+    /// Get fixed time step for game logic updates
+    fn tick_rate(&self) -> Duration;
+}
 
 /// Ratatui terminal renderer implementation
 pub struct RatatuiRenderer {
@@ -50,7 +82,7 @@ impl RatatuiRenderer {
     }
     
     /// Render a frame with ECS world data
-    fn render_frame(&self, frame: &mut Frame<impl Backend>, ecs_world: &ECSWorld) {
+    fn render_frame(&self, frame: &mut Frame<'_>, ecs_world: &ECSWorld) {
         // Create main layout
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -93,7 +125,7 @@ impl Renderer for RatatuiRenderer {
         self.render_ecs_world(ecs_world)
     }
     
-    fn draw_ui(&mut self, frame: &mut Frame<Self::Backend>, area: Rect) {
+    fn draw_ui(&mut self, frame: &mut Frame<'_>, area: Rect) {
         // Draw UI elements in the provided area
         let block = Block::default()
             .title("UI Panel")
@@ -102,12 +134,6 @@ impl Renderer for RatatuiRenderer {
     }
     
     fn cleanup(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        Ok(())
-    }
-    
-    fn resize(&mut self, _resources: &mut Resources, _width: u16, _height: u16) -> Result<(), Box<dyn std::error::Error>> {
-        // Handle terminal resize
-        // In a real implementation, we would adjust the renderer based on new dimensions
         Ok(())
     }
 }
@@ -227,7 +253,7 @@ fn find_player_position(ecs_world: &ECSWorld) -> Option<Position> {
     for (entity, (pos, _actor)) in ecs_world.world.query::<(&Position, &Actor)>().iter() {
         // In a real implementation, we'd check if this is the player specifically
         // For now, we'll just return the first actor as the player
-        if ecs_world.world.has::<Player>(entity) {
+        if ecs_world.world.contains(entity) && ecs_world.world.get::<Player>(entity).is_ok() {
             return Some(pos.clone());
         }
     }
@@ -239,7 +265,7 @@ fn get_visible_positions(ecs_world: &ECSWorld) -> std::collections::HashSet<(i32
     let mut visible_positions = std::collections::HashSet::new();
     
     for (entity, (viewshed, _pos, _actor)) in ecs_world.world.query::<(&Viewshed, &Position, &Actor)>().iter() {
-        if ecs_world.world.has::<Player>(entity) { // Only player's viewshed
+        if ecs_world.world.contains(entity) && ecs_world.world.get::<Player>(entity).is_ok() { // Only player's viewshed
             for pos in &viewshed.visible_tiles {
                 visible_positions.insert((pos.x, pos.y));
             }
@@ -325,6 +351,8 @@ impl From<Color> for TuiColor {
             Color::Cyan => TuiColor::Cyan,
             Color::Gray => TuiColor::Gray,
             Color::DarkGray => TuiColor::DarkGray,
+            Color::White => TuiColor::White,
+            Color::Black => TuiColor::Black,
             Color::Reset => TuiColor::Reset,
             Color::Rgb(r, g, b) => TuiColor::Rgb(r, g, b),
         }

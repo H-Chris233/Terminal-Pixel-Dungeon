@@ -2,11 +2,12 @@
 #![allow(unused)]
 
 pub mod ecs;
-pub mod gfx;
 pub mod systems;
 pub mod game_loop;
 pub mod input;
 pub mod renderer;
+
+use renderer::{Renderer, Clock};
 
 use anyhow::{Context, Result};
 use crossterm::{

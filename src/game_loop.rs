@@ -1,7 +1,7 @@
 //! Game loop implementation that orchestrates ECS systems.
 
 use crate::ecs::*;
-use crate::gfx::*;
+use crate::renderer::*;
 use crate::systems::*;
 use crate::input::*;
 use hecs::World;
@@ -37,8 +37,7 @@ impl<R: Renderer, I: InputSource, C: Clock> GameLoop<R, I, C> {
             Box::new(RenderingSystem),
         ];
         
-        // Initialize the world with player entity
-        Self::initialize_world_entities(&mut World::new());
+
         
         Self {
             ecs_world: ECSWorld::new(),

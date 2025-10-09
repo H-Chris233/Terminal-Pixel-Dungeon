@@ -43,7 +43,7 @@ impl System for MovementSystem {
                     // Find player entity
                     if let Some(player_entity) = find_player(world) {
                         // Get current position
-                        if let Ok(mut pos) = world.get_mut::<Position>(player_entity) {
+                        if let Ok(mut pos) = world.get::<&mut Position>(player_entity) {
                             // Calculate new position based on direction
                             let (dx, dy) = match dir {
                                 Direction::North => (0, -1),
@@ -66,7 +66,7 @@ impl System for MovementSystem {
                                 pos.y = target_y;
                                 
                                 // Mark viewshed as dirty to recalculate FOV
-                                if let Ok(mut viewshed) = world.get_mut::<Viewshed>(player_entity) {
+                                if let Ok(mut viewshed) = world.get::<&mut Viewshed>(player_entity) {
                                     viewshed.dirty = true;
                                 }
                             }
@@ -92,11 +92,11 @@ impl System for MovementSystem {
                         ) {
                             // Handle the attack
                             if let (Ok(player_pos), Ok(target_pos_comp)) = (
-                                world.get::<Position>(player_entity),
-                                world.get::<Position>(target_entity)
+                                world.get::<&Position>(player_entity),
+                                world.get::<&Position>(target_entity)
                             ) {
                                 // Check if attack is valid (adjacent target)
-                                let distance = player_pos.distance_to(target_pos_comp);
+                                let distance = player_pos.distance_to(&*target_pos_comp);
                                 if distance <= 1.5 { // Adjacent
                                     process_attack(world, player_entity, target_entity);
                                 }
@@ -110,7 +110,7 @@ impl System for MovementSystem {
                     }
                 }
                 PlayerAction::Descend => {
-                    if let Ok(mut pos) = world.get_mut::<Position>(find_player(world).unwrap()) {
+                    if let Ok(mut pos) = world.get::<&mut Position>(find_player(world).unwrap()) {
                         pos.z += 1; // Move to next dungeon level
                         resources.game_state.depth += 1;
                         
@@ -119,7 +119,7 @@ impl System for MovementSystem {
                     }
                 }
                 PlayerAction::Ascend => {
-                    if let Ok(mut pos) = world.get_mut::<Position>(find_player(world).unwrap()) {
+                    if let Ok(mut pos) = world.get::<&mut Position>(find_player(world).unwrap()) {
                         if pos.z > 0 {
                             pos.z -= 1; // Move to previous dungeon level
                             resources.game_state.depth = resources.game_state.depth.saturating_sub(1);
@@ -162,8 +162,8 @@ impl System for FOVSystem {
         for (entity, mut viewshed) in world.query_mut::<&mut Viewshed>() {
             if viewshed.dirty {
                 // Calculate visible tiles using FOV algorithm
-                let pos = world.get::<Position>(entity).unwrap();
-                viewshed.visible_tiles = calculate_fov(world, pos, viewshed.range);
+                let pos = &*world.get::<&Position>(entity).unwrap();
+                viewshed.visible_tiles = calculate_fov(world, &*pos, viewshed.range);
                 viewshed.dirty = false;
             }
         }
@@ -188,7 +188,7 @@ impl System for AISystem {
             
             // Determine target (usually player)
             let player_pos = if let Some(player_entity) = find_player(world) {
-                world.get::<Position>(player_entity).ok()
+                world.get::<&Position>(player_entity).ok().map(|p| &*p)
             } else {
                 None
             };
@@ -198,7 +198,7 @@ impl System for AISystem {
                 AIType::Aggressive => {
                     if let Some(target_pos) = player_pos {
                         // Move towards player if in range (chasing)
-                        let distance = pos.distance_to(target_pos);
+                        let distance = pos.distance_to(&*target_pos);
                         
                         if distance <= 1.5 {
                             // Attack the player
@@ -398,7 +398,7 @@ fn calculate_fov(_world: &World, _pos: &Position, _range: u8) -> Vec<Position> {
 /// Helper function to process an attack between two entities
 fn process_attack(world: &mut World, attacker: Entity, defender: Entity) {
     if let (Ok(attacker_stats), Ok(mut defender_stats)) = 
-        (world.get::<Stats>(attacker), world.get_mut::<Stats>(defender)) {
+        (world.get::<&Stats>(attacker), world.get::<&mut Stats>(defender)) {
         
         // Calculate damage based on attacker's stats and defender's defense
         let damage = std::cmp::max(1, attacker_stats.attack as i32 - defender_stats.defense as i32);
@@ -419,7 +419,7 @@ fn process_attack(world: &mut World, attacker: Entity, defender: Entity) {
 
 /// Helper function to use an item from inventory
 fn use_item(world: &mut World, entity: Entity, index: usize) {
-    if let Ok(mut inventory) = world.get_mut::<Inventory>(entity) {
+    if let Ok(mut inventory) = world.get::<&mut Inventory>(entity) {
         if index < inventory.items.len() {
             if let Some(item_slot) = inventory.items.get_mut(index) {
                 if let Some(item) = item_slot.item.clone() {
@@ -438,13 +438,13 @@ fn use_item(world: &mut World, entity: Entity, index: usize) {
                         }
                         ItemType::Weapon { damage } => {
                             // Equip weapon (simplified)
-                            if let Ok(mut stats) = world.get_mut::<Stats>(entity) {
+                            if let Ok(mut stats) = world.get::<&mut Stats>(entity) {
                                 stats.attack = damage;
                             }
                         }
                         ItemType::Armor { defense } => {
                             // Equip armor (simplified)
-                            if let Ok(mut stats) = world.get_mut::<Stats>(entity) {
+                            if let Ok(mut stats) = world.get::<&mut Stats>(entity) {
                                 stats.defense = defense;
                             }
                         }
@@ -463,7 +463,7 @@ fn use_item(world: &mut World, entity: Entity, index: usize) {
 
 /// Helper function to drop an item from inventory
 fn drop_item(world: &mut World, entity: Entity, index: usize) {
-    if let Ok(mut inventory) = world.get_mut::<Inventory>(entity) {
+    if let Ok(mut inventory) = world.get::<&mut Inventory>(entity) {
         if index < inventory.items.len() {
             if let Some(item_slot) = inventory.items.get_mut(index) {
                 if let Some(item) = item_slot.item.take() {
@@ -483,18 +483,18 @@ fn drop_item(world: &mut World, entity: Entity, index: usize) {
 fn apply_consumable_effect(world: &mut World, entity: Entity, effect: ConsumableEffect) {
     match effect {
         ConsumableEffect::Healing { amount } => {
-            if let Ok(mut stats) = world.get_mut::<Stats>(entity) {
+            if let Ok(mut stats) = world.get::<&mut Stats>(entity) {
                 stats.hp = std::cmp::min(stats.max_hp, stats.hp + amount);
             }
         }
         ConsumableEffect::Damage { amount } => {
-            if let Ok(mut stats) = world.get_mut::<Stats>(entity) {
+            if let Ok(mut stats) = world.get::<&mut Stats>(entity) {
                 stats.hp = stats.hp.saturating_sub(amount);
             }
         }
         ConsumableEffect::Buff { stat, value, duration } => {
             // Add the buff as an active effect
-            if let Ok(mut effects) = world.get_mut::<Effects>(entity) {
+            if let Ok(mut effects) = world.get::<&mut Effects>(entity) {
                 effects.active_effects.push(ActiveEffect {
                     effect_type: match stat {
                         StatType::Hp => EffectType::Healing,
@@ -524,17 +524,17 @@ fn apply_effect_to_entity(world: &mut World, entity: Entity, effect: &ActiveEffe
     // Apply the effect to the entity based on effect type
     match effect.effect_type {
         EffectType::Healing => {
-            if let Ok(mut stats) = world.get_mut::<Stats>(entity) {
+            if let Ok(mut stats) = world.get::<&mut Stats>(entity) {
                 stats.hp = std::cmp::min(stats.max_hp, stats.hp + effect.intensity);
             }
         }
         EffectType::Poison => {
-            if let Ok(mut stats) = world.get_mut::<Stats>(entity) {
+            if let Ok(mut stats) = world.get::<&mut Stats>(entity) {
                 stats.hp = stats.hp.saturating_sub(effect.intensity);
             }
         }
         EffectType::Burning => {
-            if let Ok(mut stats) = world.get_mut::<Stats>(entity) {
+            if let Ok(mut stats) = world.get::<&mut Stats>(entity) {
                 stats.hp = stats.hp.saturating_sub(effect.intensity);
             }
         }

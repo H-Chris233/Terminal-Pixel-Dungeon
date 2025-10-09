@@ -47,12 +47,22 @@ pub struct Resources {
     pub dungeon: Option<hecs::Entity>,
 }
 
-#[derive(Default)]
 pub struct GameClock {
     pub current_time: std::time::SystemTime,
     pub elapsed_time: Duration,
     pub turn_count: u32,
     pub tick_rate: Duration,
+}
+
+impl Default for GameClock {
+    fn default() -> Self {
+        Self {
+            current_time: std::time::SystemTime::now(),
+            elapsed_time: Duration::from_secs(0),
+            turn_count: 0,
+            tick_rate: Duration::from_millis(16), // ~60 FPS
+        }
+    }
 }
 
 #[derive(Default)]
@@ -107,6 +117,10 @@ pub struct GameConfig {
     pub save_directory: String,
 }
 
+// Player marker component
+#[derive(Clone, Debug)]
+pub struct Player;
+
 // Basic Components
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Position {
@@ -114,6 +128,8 @@ pub struct Position {
     pub y: i32,
     pub z: i32, // dungeon level
 }
+
+
 
 impl Position {
     pub fn new(x: i32, y: i32, z: i32) -> Self {
@@ -136,6 +152,7 @@ pub struct Tile {
     pub has_monster: bool,
 }
 
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum TerrainType {
     Floor,
@@ -157,6 +174,7 @@ pub struct Renderable {
     pub order: u8, // rendering order
 }
 
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Color {
     Red,
@@ -167,6 +185,8 @@ pub enum Color {
     Cyan,
     Gray,
     DarkGray,
+    White,
+    Black,
     Reset,
     Rgb(u8, u8, u8),
 }
@@ -176,6 +196,7 @@ pub struct Actor {
     pub name: String,
     pub faction: Faction,
 }
+
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Faction {
@@ -196,11 +217,13 @@ pub struct Stats {
     pub experience: u32,
 }
 
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Inventory {
     pub items: Vec<ItemSlot>,
     pub max_slots: usize,
 }
+
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ItemSlot {
@@ -248,7 +271,9 @@ pub struct Viewshed {
     pub range: u8,
     pub visible_tiles: Vec<Position>,
     pub memory: Vec<Position>, // previously seen tiles
+    pub dirty: bool,
 }
+
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Energy {
@@ -257,12 +282,27 @@ pub struct Energy {
     pub regeneration_rate: u32,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+
+#[derive(Clone, Debug)]
 pub struct AI {
     pub ai_type: AIType,
     pub target: Option<Entity>,
     pub state: AIState,
 }
+
+impl AI {
+    pub fn range(&self) -> u8 {
+        match &self.ai_type {
+            AIType::Aggressive => 10, // Default aggressive range
+            AIType::Passive => 2,
+            AIType::Neutral => 5,
+            AIType::Patrol { .. } => 10,
+        }
+    }
+}
+
+// AI cannot be serialized due to Entity type
+
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum AIType {
@@ -285,6 +325,7 @@ pub enum AIState {
 pub struct Effects {
     pub active_effects: Vec<ActiveEffect>,
 }
+
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ActiveEffect {
