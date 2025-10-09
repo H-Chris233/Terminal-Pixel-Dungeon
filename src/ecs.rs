@@ -70,6 +70,8 @@ pub struct GameState {
     pub game_state: GameStatus,
     pub depth: usize,
     pub message_log: Vec<String>,
+    pub terminal_width: u16,
+    pub terminal_height: u16,
 }
 
 #[derive(Default, Clone, Copy, PartialEq)]

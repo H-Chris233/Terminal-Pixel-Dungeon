@@ -1,6 +1,7 @@
 //! Input handling abstractions for the ECS architecture.
 
 use crate::ecs::*;
+use anyhow;
 use std::time::Duration;
 use crossterm::event::{self, Event as CEvent, KeyCode as CrosstermKeyCode, KeyEvent as CrosstermKeyEvent, KeyModifiers as CrosstermKeyModifiers};
 
@@ -9,10 +10,10 @@ pub trait InputSource {
     type Event;
     
     /// Poll for input events with a timeout
-    fn poll(&mut self, timeout: Duration) -> Result<Option<Self::Event>, Box<dyn std::error::Error>>;
+    fn poll(&mut self, timeout: Duration) -> anyhow::Result<Option<Self::Event>>;
     
     /// Check if input is available without blocking
-    fn is_input_available(&self) -> Result<bool, Box<dyn std::error::Error>>;
+    fn is_input_available(&self) -> anyhow::Result<bool>;
 }
 
 /// Console input source implementation
@@ -26,7 +27,7 @@ impl ConsoleInput {
     }
     
     /// Process input events and convert them to PlayerActions for the ECS
-    pub fn process_events(&mut self, resources: &mut Resources) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn process_events(&mut self, resources: &mut Resources) -> anyhow::Result<()> {
         // Process crossterm events if available
         if event::poll(Duration::from_millis(50))? {
             if let Ok(CEvent::Key(key_event)) = event::read() {
@@ -43,7 +44,7 @@ impl ConsoleInput {
 impl InputSource for ConsoleInput {
     type Event = InputEvent;
     
-    fn poll(&mut self, timeout: Duration) -> Result<Option<Self::Event>, Box<dyn std::error::Error>> {
+    fn poll(&mut self, timeout: Duration) -> anyhow::Result<Option<Self::Event>> {
         // In a real implementation, we would use crossterm or similar to poll for events
         // For now, we'll just return None to indicate no input
         if event::poll(timeout)? {
@@ -54,7 +55,7 @@ impl InputSource for ConsoleInput {
         Ok(None)
     }
     
-    fn is_input_available(&self) -> Result<bool, Box<dyn std::error::Error>> {
+    fn is_input_available(&self) -> anyhow::Result<bool> {
         // In a real implementation, we would check if input is ready
         Ok(event::poll(Duration::from_millis(0))?)
     }
@@ -122,7 +123,6 @@ pub enum MouseButton {
 }
 
 /// Convert crossterm events to our internal events
-#[cfg(feature = "crossterm")]
 impl From<crossterm::event::Event> for InputEvent {
     fn from(event: crossterm::event::Event) -> Self {
         match event {
@@ -140,7 +140,6 @@ impl From<crossterm::event::Event> for InputEvent {
     }
 }
 
-#[cfg(feature = "crossterm")]
 impl From<crossterm::event::KeyEvent> for KeyEvent {
     fn from(key_event: crossterm::event::KeyEvent) -> Self {
         Self {
@@ -150,7 +149,6 @@ impl From<crossterm::event::KeyEvent> for KeyEvent {
     }
 }
 
-#[cfg(feature = "crossterm")]
 impl From<crossterm::event::KeyCode> for KeyCode {
     fn from(code: crossterm::event::KeyCode) -> Self {
         match code {
@@ -175,7 +173,6 @@ impl From<crossterm::event::KeyCode> for KeyCode {
     }
 }
 
-#[cfg(feature = "crossterm")]
 impl From<crossterm::event::KeyModifiers> for KeyModifiers {
     fn from(modifiers: crossterm::event::KeyModifiers) -> Self {
         Self {
@@ -186,7 +183,6 @@ impl From<crossterm::event::KeyModifiers> for KeyModifiers {
     }
 }
 
-#[cfg(feature = "crossterm")]
 impl From<crossterm::event::MouseEvent> for MouseEvent {
     fn from(event: crossterm::event::MouseEvent) -> Self {
         match event.kind {
@@ -204,7 +200,6 @@ impl From<crossterm::event::MouseEvent> for MouseEvent {
     }
 }
 
-#[cfg(feature = "crossterm")]
 impl From<crossterm::event::MouseButton> for MouseButton {
     fn from(button: crossterm::event::MouseButton) -> Self {
         match button {
@@ -284,7 +279,7 @@ pub fn key_event_to_player_action(key: CrosstermKeyEvent) -> Option<PlayerAction
 }
 
 /// Process input and update ECS world
-pub fn process_input(ecs_world: &mut ECSWorld) -> Result<bool, Box<dyn std::error::Error>> {
+pub fn process_input(ecs_world: &mut ECSWorld) -> anyhow::Result<bool> {
     // Process crossterm events and add to input buffer
     if event::poll(Duration::from_millis(50))? {
         if let Ok(CEvent::Key(key_event)) = event::read() {

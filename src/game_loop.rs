@@ -4,6 +4,7 @@ use crate::ecs::*;
 use crate::renderer::*;
 use crate::systems::*;
 use crate::input::*;
+use anyhow;
 use hecs::World;
 use std::time::{Duration, Instant};
 
@@ -17,7 +18,7 @@ pub struct GameLoop<R: Renderer, I: InputSource, C: Clock> {
     pub is_running: bool,
 }
 
-impl<R: Renderer, I: InputSource, C: Clock> GameLoop<R, I, C> {
+impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> GameLoop<R, I, C> {
     pub fn new(
         renderer: R,
         input_source: I,
@@ -50,7 +51,7 @@ impl<R: Renderer, I: InputSource, C: Clock> GameLoop<R, I, C> {
     }
     
     /// Initialize the game state
-    pub fn initialize(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn initialize(&mut self) -> anyhow::Result<()> {
         self.renderer.init()?;
         
         // Add initial entities to the world
@@ -191,7 +192,7 @@ impl<R: Renderer, I: InputSource, C: Clock> GameLoop<R, I, C> {
     }
     
     /// Main game loop
-    pub fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn run(&mut self) -> anyhow::Result<()> {
         let mut last_tick = Instant::now();
         
         while self.is_running {
@@ -217,7 +218,7 @@ impl<R: Renderer, I: InputSource, C: Clock> GameLoop<R, I, C> {
     }
     
     /// Handle user input
-    fn handle_input(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn handle_input(&mut self) -> anyhow::Result<()> {
         // Poll for input with a small timeout
         if let Ok(Some(event)) = self.input_source.poll(Duration::from_millis(50)) {
             match event {
@@ -239,7 +240,7 @@ impl<R: Renderer, I: InputSource, C: Clock> GameLoop<R, I, C> {
     }
     
     /// Update game state by running all systems
-    fn update(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn update(&mut self) -> anyhow::Result<()> {
         for system in &mut self.systems {
             match system.run(&mut self.ecs_world.world, &mut self.ecs_world.resources) {
                 SystemResult::Continue => continue,
@@ -249,7 +250,7 @@ impl<R: Renderer, I: InputSource, C: Clock> GameLoop<R, I, C> {
                 }
                 SystemResult::Error(msg) => {
                     eprintln!("System error: {}", msg);
-                    return Err(msg.into());
+                    return Err(anyhow::anyhow!(msg));
                 }
             }
         }
@@ -258,7 +259,7 @@ impl<R: Renderer, I: InputSource, C: Clock> GameLoop<R, I, C> {
     }
     
     /// Render the current game state
-    fn render(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn render(&mut self) -> anyhow::Result<()> {
         use ratatui::backend::CrosstermBackend;
         use std::io::stdout;
         
@@ -268,7 +269,7 @@ impl<R: Renderer, I: InputSource, C: Clock> GameLoop<R, I, C> {
     }
     
     /// Clean up resources
-    fn cleanup(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn cleanup(&mut self) -> anyhow::Result<()> {
         self.renderer.cleanup()?;
         Ok(())
     }
@@ -305,7 +306,7 @@ impl HeadlessGameLoop {
     }
     
     /// Run the game loop without rendering (for testing)
-    pub fn run_for_ticks(&mut self, ticks: u32) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn run_for_ticks(&mut self, ticks: u32) -> anyhow::Result<()> {
         for _ in 0..ticks {
             if !self.is_running {
                 break;
@@ -318,7 +319,7 @@ impl HeadlessGameLoop {
     }
     
     /// Update game state by running all systems
-    fn update(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn update(&mut self) -> anyhow::Result<()> {
         for system in &mut self.systems {
             match system.run(&mut self.ecs_world.world, &mut self.ecs_world.resources) {
                 SystemResult::Continue => continue,
@@ -328,7 +329,7 @@ impl HeadlessGameLoop {
                 }
                 SystemResult::Error(msg) => {
                     eprintln!("System error: {}", msg);
-                    return Err(msg.into());
+                    return Err(anyhow::anyhow!(msg));
                 }
             }
         }
@@ -396,7 +397,7 @@ mod tests {
     use crate::renderer::GameClock;
     
     #[test]
-    fn test_game_loop_creation() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_game_loop_creation() -> anyhow::Result<()> {
         let renderer = RatatuiRenderer::new()?;
         let input_source = ConsoleInput::new();
         let clock = GameClock::new(16); // ~60 FPS

@@ -1,6 +1,7 @@
 //! Ratatui renderer implementation for the ECS architecture.
 
 use crate::ecs::*;
+use anyhow;
 
 use ratatui::{
     backend::Backend,
@@ -20,16 +21,19 @@ pub trait Renderer {
     type Backend: Backend;
     
     /// Initialize the renderer
-    fn init(&mut self) -> Result<(), Box<dyn std::error::Error>>;
+    fn init(&mut self) -> anyhow::Result<()>;
     
     /// Draw the current game state
-    fn draw(&mut self, ecs_world: &mut ECSWorld) -> Result<(), Box<dyn std::error::Error>>;
+    fn draw(&mut self, ecs_world: &mut ECSWorld) -> anyhow::Result<()>;
     
     /// Draw UI elements
     fn draw_ui(&mut self, frame: &mut Frame<'_>, area: Rect);
     
+    /// Handle terminal resize
+    fn resize(&mut self, resources: &mut Resources, width: u16, height: u16) -> anyhow::Result<()>;
+    
     /// Cleanup resources
-    fn cleanup(&mut self) -> Result<(), Box<dyn std::error::Error>>;
+    fn cleanup(&mut self) -> anyhow::Result<()>;
 }
 
 /// Trait for time management
@@ -63,7 +67,7 @@ struct RenderCacheEntry {
 }
 
 impl RatatuiRenderer {
-    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new() -> anyhow::Result<Self> {
         let backend = ratatui::backend::CrosstermBackend::new(io::stdout());
         let terminal = Terminal::new(backend)?;
         Ok(Self {
@@ -74,54 +78,53 @@ impl RatatuiRenderer {
     }
     
     /// Render the ECS world to the terminal
-    fn render_ecs_world(&mut self, ecs_world: &mut ECSWorld) -> Result<(), Box<dyn std::error::Error>> {
+    fn render_ecs_world(&mut self, ecs_world: &mut ECSWorld) -> anyhow::Result<()> {
         self.terminal.draw(|f| {
-            self.render_frame(f, ecs_world);
+            // Create a temporary renderer to handle the frame rendering
+            let game_area = GameWidget {
+                ecs_world,
+                player_pos: find_player_position(ecs_world),
+            };
+            
+            // Create main layout
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(1),  // Status bar
+                    Constraint::Min(10),     // Main game area
+                    Constraint::Length(3),   // Message log
+                ])
+                .split(f.area());
+            
+            // Draw status bar
+            let status_bar = Paragraph::new("Pixel Dungeon - Status")
+                .style(Style::default().fg(TuiColor::Yellow))
+                .block(Block::default().borders(Borders::NONE));
+            f.render_widget(status_bar, chunks[0]);
+            
+            // Draw main game area
+            f.render_widget(game_area, chunks[1]);
+            
+            // Draw message log
+            let messages = Paragraph::new(format_messages(&ecs_world.resources.game_state.message_log))
+                .style(Style::default().fg(TuiColor::Gray))
+                .block(Block::default().borders(Borders::TOP));
+            f.render_widget(messages, chunks[2]);
         })?;
         Ok(())
     }
     
-    /// Render a frame with ECS world data
-    fn render_frame(&self, frame: &mut Frame<'_>, ecs_world: &ECSWorld) {
-        // Create main layout
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(1),  // Status bar
-                Constraint::Min(10),     // Main game area
-                Constraint::Length(3),   // Message log
-            ])
-            .split(frame.size());
-        
-        // Draw status bar
-        let status_bar = Paragraph::new("Pixel Dungeon - Status")
-            .style(Style::default().fg(TuiColor::Yellow))
-            .block(Block::default().borders(Borders::NONE));
-        frame.render_widget(status_bar, chunks[0]);
-        
-        // Draw main game area
-        let game_area = GameWidget {
-            ecs_world,
-            player_pos: find_player_position(ecs_world),
-        };
-        frame.render_widget(game_area, chunks[1]);
-        
-        // Draw message log
-        let messages = Paragraph::new(format_messages(&ecs_world.resources.game_state.message_log))
-            .style(Style::default().fg(TuiColor::Gray))
-            .block(Block::default().borders(Borders::TOP));
-        frame.render_widget(messages, chunks[2]);
-    }
+
 }
 
 impl Renderer for RatatuiRenderer {
     type Backend = ratatui::backend::CrosstermBackend<Stdout>;
     
-    fn init(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn init(&mut self) -> anyhow::Result<()> {
         Ok(())
     }
     
-    fn draw(&mut self, ecs_world: &mut ECSWorld) -> Result<(), Box<dyn std::error::Error>> {
+    fn draw(&mut self, ecs_world: &mut ECSWorld) -> anyhow::Result<()> {
         self.render_ecs_world(ecs_world)
     }
     
@@ -133,7 +136,14 @@ impl Renderer for RatatuiRenderer {
         frame.render_widget(block, area);
     }
     
-    fn cleanup(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn resize(&mut self, resources: &mut Resources, width: u16, height: u16) -> anyhow::Result<()> {
+        // Update game state with new dimensions
+        resources.game_state.terminal_width = width;
+        resources.game_state.terminal_height = height;
+        Ok(())
+    }
+    
+    fn cleanup(&mut self) -> anyhow::Result<()> {
         Ok(())
     }
 }
@@ -149,7 +159,7 @@ impl<'a> Widget for GameWidget<'a> {
         // Fill the area with background
         for x in area.left()..area.right() {
             for y in area.top()..area.bottom() {
-                buf.get_mut(x, y)
+                buf[(x, y)]
                     .set_char(' ')
                     .set_fg(TuiColor::Black)
                     .set_bg(TuiColor::Black);
@@ -179,7 +189,7 @@ impl<'a> Widget for GameWidget<'a> {
 
             // Check bounds
             if x < area.right() && y < area.bottom() {
-                let cell = buf.get_mut(x, y);
+                let cell = &mut buf[(x, y)];
                 
                 // Set the tile's appearance
                 cell.set_char(tile.terrain_type.to_char());
@@ -233,7 +243,7 @@ impl<'a> Widget for GameWidget<'a> {
 
             // Check bounds
             if x < area.right() && y < area.bottom() {
-                let cell = buf.get_mut(x, y);
+                let cell = &mut buf[(x, y)];
                 
                 cell.set_char(renderable.symbol);
                 
@@ -253,7 +263,7 @@ fn find_player_position(ecs_world: &ECSWorld) -> Option<Position> {
     for (entity, (pos, _actor)) in ecs_world.world.query::<(&Position, &Actor)>().iter() {
         // In a real implementation, we'd check if this is the player specifically
         // For now, we'll just return the first actor as the player
-        if ecs_world.world.contains(entity) && ecs_world.world.get::<Player>(entity).is_ok() {
+        if ecs_world.world.contains(entity) && ecs_world.world.get::<&Player>(entity).is_ok() {
             return Some(pos.clone());
         }
     }
@@ -265,7 +275,7 @@ fn get_visible_positions(ecs_world: &ECSWorld) -> std::collections::HashSet<(i32
     let mut visible_positions = std::collections::HashSet::new();
     
     for (entity, (viewshed, _pos, _actor)) in ecs_world.world.query::<(&Viewshed, &Position, &Actor)>().iter() {
-        if ecs_world.world.contains(entity) && ecs_world.world.get::<Player>(entity).is_ok() { // Only player's viewshed
+        if ecs_world.world.contains(entity) && ecs_world.world.get::<&Player>(entity).is_ok() { // Only player's viewshed
             for pos in &viewshed.visible_tiles {
                 visible_positions.insert((pos.x, pos.y));
             }

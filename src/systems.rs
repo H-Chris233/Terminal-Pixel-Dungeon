@@ -1,6 +1,7 @@
 //! ECS Systems for game logic processing.
 
 use crate::ecs::*;
+use anyhow;
 use hecs::{Entity, World};
 
 /// Trait for ECS systems that operate on the world
@@ -90,16 +91,21 @@ impl System for MovementSystem {
                             target_pos.y, 
                             target_pos.z
                         ) {
-                            // Handle the attack
-                            if let (Ok(player_pos), Ok(target_pos_comp)) = (
+                            // Handle the attack - first check positions without holding mutable reference
+                            let should_attack = if let (Ok(player_pos_ref), Ok(target_pos_ref)) = (
                                 world.get::<&Position>(player_entity),
                                 world.get::<&Position>(target_entity)
                             ) {
-                                // Check if attack is valid (adjacent target)
-                                let distance = player_pos.distance_to(&*target_pos_comp);
-                                if distance <= 1.5 { // Adjacent
-                                    process_attack(world, player_entity, target_entity);
-                                }
+                                let player_pos = (*player_pos_ref).clone();
+                                let target_pos = (*target_pos_ref).clone();
+                                let distance = player_pos.distance_to(&target_pos);
+                                distance <= 1.5  // Adjacent
+                            } else {
+                                false
+                            };
+                            
+                            if should_attack {
+                                process_attack(world, player_entity, target_entity);
                             }
                         }
                     }
@@ -159,11 +165,18 @@ pub struct FOVSystem;
 impl System for FOVSystem {
     fn run(&mut self, world: &mut World, _resources: &mut Resources) -> SystemResult {
         // Update field of view for all entities with Viewshed component
-        for (entity, mut viewshed) in world.query_mut::<&mut Viewshed>() {
-            if viewshed.dirty {
-                // Calculate visible tiles using FOV algorithm
-                let pos = &*world.get::<&Position>(entity).unwrap();
-                viewshed.visible_tiles = calculate_fov(world, &*pos, viewshed.range);
+        // First, collect all entities that need FOV updates and their data
+        let entities_to_process: Vec<_> = world
+            .query::<(&Viewshed, &Position)>()
+            .iter()
+            .filter(|(_, (viewshed, _))| viewshed.dirty)
+            .map(|(entity, (viewshed, pos))| (entity, viewshed.range, pos.clone()))
+            .collect();
+        
+        // Then process and update each entity
+        for (entity, range, pos) in entities_to_process {
+            if let Ok(mut viewshed) = world.get::<&mut Viewshed>(entity) {
+                viewshed.visible_tiles = calculate_fov_simple(&pos, range);
                 viewshed.dirty = false;
             }
         }
@@ -178,32 +191,45 @@ pub struct AISystem;
 impl System for AISystem {
     fn run(&mut self, world: &mut World, resources: &mut Resources) -> SystemResult {
         // Process AI for all entities with AI component
-        for (entity, (mut ai, mut pos, mut energy)) in 
-            world.query_mut::<(&mut AI, &mut Position, &mut Energy)>() 
-        {
-            // Only process AI if entity has enough energy
-            if energy.current < 10 {
-                continue; // Not enough energy to act
+        // First, get all necessary information without holding borrows
+        let (player_entity_opt, player_pos_opt) = {
+            let mut player_entity_opt = None;
+            let mut player_pos_opt = None;
+            
+            if let Some(player_entity) = find_player(world) {
+                player_entity_opt = Some(player_entity);
+                // Get the position and extract the value to avoid borrow conflicts
+                if let Ok(pos_ref) = world.get::<&Position>(player_entity) {
+                    // Extract the value and drop the reference immediately
+                    player_pos_opt = Some((*pos_ref).clone());  // Dereference to get Position, then clone
+                }
             }
-            
-            // Determine target (usually player)
-            let player_pos = if let Some(player_entity) = find_player(world) {
-                world.get::<&Position>(player_entity).ok().map(|p| &*p)
-            } else {
-                None
-            };
-            
-            // Update AI state based on environment and target
+            (player_entity_opt, player_pos_opt)
+        };
+        
+        // Collect all AI entities that need processing, along with their info
+        let entities_to_process: Vec<_> = world
+            .query::<(&AI, &Position, &Energy)>()
+            .iter()
+            .filter(|(_, (_, _, energy))| energy.current >= 10) // Only process if enough energy
+            .map(|(entity, (ai, pos, _))| (entity, ai.clone(), pos.clone()))
+            .collect();
+        
+        // Process AI for each entity and collect actions to perform later
+        let mut entities_to_attack = Vec::new();
+        let mut entity_moves = Vec::new(); // Store movement for later application
+        
+        for (entity, mut ai, mut pos) in entities_to_process {
             match &mut ai.ai_type {
                 AIType::Aggressive => {
-                    if let Some(target_pos) = player_pos {
+                    if let Some(ref target_pos) = player_pos_opt {
                         // Move towards player if in range (chasing)
-                        let distance = pos.distance_to(&*target_pos);
+                        let distance = pos.distance_to(target_pos);
                         
                         if distance <= 1.5 {
-                            // Attack the player
-                            if let Some(player_entity) = find_player(world) {
-                                process_attack(world, entity, player_entity);
+                            // Schedule attack for later to avoid borrow conflicts
+                            if let Some(player_entity) = player_entity_opt {
+                                entities_to_attack.push((entity, player_entity));
                             }
                         } else if distance <= ai.range() as f32 {
                             // Move towards player
@@ -214,8 +240,7 @@ impl System for AISystem {
                             let new_y = pos.y + dy;
                             
                             if is_position_passable(world, new_x, new_y, pos.z) {
-                                pos.x = new_x;
-                                pos.y = new_y;
+                                entity_moves.push((entity, new_x, new_y));
                             }
                         }
                     } else {
@@ -236,9 +261,26 @@ impl System for AISystem {
                     }
                 }
             }
-            
-            // Consume energy for the AI action
-            energy.current = energy.current.saturating_sub(10);
+        }
+        
+        // Now update the positions for entities that need to move
+        for (entity, new_x, new_y) in entity_moves {
+            if let Ok(mut pos) = world.get::<&mut Position>(entity) {
+                pos.x = new_x;
+                pos.y = new_y;
+            }
+        }
+        
+        // Update energy for all AI entities (all get -10 energy)
+        for (entity, _) in world.query::<&AI>().iter() {
+            if let Ok(mut energy) = world.get::<&mut Energy>(entity) {
+                energy.current = energy.current.saturating_sub(10);
+            }
+        }
+        
+        // Finally, process all the scheduled attacks
+        for (attacker, defender) in entities_to_attack {
+            process_attack(world, attacker, defender);
         }
         
         SystemResult::Continue
@@ -251,29 +293,52 @@ pub struct EffectSystem;
 impl System for EffectSystem {
     fn run(&mut self, world: &mut World, _resources: &mut Resources) -> SystemResult {
         // Process active effects on all entities
-        for (entity, mut effects) in world.query_mut::<&mut Effects>() {
-            let mut effects_to_remove = Vec::new();
-            
-            for (idx, effect) in effects.active_effects.iter_mut().enumerate() {
-                // Handle timed effects
-                if effect.duration > 0 {
-                    effect.duration -= 1;
-                    
-                    // Apply effect
-                    apply_effect_to_entity(world, entity, effect);
-                    
-                    if effect.duration == 0 {
-                        effects_to_remove.push(idx);
-                    }
-                } else {
-                    // Permanent effects are always active
-                    apply_effect_to_entity(world, entity, effect);
-                }
+        // First collect all entities with effects and their effect data to avoid borrow conflicts
+        let entities_with_effects: Vec<_> = world
+            .query::<&Effects>()
+            .iter()
+            .map(|(entity, effects)| {
+                let effects_to_process: Vec<_> = effects.active_effects
+                    .iter()
+                    .cloned()
+                    .collect();
+                let entity_effects_to_expire: Vec<_> = effects.active_effects
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(idx, effect)| {
+                        if effect.duration > 0 && effect.duration == 1 {  // This will expire next tick
+                            Some((entity, idx))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                (entity, effects_to_process, entity_effects_to_expire)
+            })
+            .collect();
+        
+        // Apply all effects to their respective entities
+        for (entity, effects_to_apply, _) in &entities_with_effects {
+            for effect in effects_to_apply {
+                apply_effect_to_entity(world, *entity, effect);
             }
-            
-            // Remove expired effects
-            for &idx in effects_to_remove.iter().rev() {
-                effects.active_effects.remove(idx);
+        }
+        
+        // Update the effect components to reflect changes (like expiring timed effects)
+        for (entity, _, effects_to_expire) in entities_with_effects {
+            if let Ok(mut effects) = world.get::<&mut Effects>(entity) {
+                for (entity_to_expire, idx_to_remove) in effects_to_expire.iter().rev() {
+                    if *entity_to_expire == entity && *idx_to_remove < effects.active_effects.len() {
+                        effects.active_effects.remove(*idx_to_remove);
+                    }
+                }
+                
+                // Decrement duration for timed effects
+                for effect in &mut effects.active_effects {
+                    if effect.duration > 0 {
+                        effect.duration -= 1;
+                    }
+                }
             }
         }
         
@@ -395,6 +460,24 @@ fn calculate_fov(_world: &World, _pos: &Position, _range: u8) -> Vec<Position> {
     Vec::new()
 }
 
+/// Simple FOV calculation that doesn't require world access
+fn calculate_fov_simple(pos: &Position, range: u8) -> Vec<Position> {
+    // This would implement an actual FOV algorithm (like ray casting or shadow casting)
+    // For now, returning positions in a circle around the given position
+    let mut visible_tiles = Vec::new();
+    let range = range as i32;
+    
+    for dx in -range..=range {
+        for dy in -range..=range {
+            if dx * dx + dy * dy <= range * range {
+                visible_tiles.push(Position::new(pos.x + dx, pos.y + dy, pos.z));
+            }
+        }
+    }
+    
+    visible_tiles
+}
+
 /// Helper function to process an attack between two entities
 fn process_attack(world: &mut World, attacker: Entity, defender: Entity) {
     if let (Ok(attacker_stats), Ok(mut defender_stats)) = 
@@ -419,41 +502,70 @@ fn process_attack(world: &mut World, attacker: Entity, defender: Entity) {
 
 /// Helper function to use an item from inventory
 fn use_item(world: &mut World, entity: Entity, index: usize) {
-    if let Ok(mut inventory) = world.get::<&mut Inventory>(entity) {
-        if index < inventory.items.len() {
-            if let Some(item_slot) = inventory.items.get_mut(index) {
-                if let Some(item) = item_slot.item.clone() {
-                    // Use the item based on its type
-                    match item.item_type {
-                        ItemType::Consumable { effect } => {
-                            // Apply the consumable effect to the entity
-                            apply_consumable_effect(world, entity, effect);
-                            
-                            // Reduce item count
-                            if item_slot.quantity > 1 {
-                                item_slot.quantity -= 1;
-                            } else {
-                                item_slot.item = None;
-                            }
+    // First, check if we can use the item and get its type without mutably borrowing inventory
+    let item_to_use = {
+        if let Ok(inventory) = world.get::<&Inventory>(entity) {
+            if index < inventory.items.len() {
+                inventory.items.get(index)
+                    .and_then(|item_slot| item_slot.item.clone())
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    };
+    
+    // Process consumable items first to handle borrow conflicts
+    if let Some(item) = item_to_use {
+        if let ItemType::Consumable { effect } = item.item_type {
+            // Apply the consumable effect to the entity first
+            apply_consumable_effect(world, entity, effect);
+            
+            // Then update the inventory to reduce item count
+            if let Ok(mut inventory) = world.get::<&mut Inventory>(entity) {
+                if index < inventory.items.len() {
+                    if let Some(item_slot) = inventory.items.get_mut(index) {
+                        if item_slot.quantity > 1 {
+                            item_slot.quantity -= 1;
+                        } else {
+                            item_slot.item = None;
                         }
-                        ItemType::Weapon { damage } => {
-                            // Equip weapon (simplified)
-                            if let Ok(mut stats) = world.get::<&mut Stats>(entity) {
-                                stats.attack = damage;
-                            }
-                        }
-                        ItemType::Armor { defense } => {
-                            // Equip armor (simplified)
-                            if let Ok(mut stats) = world.get::<&mut Stats>(entity) {
-                                stats.defense = defense;
-                            }
-                        }
-                        ItemType::Key => {
-                            // Handle key usage
-                        }
-                        ItemType::Quest => {
-                            // Handle quest item usage
-                        }
+                    }
+                }
+            }
+        } else {
+            // Handle non-consumable items
+            match item.item_type {
+                ItemType::Weapon { damage } => {
+                    // Update stats
+                    if let Ok(mut stats) = world.get::<&mut Stats>(entity) {
+                        stats.attack = damage;
+                    }
+                }
+                ItemType::Armor { defense } => {
+                    // Update stats
+                    if let Ok(mut stats) = world.get::<&mut Stats>(entity) {
+                        stats.defense = defense;
+                    }
+                }
+                ItemType::Key => {
+                    // Handle key usage
+                }
+                ItemType::Quest => {
+                    // Handle quest item usage
+                }
+                ItemType::Consumable { .. } => {
+                    // This case is already handled above
+                }
+            }
+            
+            // Update inventory for non-consumables if needed
+            if let Ok(mut inventory) = world.get::<&mut Inventory>(entity) {
+                if index < inventory.items.len() {
+                    if let Some(item_slot) = inventory.items.get_mut(index) {
+                        // Simply using the item might consume it depending on implementation
+                        // For non-consumables, we might not consume them
                     }
                 }
             }
