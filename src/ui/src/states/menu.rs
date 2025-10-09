@@ -12,7 +12,7 @@ use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Style},
-    text::{Span, Spans},
+    text::{Span, Line},
     widgets::{Block, Borders, Paragraph},
 };
 
@@ -62,8 +62,8 @@ impl MainMenuState {
     }
 
     /// 渲染标题艺术字（像素风格）
-    fn render_title(&self) -> Spans<'static> {
-        Spans::from(vec![
+    fn render_title(&self) -> Line<'static> {
+        Line::from(vec![
             Span::styled("PIXEL ", Style::default().fg(Color::Red)),
             Span::styled("DUNGEON", Style::default().fg(Color::White)),
         ])
@@ -145,11 +145,11 @@ impl GameState for MainMenuState {
 
             // 菜单选项（带闪烁效果）
             let show_cursor = self.blink_timer < 0.5;
-            let menu_items: Vec<Spans> = self
+            let menu_items: Vec<Line> = self
                 .options
                 .iter()
                 .enumerate()
-                .map(|(i, _)| Spans::from(self.render_options(show_cursor, i)))
+                .map(|(i, _)| Line::from(self.render_options(show_cursor, i)))
                 .collect();
 
             let menu_block = Paragraph::new(menu_items)
@@ -255,7 +255,7 @@ impl GameState for PauseMenuState {
                 .border_style(Style::default().fg(Color::Red));
 
             let show_cursor = self.blink_timer < 0.5;
-            let menu: Vec<Spans> = self
+            let menu: Vec<Line> = self
                 .options
                 .iter()
                 .enumerate()
@@ -265,7 +265,7 @@ impl GameState for PauseMenuState {
                     } else {
                         Style::default().fg(Color::White)
                     };
-                    Spans::from(Span::styled(
+                    Line::from(Span::styled(
                         if i == self.selected_index && show_cursor {
                             format!("> {} <", text)
                         } else {
@@ -346,24 +346,24 @@ impl GameState for GameOverState {
 
             let show_prompt = self.blink_timer % 1.0 < 0.5;
             let text = vec![
-                Spans::from(Span::styled(
+                Line::from(Span::styled(
                     "YOU DIED!",
                     Style::default()
                         .fg(Color::Red)
-                        .add_modifier(tui::style::Modifier::BOLD),
+                        .add_modifier(Modifier::BOLD),
                 )),
-                Spans::from(Span::raw("")),
-                Spans::from(Span::styled(
+                Line::from(Span::raw("")),
+                Line::from(Span::styled(
                     &self.cause_of_death,
                     Style::default().fg(Color::White),
                 )),
-                Spans::from(Span::raw("")),
+                Line::from(Span::raw("")),
                 Spans::from(Span::styled(
                     format!("Score: {}", self.score),
                     Style::default().fg(Color::Yellow),
                 )),
-                Spans::from(Span::raw("")),
-                Spans::from(if show_prompt {
+                Line::from(Span::raw("")),
+                Line::from(if show_prompt {
                     Span::styled("Press ENTER to continue", Style::default().fg(Color::Gray))
                 } else {
                     Span::raw("")

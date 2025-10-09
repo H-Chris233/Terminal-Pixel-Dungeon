@@ -3,7 +3,7 @@ use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use strum::{Display, EnumIter, EnumString};
-use ratatui::style::{Color, Style};
+use ratatui::style::{Color, Style, Modifier};
 
 /// 效果实例（现在包含视觉状态）
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
@@ -137,7 +137,7 @@ impl Effect {
     pub fn status_style(&self) -> Style {
         Style::default()
             .fg(self.effect_type.status_color().into())
-            .add_modifier(tui::style::Modifier::BOLD)
+            .add_modifier(Modifier::BOLD)
     }
     
     /// 获取视觉配置的方法
@@ -432,11 +432,7 @@ impl From<Color> for SerializableColor {
             Color::LightMagenta => Self::LightMagenta,
             Color::LightCyan => Self::LightCyan,
             Color::Rgb(r, g, b) => Self::Rgb(r, g, b),
-            Color::Indexed(n) => Self::Rgb(
-                ((n >> 16) & 0xFF) as u8,
-                ((n >> 8) & 0xFF) as u8,
-                (n & 0xFF) as u8
-            ),
+            Color::Indexed(n) => Self::Rgb(n, n, n),
         }
     }
 }

@@ -1,12 +1,14 @@
 //src/ui/render/render.rs
-use crate::{dungeon::dungeon::Dungeon, hero::hero::Hero, ui::terminal::TerminalController};
+use crate::{ui::terminal::TerminalController};
+use dungeon::Dungeon;
+use hero::Hero;
 use anyhow::{Context, Result};
-use crossterm::style::Color;
+use ratatui::style::Color;
 use ratatui::widgets::Widget;
 use ratatui::{
     backend::Backend,
     layout::{Constraint, Direction, Layout, Rect},
-    text::{Span, Spans},
+    text::{Span, Line},
     widgets::{Block, Borders, Paragraph},
     Frame,
 };
@@ -83,7 +85,7 @@ impl RenderSystem {
 
     /// 消息日志渲染（带滚动缓冲）
     fn render_message_log<B: Backend>(&self, f: &mut Frame<B>, area: Rect, messages: &[String]) {
-        let visible_messages: Vec<Spans> = messages
+        let visible_messages: Vec<Line> = messages
             .iter()
             .rev()
             .take(3)
@@ -99,7 +101,7 @@ impl RenderSystem {
                 } else {
                     Color::White
                 };
-                Spans::from(Span::styled(msg, color))
+                Line::from(Span::styled(msg, Style::default().fg(color)))
             })
             .collect();
 
@@ -110,7 +112,6 @@ impl RenderSystem {
 
         Paragraph::new(visible_messages)
             .block(block)
-            .scroll((messages.len().saturating_sub(3) as u16, 0))
             .render(f, area);
     }
 }

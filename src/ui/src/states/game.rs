@@ -11,10 +11,10 @@ use crate::ui::states::common::GameStateID;
 use crate::ui::states::common::StateContext;
 use crate::ui::states::common::StateTransition;
 use crate::{
-    dungeon::dungeon::Dungeon,
+    dungeon::Dungeon,
     dungeon::level::level::*,
     dungeon::level::tiles::*,
-    hero::hero::{Hero, HeroAction},
+    hero::{Hero, HeroAction},
     ui::terminal::TerminalController,
 };
 use crossterm::event::{KeyCode, KeyEvent};

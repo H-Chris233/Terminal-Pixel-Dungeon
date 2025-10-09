@@ -7,10 +7,12 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 use items::Weapon;
+use crate::effect::{Effect, EffectType};
 
 /// 敌人实体，包含战斗属性和位置信息
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct Enemy {
+    pub effects: Vec<Effect>,
     pub kind: EnemyKind,
     pub hp: u32,
     pub max_hp: u32,
@@ -27,6 +29,12 @@ pub struct Enemy {
     pub is_surprised: bool,
     pub weapon: Option<Weapon>,
     pub crit_bonus: f32,
+}
+
+impl Enemy {
+    pub fn add_effect(&mut self, effect: Effect) {
+        self.effects.push(effect);
+    }
 }
 
 /// 敌人种类，影响基础属性和行为
@@ -99,6 +107,7 @@ impl Enemy {
             is_surprised: false,
             weapon: None,
             crit_bonus: 0.0,
+            effects: Vec::new(),
         }
     }
 

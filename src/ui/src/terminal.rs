@@ -25,9 +25,9 @@ impl TerminalController {
         enable_raw_mode().context("Failed to enable raw mode")?;
         let mut stdout = io::stdout();
         execute!(stdout, EnterAlternateScreen).context("Failed to enter alternate screen")?;
-
+        let backend = CrosstermBackend::new(stdout);
         Ok(Self {
-            backend: CrosstermBackend::new(stdout),
+            backend,
             terminal: Terminal::new(backend).context("Failed to create terminal")?,
         })
     }
@@ -41,7 +41,7 @@ impl TerminalController {
     }
 
     /// 基础布局划分（适用于像素地牢的经典三栏布局）
-    pub fn create_layout(frame: &mut Frame) -> Vec<tui::layout::Rect> {
+    pub fn create_layout(frame: &mut Frame) -> Vec<layout::Rect> {
         Layout::default()
             .direction(layout::Direction::Vertical)
             .constraints([

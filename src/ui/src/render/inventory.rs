@@ -1,16 +1,13 @@
 //src/ui/render/inventory.rs
-use crate::items::items::ItemKind;
-use crate::{
-    hero::hero::Hero,
-    items::items::{Item, ItemType},
-};
+use items::{Item, ItemKind};
+use hero::Hero;
 use crossterm::event::KeyCode;
 use ratatui::widgets::ListState;
 use ratatui::{
     backend::Backend,
     layout::{Alignment, Rect},
     style::{Color, Modifier, Style},
-    text::{Span, Spans},
+    text::{Span, Line},
     widgets::{Block, Borders, List, ListItem, Paragraph},
     Frame,
 };
@@ -85,7 +82,7 @@ impl InventoryRenderer {
                     _ => ("", Color::White),
                 };
 
-                ListItem::new(Spans::from(vec![
+                ListItem::new(Line::from(vec![
                     Span::styled(
                         format!("{} ", (b'a' + i as u8) as char),
                         Style::default().fg(Color::White),
@@ -134,13 +131,13 @@ impl InventoryRenderer {
             .border_style(Style::default().fg(Color::DarkGray));
 
         let text = vec![
-            Spans::from(Span::styled(
+            Line::from(Span::styled(
                 format!("{}", item.name),
                 Style::default()
                     .fg(Color::White)
                     .add_modifier(Modifier::BOLD),
             )),
-            Spans::from(Span::styled(
+            Line::from(Span::styled(
                 item.description.clone(),
                 Style::default().fg(Color::Gray),
             )),

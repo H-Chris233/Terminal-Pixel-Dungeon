@@ -1,8 +1,6 @@
 //src/ui/render/dungeon.rs
-use crate::{
-    dungeon::dungeon::{Dungeon, Tile, TileVisibility},
-    hero::hero::Hero,
-};
+use dungeon::Dungeon;
+use hero::Hero;
 use ratatui::widgets::ListState;
 use ratatui::widgets::Paragraph;
 use ratatui::{

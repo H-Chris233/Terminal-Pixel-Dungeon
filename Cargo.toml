@@ -1,3 +1,15 @@
+[workspace]
+members = [
+    "src/combat",
+    "src/dungeon",
+    "src/hero",
+    "src/items",
+    "src/save",
+    "src/error",
+    "src/ui",
+]
+resolver = "2"
+
 [package]
 name = "terminal_pixel_dungeon"
 version = "0.0.1"
@@ -15,3 +27,12 @@ serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 tempfile = "3.19.1"
 thiserror = "2.0.12"
+
+# Local path dependencies to subcrates
+combat = { path = "src/combat", version = "0.1.0" }
+dungeon = { path = "src/dungeon", version = "0.1.0" }
+hero = { path = "src/hero", version = "0.1.0" }
+items = { path = "src/items", version = "0.1.0" }
+save = { path = "src/save", version = "0.1.0" }
+error = { path = "src/error", version = "0.1.0" }
+ui = { path = "src/ui", version = "0.1.0" }

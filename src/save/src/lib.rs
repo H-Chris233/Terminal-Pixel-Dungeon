@@ -27,12 +27,12 @@ pub struct SaveMetadata {
 }
 
 /// 存档数据(包含游戏完整状态)
-#[derive(Debug, Encode, Decode, Serialize, Deserialize)] // 添加Encode和Decode派生
+#[derive(Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct SaveData {
     pub metadata: SaveMetadata,
-    pub hero: crate::hero::hero::Hero,
-    pub dungeon: crate::dungeon::dungeon::Dungeon,
-    pub game_seed: u64, // 用于重现随机地牢
+    pub hero: hero::Hero,
+    pub dungeon: dungeon::Dungeon,
+    pub game_seed: u64,
 }
 
 /// 存档系统

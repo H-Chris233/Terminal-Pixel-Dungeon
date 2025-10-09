@@ -80,6 +80,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
+name = "combat"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "items",
+ "rand",
+ "ratatui",
+ "serde",
+ "strum 0.27.2",
+ "strum_macros 0.27.2",
+]
+
+[[package]]
 name = "compact_str"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -211,6 +224,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "dungeon"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "combat",
+ "items",
+ "rand",
+ "rand_pcg",
+ "serde",
+]
+
+[[package]]
 name = "either"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -230,6 +256,15 @@ checksum = "976dd42dc7e85965fe702eb8164f21f450704bdde31faefd6471dba214cb594e"
 dependencies = [
  "libc",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "error"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "thiserror",
 ]
 
 [[package]]
@@ -299,6 +334,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "hero"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "combat",
+ "dungeon",
+ "items",
+ "rand",
+ "rand_pcg",
+ "serde",
+ "strum 0.27.2",
+ "strum_macros 0.27.2",
+ "thiserror",
+]
+
+[[package]]
 name = "ident_case"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -321,6 +373,19 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "items"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "rand",
+ "ratatui",
+ "seahash",
+ "serde",
+ "strum 0.27.2",
+ "strum_macros 0.27.2",
 ]
 
 [[package]]
@@ -504,6 +569,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rand_pcg"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b48ac3f7ffaab7fac4d2376632268aa5f89abdb55f7ebf8f4d11fffccb2320f7"
+dependencies = [
+ "rand_core",
+ "serde",
+]
+
+[[package]]
 name = "ratatui"
 version = "0.28.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -517,8 +592,8 @@ dependencies = [
  "itertools",
  "lru",
  "paste",
- "strum",
- "strum_macros",
+ "strum 0.26.3",
+ "strum_macros 0.26.4",
  "unicode-segmentation",
  "unicode-truncate",
  "unicode-width",
@@ -572,10 +647,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28d3b2b1366ec20994f1fd18c3c594f05c5dd4bc44d8bb0c1c632c8d6829481f"
 
 [[package]]
+name = "save"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "dungeon",
+ "error",
+ "hero",
+ "serde",
+]
+
+[[package]]
 name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
+
+[[package]]
+name = "seahash"
+version = "4.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c107b6f4780854c8b126e228ea8869f4d7b71260f962fefb57b996b8959ba6b"
 
 [[package]]
 name = "serde"
@@ -669,7 +762,16 @@ version = "0.26.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fec0f0aef304996cf250b31b5a10dee7980c85da9d759361292b8bca5a18f06"
 dependencies = [
- "strum_macros",
+ "strum_macros 0.26.4",
+]
+
+[[package]]
+name = "strum"
+version = "0.27.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af23d6f6c1a224baef9d3f61e287d2761385a5b88fdab4eb4c6f11aeb54c4bcf"
+dependencies = [
+ "strum_macros 0.27.2",
 ]
 
 [[package]]
@@ -682,6 +784,18 @@ dependencies = [
  "proc-macro2",
  "quote",
  "rustversion",
+ "syn",
+]
+
+[[package]]
+name = "strum_macros"
+version = "0.27.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7695ce3845ea4b33927c055a39dc438a45b059f7c1b3d91d38d10355fb8cbca7"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
  "syn",
 ]
 
@@ -715,15 +829,22 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bincode",
+ "combat",
  "crossterm 0.29.0",
+ "dungeon",
+ "error",
  "hecs",
+ "hero",
+ "items",
  "rand",
  "ratatui",
+ "save",
  "scopeguard",
  "serde",
  "serde_json",
  "tempfile",
  "thiserror",
+ "ui",
 ]
 
 [[package]]
@@ -744,6 +865,22 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "ui"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "crossterm 0.29.0",
+ "dungeon",
+ "hero",
+ "ratatui",
+ "save",
+ "serde",
+ "strum 0.27.2",
+ "util",
 ]
 
 [[package]]
@@ -780,6 +917,12 @@ name = "unty"
 version = "0.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6d49784317cd0d1ee7ec5c716dd598ec5b4483ea832a2dced265471cc0f690ae"
+
+[[package]]
+name = "util"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1883f788ebb25ad22fe882ea46046b57f481cac322ef7da7f52dc2fff51bed09"
 
 [[package]]
 name = "version_check"

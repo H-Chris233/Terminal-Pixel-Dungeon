@@ -7,10 +7,10 @@ pub mod render;
 pub mod states;
 pub mod terminal;
 
-use dungeon::dungeon::Dungeon;
-use hero::hero::Hero;
-use save::save::AutoSave;
-use save::save::SaveData;
+use dungeon::Dungeon;
+use hero::Hero;
+use save::AutoSave;
+use save::SaveData;
 use crossterm::{
     event::{self, Event, KeyCode},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},

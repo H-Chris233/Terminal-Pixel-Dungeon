@@ -11,6 +11,10 @@ use std::collections::HashSet;
 pub mod level;
 pub mod trap;
 
+pub fn affect_adjacent_enemies(_x: i32, _y: i32, _f: impl Fn(&mut Enemy)) {}
+pub fn reveal_current_level(_x: i32, _y: i32) {}
+pub fn alert_nearby_enemies(_x: i32, _y: i32) {}
+
 use crate::level::tiles::{TerrainType, TileInfo};
 use crate::level::Level;
 use crate::trap::TrapEffect;

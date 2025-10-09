@@ -10,13 +10,13 @@ use dungeon::trap::Trap;
 use dungeon::trap::TrapEffect;
 use dungeon::Dungeon;
 use items::scroll::ScrollKind;
+use combat::enemy::Enemy;
 use items::{potion::PotionKind, Item, ItemCategory};
 use thiserror::Error;
 
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
-use crate::EffectSystem;
 use crate::Hero;
 use crate::HeroBehavior;
 use crate::HeroError;
@@ -52,74 +52,62 @@ impl Hero {
 
     /// 药水使用逻辑
     fn use_potion(&mut self, index: usize) -> Result<(), HeroError> {
-        let potion = self
-            .bag
-            .get_item_by_index(index)?
-            .as_potion();
+        let mut item = self.bag.use_item(index).map_err(|_| HeroError::ActionFailed)?;
+        if let items::ItemKind::Potion(ref mut potion) = item.kind {
+            if !potion.identified {
+                self.notify("你喝下了未知的药水...".into());
+                potion.identify();
+                self.notify(&format!("这是一瓶...{}!", potion.name()));
+            }
 
-        if !potion.identified {
-            self.notify("你喝下了未知的药水...".into());
-            potion.identify();
-            self.notify(&format!("这是一瓶...{}!", potion.name()));
-        }
-
-        match potion.kind {
+            match potion.kind {
             PotionKind::Healing => self.heal(self.max_hp / 3),
             PotionKind::Strength => self.strength += 1,
             PotionKind::MindVision => {
                 self.effects.add(Effect::new(EffectType::MindVision, 20));
             }
             PotionKind::ToxicGas => {
-                // 对周围敌人造成中毒效果
                 dungeon::affect_adjacent_enemies(self.x, self.y, |e| {
                     e.add_effect(Effect::new(EffectType::Poison, 10));
                 });
             }
             PotionKind::Frost => {
-                // 冰冻周围敌人
                 dungeon::affect_adjacent_enemies(self.x, self.y, |e| {
                     e.add_effect(Effect::new(EffectType::Frost, 5));
                 });
             }
+            _ => {}
         }
 
-        self.bag.remove_item(index)?;
+        }
         Ok(())
     }
 
     /// 使用卷轴
     fn use_scroll(&mut self, index: usize) -> Result<(), HeroError> {
-        let scroll = self
-            .bag
-            .get_item_by_index(index)?
-            .as_scroll();
+        let mut item = self.bag.use_item(index)?;
+        if let items::ItemKind::Scroll(ref mut scroll) = item.kind {
+            if !scroll.identified {
+                self.notify("你阅读了未知的卷轴...");
+                scroll.identify();
+                self.notify(&format!("这是一张...{}!", scroll.name()));
+            }
 
-        if !scroll.identified {
-            self.notify("你阅读了未知的卷轴...");
-            scroll.identify();
-            self.notify(&format!("这是一张...{}!", scroll.name()));
-        }
-
-        match scroll.kind {
-            ScrollKind::Upgrade => {
-                if let Some(weapon) = self.bag.equipment().weapon.as_mut() {
-                    weapon.upgrade();
-                    self.notify(&format!("你的{}变得更锋利了！", weapon.name));
-                } else {
-                    return Err(HeroError::ActionFailed);
+            match scroll.kind {
+                ScrollKind::Upgrade => {
+                    self.bag.upgrade_weapon().map_err(|_| HeroError::ActionFailed)?;
                 }
-            }
-            ScrollKind::RemoveCurse => {
-                self.bag.remove_curse_all();
-                self.notify("一股净化之力扫过你的装备".into());
-            }
-            ScrollKind::MagicMapping => {
-                dungeon::reveal_current_level(self.x, self.y);
-                self.notify("你的脑海中浮现出这一层的地图".into());
+                ScrollKind::RemoveCurse => {
+                    self.bag.remove_curse_all();
+                    self.notify("一股净化之力扫过你的装备".into());
+                }
+                ScrollKind::MagicMapping => {
+                    dungeon::reveal_current_level(self.x, self.y);
+                    self.notify("你的脑海中浮现出这一层的地图".into());
+                }
+                _ => {}
             }
         }
-
-        self.bag.remove_item(index)?;
         Ok(())
     }
 }

@@ -11,3 +11,6 @@ hero = { version = "0.1.0", path = "../hero" }
 ratatui = "0.28.1"
 save = { version = "0.1.0", path = "../save" }
 util = "0.1.3"
+serde = { version = "1.0.219", features = ["derive"] }
+strum = { version = "0.27.2", features = ["derive"] }
+bincode = { version = "2.0.1", features = ["derive", "serde"] }

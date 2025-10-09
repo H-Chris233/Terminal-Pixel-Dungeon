@@ -1,10 +1,11 @@
 //src/ui/render/hud.rs
-use crate::{hero::class::Class, hero::hero::Hero, ui::terminal::TerminalController};
+use crate::{hero::class::Class, ui::terminal::TerminalController};
+use hero::Hero;
 use ratatui::{
     backend::Backend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    text::{Span, Spans},
+    text::{Span, Line},
     widgets::{Block, Borders, Gauge, Paragraph},
     Frame,
 };
@@ -124,7 +125,7 @@ impl HudRenderer {
             Class::Huntress => "🌿",
         };
 
-        let text = Spans::from(vec![
+        let text = Line::from(vec![
             Span::styled(class_icon, Style::default().fg(Color::Red)),
             Span::styled(
                 format!(" Lv.{}", hero.level),
@@ -175,7 +176,7 @@ impl HudRenderer {
             Style::default().fg(Color::Yellow)
         };
 
-        let text = Spans::from(vec![
+        let text = Line::from(vec![
             Span::styled("💰 ", gold_style),
             Span::styled(hero.gold.to_string(), gold_style),
         ]);
@@ -201,7 +202,7 @@ impl HudRenderer {
             Span::raw(" ")
         };
 
-        let text = Spans::from(vec![
+        let text = Line::from(vec![
             stairs_icon,
             Span::styled(
                 format!(" D.{}", hero.depth),
