@@ -100,32 +100,35 @@ impl Hero {
             bag: Bag::new(),
         };
 
-        // 根据职业初始化属性
+        // 根据职业初始化属性（SPD标准值）
         match hero.class {
             Class::Warrior => {
-                hero.hp = 25;
-                hero.max_hp = 25;
-                hero.base_attack = 10;
-                hero.base_defense = 4;
-                hero.strength += 1;
+                hero.hp = 30;     // SPD标准：战士30生命值
+                hero.max_hp = 30;
+                hero.base_attack = 10;  // 初始基础攻击力
+                hero.base_defense = 4; // 初始基础防御力
+                hero.strength = 11;    // SPD标准：战士11力量
             }
             Class::Mage => {
-                hero.hp = 20;
+                hero.hp = 20;     // SPD标准：法师20生命值
                 hero.max_hp = 20;
                 hero.base_attack = 8;
                 hero.base_defense = 2;
+                hero.strength = 10;    // SPD标准：法师10力量
             }
             Class::Rogue => {
-                hero.hp = 22;
-                hero.max_hp = 22;
+                hero.hp = 25;     // SPD标准：盗贼25生命值
+                hero.max_hp = 25;
                 hero.base_attack = 6;
                 hero.base_defense = 3;
+                hero.strength = 10;    // SPD标准：盗贼10力量
             }
             Class::Huntress => {
-                hero.hp = 20;
-                hero.max_hp = 20;
+                hero.hp = 22;     // SPD标准：女猎手22生命值
+                hero.max_hp = 22;
                 hero.base_attack = 5;
                 hero.base_defense = 2;
+                hero.strength = 10;    // SPD标准：女猎手10力量
             }
         }
 
@@ -135,14 +138,24 @@ impl Hero {
     pub fn on_turn(&mut self) -> Result<(), HeroError> {
         self.turns += 1;
 
-        // 饥饿系统
-        if self.turns % 100 == 0 {
-            self.satiety = self.satiety.saturating_sub(1);
-            if self.satiety == 0 {
+    // SPD标准饥饿系统
+    if self.turns % 20 == 0 {  // 每20回合减少1饥饿度（SPD标准）
+        self.satiety = self.satiety.saturating_sub(1);
+        
+        // 饥饿状态效果
+        match self.satiety {
+            0 => { // 饥饿致死
                 self.take_damage(1);
                 return Err(HeroError::Starvation);
             }
+            1..=5 => { // 饥饿状态：属性降低
+                if self.satiety % 2 == 0 { // 每2回合掉血
+                    self.take_damage(1);
+                }
+            }
+            _ => {} // 正常状态
         }
+    }
 
         // 更新效果
         self.effects.update();
