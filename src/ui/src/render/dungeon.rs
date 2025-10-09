@@ -3,9 +3,9 @@ use crate::{
     dungeon::dungeon::{Dungeon, Tile, TileVisibility},
     hero::hero::Hero,
 };
-use tui::widgets::ListState;
-use tui::widgets::Paragraph;
-use tui::{
+use ratatui::widgets::ListState;
+use ratatui::widgets::Paragraph;
+use ratatui::{
     backend::Backend,
     layout::Rect,
     style::{Color, Modifier, Style},

@@ -1,0 +1,301 @@
+//! Input handling abstractions for the ECS architecture.
+
+use crate::ecs::*;
+use std::time::Duration;
+use crossterm::event::{self, Event as CEvent, KeyCode as CrosstermKeyCode, KeyEvent as CrosstermKeyEvent, KeyModifiers as CrosstermKeyModifiers};
+
+/// Trait for input sources
+pub trait InputSource {
+    type Event;
+    
+    /// Poll for input events with a timeout
+    fn poll(&mut self, timeout: Duration) -> Result<Option<Self::Event>, Box<dyn std::error::Error>>;
+    
+    /// Check if input is available without blocking
+    fn is_input_available(&self) -> Result<bool, Box<dyn std::error::Error>>;
+}
+
+/// Console input source implementation
+pub struct ConsoleInput {
+    // Could include stdin handle or other input mechanisms
+}
+
+impl ConsoleInput {
+    pub fn new() -> Self {
+        Self {}
+    }
+    
+    /// Process input events and convert them to PlayerActions for the ECS
+    pub fn process_events(&mut self, resources: &mut Resources) -> Result<(), Box<dyn std::error::Error>> {
+        // Process crossterm events if available
+        if event::poll(Duration::from_millis(50))? {
+            if let Ok(CEvent::Key(key_event)) = event::read() {
+                if let Some(action) = key_event_to_player_action(key_event) {
+                    resources.input_buffer.pending_actions.push(action);
+                }
+            }
+        }
+        
+        Ok(())
+    }
+}
+
+impl InputSource for ConsoleInput {
+    type Event = InputEvent;
+    
+    fn poll(&mut self, timeout: Duration) -> Result<Option<Self::Event>, Box<dyn std::error::Error>> {
+        // In a real implementation, we would use crossterm or similar to poll for events
+        // For now, we'll just return None to indicate no input
+        if event::poll(timeout)? {
+            if let Ok(event) = event::read() {
+                return Ok(Some(InputEvent::from(event)));
+            }
+        }
+        Ok(None)
+    }
+    
+    fn is_input_available(&self) -> Result<bool, Box<dyn std::error::Error>> {
+        // In a real implementation, we would check if input is ready
+        Ok(event::poll(Duration::from_millis(0))?)
+    }
+}
+
+/// Terminal input events
+#[derive(Debug, Clone)]
+pub enum InputEvent {
+    Key(KeyEvent),
+    Mouse(MouseEvent),
+    Resize(u16, u16),
+}
+
+/// Key events
+#[derive(Debug, Clone)]
+pub struct KeyEvent {
+    pub code: KeyCode,
+    pub modifiers: KeyModifiers,
+}
+
+/// Mouse events
+#[derive(Debug, Clone)]
+pub enum MouseEvent {
+    Press(MouseButton, u16, u16),
+    Release(u16, u16),
+    Hold(u16, u16),
+}
+
+/// Key codes
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyCode {
+    Char(char),
+    Enter,
+    Esc,
+    Backspace,
+    Delete,
+    Tab,
+    Up,
+    Down,
+    Left,
+    Right,
+    Home,
+    End,
+    PageUp,
+    PageDown,
+    Insert,
+    F(u8),
+    Null,
+}
+
+/// Key modifiers
+#[derive(Debug, Clone, Copy, Default)]
+pub struct KeyModifiers {
+    pub shift: bool,
+    pub ctrl: bool,
+    pub alt: bool,
+}
+
+/// Mouse buttons
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MouseButton {
+    Left,
+    Right,
+    Middle,
+}
+
+/// Convert crossterm events to our internal events
+#[cfg(feature = "crossterm")]
+impl From<crossterm::event::Event> for InputEvent {
+    fn from(event: crossterm::event::Event) -> Self {
+        match event {
+            crossterm::event::Event::Key(key_event) => {
+                InputEvent::Key(KeyEvent::from(key_event))
+            }
+            crossterm::event::Event::Mouse(mouse_event) => {
+                InputEvent::Mouse(MouseEvent::from(mouse_event))
+            }
+            crossterm::event::Event::Resize(width, height) => {
+                InputEvent::Resize(width, height)
+            }
+            _ => InputEvent::Resize(0, 0), // fallback
+        }
+    }
+}
+
+#[cfg(feature = "crossterm")]
+impl From<crossterm::event::KeyEvent> for KeyEvent {
+    fn from(key_event: crossterm::event::KeyEvent) -> Self {
+        Self {
+            code: KeyCode::from(key_event.code),
+            modifiers: KeyModifiers::from(key_event.modifiers),
+        }
+    }
+}
+
+#[cfg(feature = "crossterm")]
+impl From<crossterm::event::KeyCode> for KeyCode {
+    fn from(code: crossterm::event::KeyCode) -> Self {
+        match code {
+            crossterm::event::KeyCode::Char(c) => KeyCode::Char(c),
+            crossterm::event::KeyCode::Enter => KeyCode::Enter,
+            crossterm::event::KeyCode::Esc => KeyCode::Esc,
+            crossterm::event::KeyCode::Backspace => KeyCode::Backspace,
+            crossterm::event::KeyCode::Delete => KeyCode::Delete,
+            crossterm::event::KeyCode::Tab => KeyCode::Tab,
+            crossterm::event::KeyCode::Up => KeyCode::Up,
+            crossterm::event::KeyCode::Down => KeyCode::Down,
+            crossterm::event::KeyCode::Left => KeyCode::Left,
+            crossterm::event::KeyCode::Right => KeyCode::Right,
+            crossterm::event::KeyCode::Home => KeyCode::Home,
+            crossterm::event::KeyCode::End => KeyCode::End,
+            crossterm::event::KeyCode::PageUp => KeyCode::PageUp,
+            crossterm::event::KeyCode::PageDown => KeyCode::PageDown,
+            crossterm::event::KeyCode::Insert => KeyCode::Insert,
+            crossterm::event::KeyCode::F(n) => KeyCode::F(n),
+            _ => KeyCode::Null,
+        }
+    }
+}
+
+#[cfg(feature = "crossterm")]
+impl From<crossterm::event::KeyModifiers> for KeyModifiers {
+    fn from(modifiers: crossterm::event::KeyModifiers) -> Self {
+        Self {
+            shift: modifiers.contains(crossterm::event::KeyModifiers::SHIFT),
+            ctrl: modifiers.contains(crossterm::event::KeyModifiers::CONTROL),
+            alt: modifiers.contains(crossterm::event::KeyModifiers::ALT),
+        }
+    }
+}
+
+#[cfg(feature = "crossterm")]
+impl From<crossterm::event::MouseEvent> for MouseEvent {
+    fn from(event: crossterm::event::MouseEvent) -> Self {
+        match event.kind {
+            crossterm::event::MouseEventKind::Down(button) => {
+                MouseEvent::Press(MouseButton::from(button), event.column, event.row)
+            }
+            crossterm::event::MouseEventKind::Up(_) => {
+                MouseEvent::Release(event.column, event.row)
+            }
+            crossterm::event::MouseEventKind::Drag(_) => {
+                MouseEvent::Hold(event.column, event.row)
+            }
+            _ => MouseEvent::Hold(event.column, event.row), // fallback
+        }
+    }
+}
+
+#[cfg(feature = "crossterm")]
+impl From<crossterm::event::MouseButton> for MouseButton {
+    fn from(button: crossterm::event::MouseButton) -> Self {
+        match button {
+            crossterm::event::MouseButton::Left => MouseButton::Left,
+            crossterm::event::MouseButton::Right => MouseButton::Right,
+            crossterm::event::MouseButton::Middle => MouseButton::Middle,
+        }
+    }
+}
+
+/// Convert crossterm key events to player actions for the ECS
+pub fn key_event_to_player_action(key: CrosstermKeyEvent) -> Option<PlayerAction> {
+    match (key.code, key.modifiers) {
+        // Movement keys
+        (CrosstermKeyCode::Char('k'), _) | (CrosstermKeyCode::Up, _) => Some(PlayerAction::Move(Direction::North)),
+        (CrosstermKeyCode::Char('j'), _) | (CrosstermKeyCode::Down, _) => Some(PlayerAction::Move(Direction::South)),
+        (CrosstermKeyCode::Char('h'), _) | (CrosstermKeyCode::Left, _) => Some(PlayerAction::Move(Direction::West)),
+        (CrosstermKeyCode::Char('l'), _) | (CrosstermKeyCode::Right, _) => Some(PlayerAction::Move(Direction::East)),
+        (CrosstermKeyCode::Char('y'), _) => Some(PlayerAction::Move(Direction::NorthWest)),
+        (CrosstermKeyCode::Char('u'), _) => Some(PlayerAction::Move(Direction::NorthEast)),
+        (CrosstermKeyCode::Char('b'), _) => Some(PlayerAction::Move(Direction::SouthWest)),
+        (CrosstermKeyCode::Char('n'), _) => Some(PlayerAction::Move(Direction::SouthEast)),
+        
+        // Wait/skip turn
+        (CrosstermKeyCode::Char('.'), _) => Some(PlayerAction::Wait),
+        
+        // Stairs
+        (CrosstermKeyCode::Char('>'), _) => Some(PlayerAction::Descend),
+        (CrosstermKeyCode::Char('<'), _) => Some(PlayerAction::Ascend),
+        
+        // Attack via direction
+        (CrosstermKeyCode::Char('K'), CrosstermKeyModifiers::SHIFT) => {
+            // Attack North - in reality, we'd calculate the position
+            Some(PlayerAction::Attack(Position { x: 0, y: -1, z: 0 }))
+        },
+        (CrosstermKeyCode::Char('J'), CrosstermKeyModifiers::SHIFT) => {
+            Some(PlayerAction::Attack(Position { x: 0, y: 1, z: 0 }))
+        },
+        (CrosstermKeyCode::Char('H'), CrosstermKeyModifiers::SHIFT) => {
+            Some(PlayerAction::Attack(Position { x: -1, y: 0, z: 0 }))
+        },
+        (CrosstermKeyCode::Char('L'), CrosstermKeyModifiers::SHIFT) => {
+            Some(PlayerAction::Attack(Position { x: 1, y: 0, z: 0 }))
+        },
+        (CrosstermKeyCode::Char('Y'), CrosstermKeyModifiers::SHIFT) => {
+            Some(PlayerAction::Attack(Position { x: -1, y: -1, z: 0 }))
+        },
+        (CrosstermKeyCode::Char('U'), CrosstermKeyModifiers::SHIFT) => {
+            Some(PlayerAction::Attack(Position { x: 1, y: -1, z: 0 }))
+        },
+        (CrosstermKeyCode::Char('B'), CrosstermKeyModifiers::SHIFT) => {
+            Some(PlayerAction::Attack(Position { x: -1, y: 1, z: 0 }))
+        },
+        (CrosstermKeyCode::Char('N'), CrosstermKeyModifiers::SHIFT) => {
+            Some(PlayerAction::Attack(Position { x: 1, y: 1, z: 0 }))
+        },
+        
+        // Game control
+        (CrosstermKeyCode::Char('q'), _) => Some(PlayerAction::Quit),
+        
+        // Number keys for items/spells (for later implementation)
+        (CrosstermKeyCode::Char('1'), _) => Some(PlayerAction::UseItem(0)),
+        (CrosstermKeyCode::Char('2'), _) => Some(PlayerAction::UseItem(1)),
+        (CrosstermKeyCode::Char('3'), _) => Some(PlayerAction::UseItem(2)),
+        (CrosstermKeyCode::Char('4'), _) => Some(PlayerAction::UseItem(3)),
+        (CrosstermKeyCode::Char('5'), _) => Some(PlayerAction::UseItem(4)),
+        (CrosstermKeyCode::Char('6'), _) => Some(PlayerAction::UseItem(5)),
+        (CrosstermKeyCode::Char('7'), _) => Some(PlayerAction::UseItem(6)),
+        (CrosstermKeyCode::Char('8'), _) => Some(PlayerAction::UseItem(7)),
+        (CrosstermKeyCode::Char('9'), _) => Some(PlayerAction::UseItem(8)),
+        
+        // Drop item
+        (CrosstermKeyCode::Char('d'), _) => Some(PlayerAction::DropItem(0)), // Default to first item
+        
+        _ => None,
+    }
+}
+
+/// Process input and update ECS world
+pub fn process_input(ecs_world: &mut ECSWorld) -> Result<bool, Box<dyn std::error::Error>> {
+    // Process crossterm events and add to input buffer
+    if event::poll(Duration::from_millis(50))? {
+        if let Ok(CEvent::Key(key_event)) = event::read() {
+            if let Some(action) = key_event_to_player_action(key_event) {
+                ecs_world.resources.input_buffer.pending_actions.push(action);
+            }
+        }
+    }
+    
+    // Return true if we received a quit command
+    Ok(ecs_world.resources.input_buffer.pending_actions
+        .iter()
+        .any(|action| matches!(action, PlayerAction::Quit)))
+}

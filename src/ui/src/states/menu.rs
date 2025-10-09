@@ -7,8 +7,8 @@
 
 use super::*;
 use crossterm::event::KeyCode;
-use tui::widgets::Widget;
-use tui::{
+use ratatui::widgets::Widget;
+use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Style},

@@ -2,8 +2,8 @@
 use crate::{dungeon::dungeon::Dungeon, hero::hero::Hero, ui::terminal::TerminalController};
 use anyhow::{Context, Result};
 use crossterm::style::Color;
-use tui::widgets::Widget;
-use tui::{
+use ratatui::widgets::Widget;
+use ratatui::{
     backend::Backend,
     layout::{Constraint, Direction, Layout, Rect},
     text::{Span, Spans},

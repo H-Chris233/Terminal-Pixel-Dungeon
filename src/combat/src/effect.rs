@@ -3,7 +3,7 @@ use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use strum::{Display, EnumIter, EnumString};
-use tui::style::{Color, Style};
+use ratatui::style::{Color, Style};
 
 /// 效果实例（现在包含视觉状态）
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]

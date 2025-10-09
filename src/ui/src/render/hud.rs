@@ -1,6 +1,6 @@
 //src/ui/render/hud.rs
 use crate::{hero::class::Class, hero::hero::Hero, ui::terminal::TerminalController};
-use tui::{
+use ratatui::{
     backend::Backend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},

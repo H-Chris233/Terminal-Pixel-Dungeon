@@ -18,7 +18,7 @@ use crossterm::{
 use std::io;
 use std::thread;
 use std::time::{Duration, Instant};
-use tui::{backend::CrosstermBackend, Terminal};
+use ratatui::{backend::CrosstermBackend, Terminal};
 
 pub struct TerminalUI {
     pub terminal: Terminal<CrosstermBackend<std::io::Stdout>>,

@@ -5,8 +5,8 @@ use crate::{
     items::items::{Item, ItemType},
 };
 use crossterm::event::KeyCode;
-use tui::widgets::ListState;
-use tui::{
+use ratatui::widgets::ListState;
+use ratatui::{
     backend::Backend,
     layout::{Alignment, Rect},
     style::{Color, Modifier, Style},

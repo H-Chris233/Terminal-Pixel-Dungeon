@@ -6,7 +6,7 @@ use seahash::SeaHasher;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::hash::Hasher;
-use tui::style::Color;
+use ratatui::style::Color;
 
 use crate::ItemCategory;
 use crate::ItemTrait;

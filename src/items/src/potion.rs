@@ -9,7 +9,7 @@ use std::fmt;
 use std::hash::Hasher;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
-use tui::style::Color;
+use ratatui::style::Color;
 
 use crate::ItemCategory;
 use crate::ItemTrait;

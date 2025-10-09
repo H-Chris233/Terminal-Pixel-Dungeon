@@ -175,7 +175,7 @@ pub trait GameState: std::fmt::Debug {
 /// 状态渲染辅助方法
 pub mod render_util {
     use super::*;
-    use tui::{layout::Rect, style::Color};
+    use ratatui::{layout::Rect, style::Color};
 
     /// 应用淡入淡出效果到区域
     pub fn apply_fade(area: &mut Rect, progress: f32) {
