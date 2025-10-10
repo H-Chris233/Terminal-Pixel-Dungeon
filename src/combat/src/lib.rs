@@ -44,6 +44,9 @@ impl Combat {
         let mut result = CombatResult::new();
 
         // Attacker's turn (with potential ambush bonus)
+        if is_ambush {
+            result.log(format!("Ambush by {}!", attacker.name()));
+        }
         let attack_result = Self::resolve_attack(attacker, defender, is_ambush);
         result.combine(attack_result);
 

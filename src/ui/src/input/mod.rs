@@ -74,7 +74,7 @@ pub mod prelude {
 #[cfg(test)]
 mod integration_tests {
     use super::*;
-    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, Event};
 
     #[test]
     fn test_input_pipeline() {

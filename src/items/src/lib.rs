@@ -144,54 +144,44 @@ impl Item {
         }
     }
     
-    pub fn as_weapon(&self) -> &Weapon {
-        if let ItemKind::Weapon(ref w) = self.kind { w } 
-        else { panic!("Item is not Weapon: {:?}", self.kind) }
+    pub fn as_weapon(&self) -> Option<&Weapon> {
+        if let ItemKind::Weapon(ref w) = self.kind { Some(w) } else { None }
     }
 
-    pub fn as_armor(&self) -> &Armor {
-        if let ItemKind::Armor(ref a) = self.kind { a } 
-        else { panic!("Item is not Armor: {:?}", self.kind) }
+    pub fn as_armor(&self) -> Option<&Armor> {
+        if let ItemKind::Armor(ref a) = self.kind { Some(a) } else { None }
     }
 
-    pub fn as_potion(&self) -> &Potion {
-        if let ItemKind::Potion(ref p) = self.kind { p } 
-        else { panic!("Item is not Potion: {:?}", self.kind) }
+    pub fn as_potion(&self) -> Option<&Potion> {
+        if let ItemKind::Potion(ref p) = self.kind { Some(p) } else { None }
     }
 
-    pub fn as_scroll(&self) -> &Scroll {
-        if let ItemKind::Scroll(ref s) = self.kind { s } 
-        else { panic!("Item is not Scroll: {:?}", self.kind) }
+    pub fn as_scroll(&self) -> Option<&Scroll> {
+        if let ItemKind::Scroll(ref s) = self.kind { Some(s) } else { None }
     }
 
-    pub fn as_food(&self) -> &Food {
-        if let ItemKind::Food(ref f) = self.kind { f } 
-        else { panic!("Item is not Food: {:?}", self.kind) }
+    pub fn as_food(&self) -> Option<&Food> {
+        if let ItemKind::Food(ref f) = self.kind { Some(f) } else { None }
     }
 
-    pub fn as_wand(&self) -> &Wand {
-        if let ItemKind::Wand(ref w) = self.kind { w } 
-        else { panic!("Item is not Wand: {:?}", self.kind) }
+    pub fn as_wand(&self) -> Option<&Wand> {
+        if let ItemKind::Wand(ref w) = self.kind { Some(w) } else { None }
     }
 
-    pub fn as_ring(&self) -> &Ring {
-        if let ItemKind::Ring(ref r) = self.kind { r } 
-        else { panic!("Item is not Ring: {:?}", self.kind) }
+    pub fn as_ring(&self) -> Option<&Ring> {
+        if let ItemKind::Ring(ref r) = self.kind { Some(r) } else { None }
     }
 
-    pub fn as_seed(&self) -> &Seed {
-        if let ItemKind::Seed(ref s) = self.kind { s } 
-        else { panic!("Item is not Seed: {:?}", self.kind) }
+    pub fn as_seed(&self) -> Option<&Seed> {
+        if let ItemKind::Seed(ref s) = self.kind { Some(s) } else { None }
     }
 
-    pub fn as_stone(&self) -> &Stone {
-        if let ItemKind::Stone(ref s) = self.kind { s } 
-        else { panic!("Item is not Stone: {:?}", self.kind) }
+    pub fn as_stone(&self) -> Option<&Stone> {
+        if let ItemKind::Stone(ref s) = self.kind { Some(s) } else { None }
     }
 
-    pub fn as_misc(&self) -> &MiscItem {
-        if let ItemKind::Misc(ref m) = self.kind { m } 
-        else { panic!("Item is not Misc: {:?}", self.kind) }
+    pub fn as_misc(&self) -> Option<&MiscItem> {
+        if let ItemKind::Misc(ref m) = self.kind { Some(m) } else { None }
     }
 }
 

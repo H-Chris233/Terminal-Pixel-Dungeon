@@ -68,7 +68,7 @@ impl Weapon {
             3 => ((6, 18), 16, "巨剑"),    // 三阶武器
             4 => ((10, 25), 19, "符文剑"), // 四阶武器
             5 => ((15, 35), 22, "圣剑"),   // 五阶武器
-            _ => panic!("Invalid weapon tier"),
+            _ => return Weapon { name: "Unknown".to_string(), tier: Tier::One, damage: (1,1), hit_chance: 0.5, str_requirement: 0, enchanted: None, modifier: WeaponMod::Balanced, upgrade_level: 0, cursed: false, identified: false, kind: WeaponKind::Sword, base_value: 0 },
         };
 
         Self {
@@ -356,7 +356,7 @@ impl Tier {
             3 => Tier::Three,
             4 => Tier::Four,
             5 => Tier::Five,
-            _ => panic!("Invalid tier value"),
+            _ => Tier::One,
         }
     }
 

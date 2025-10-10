@@ -91,6 +91,12 @@ pub struct StateContext {
     pub transition_progress: f32, // 全局过渡进度
 }
 
+impl std::fmt::Debug for StateContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "StateContext {{ should_quit: {} }}", self.should_quit)
+    }
+}
+
 impl StateContext {
     pub fn new(terminal: TerminalController, input: InputSystem, render: RenderSystem) -> Self {
         Self {
@@ -212,6 +218,7 @@ pub mod render_util {
 mod tests {
     use super::*;
 
+    #[derive(Debug)]
     struct MockState;
     impl GameState for MockState {
         fn id(&self) -> GameStateID {

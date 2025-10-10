@@ -61,7 +61,7 @@ impl StateStack {
             GameStateID::MainMenu => Box::new(MainMenuState::new()),
             GameStateID::PauseMenu => Box::new(PauseMenuState::new()),
             GameStateID::GameOver => Box::new(GameOverState::new(0, "Unknown cause")),
-            _ => unimplemented!(),
+            _ => Box::new(MainMenuState::new()),
         };
         state.on_enter(&mut self.context);
         self.states.push(state);
@@ -179,8 +179,8 @@ mod tests {
 
     #[test]
     fn test_state_transitions() {
-        let terminal = TerminalController::new();
-        let input = InputSystem::new();
+        let terminal = TerminalController::new().expect("Terminal init");
+        let mut input = InputSystem::default();
         let render = RenderSystem::new();
         let mut stack = StateStack::new(terminal, input, render, GameStateID::MainMenu);
 

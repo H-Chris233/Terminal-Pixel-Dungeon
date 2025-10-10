@@ -232,8 +232,8 @@ impl Hero {
         // 战斗初始化逻辑
     }
 
-    pub fn notify(&self, msg: &str) {
-        todo!();
+    pub fn notify(&self, _msg: &str) {
+        // Non-critical: notification sink for now
     }
 }
 
