@@ -1,14 +1,13 @@
 //src/ui/render/dungeon.rs
 use dungeon::Dungeon;
+use dungeon::level::tiles::Tile;
 use hero::Hero;
 use ratatui::widgets::ListState;
-use ratatui::widgets::Paragraph;
 use ratatui::{
-    backend::Backend,
     layout::Rect,
     style::{Color, Modifier, Style},
     text::Span,
-    widgets::{Block, Borders},
+    widgets::{Block, Borders, Paragraph},
     Frame,
 };
 
@@ -36,7 +35,7 @@ impl DungeonRenderer {
     }
 
     /// 主渲染入口
-    pub fn render<B: Backend>(&self, f: &mut Frame<B>, area: Rect, dungeon: &Dungeon, hero: &Hero) {
+    pub fn render(&self, f: &mut Frame, area: Rect, dungeon: &Dungeon, hero: &Hero) {
         let block = Block::default()
             .title(format!("Depth: {}", dungeon.depth))
             .borders(Borders::ALL)
@@ -47,9 +46,9 @@ impl DungeonRenderer {
     }
 
     /// 渲染可见区域（核心逻辑）
-    fn render_visible_area<B: Backend>(
+    fn render_visible_area(
         &self,
-        f: &mut Frame<B>,
+        f: &mut Frame,
         area: Rect,
         dungeon: &Dungeon,
         hero: &Hero,
@@ -240,9 +239,9 @@ impl DungeonRenderer {
     }
 
     /// 渲染单个地图格子
-    fn render_tile<B: Backend>(
+    fn render_tile(
         &self,
-        f: &mut Frame<B>,
+        f: &mut Frame,
         rect: Rect,
         tile: &Tile,
         is_visible: bool,

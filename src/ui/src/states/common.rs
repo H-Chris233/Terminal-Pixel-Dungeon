@@ -5,14 +5,11 @@
 //! - 严格的状态生命周期控制
 //! - 输入事件优先级路由
 
-use crate::{
-    ui::{
-        input::{InputSystem, KeyCode},
-        render::render::RenderSystem,
-        terminal::TerminalController,
-    },
-    util::math::lerp,
-};
+use crate::input::InputSystem;
+use crate::render::render::RenderSystem;
+use crate::terminal::TerminalController;
+
+fn lerp(a: f32, b: f32, t: f32) -> f32 { a + (b - a) * t }
 use anyhow::Result;
 use crossterm::event::Event;
 

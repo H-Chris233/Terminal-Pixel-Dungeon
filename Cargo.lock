@@ -876,6 +876,7 @@ dependencies = [
  "crossterm 0.29.0",
  "dungeon",
  "hero",
+ "items",
  "ratatui",
  "save",
  "serde",

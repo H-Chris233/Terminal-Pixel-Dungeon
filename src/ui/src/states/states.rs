@@ -9,19 +9,15 @@ use super::{
     common::{GameState, GameStateID, StateTransition},
     menu::{GameOverState, MainMenuState, PauseMenuState},
 };
-use crate::{
-    ui::{
-        input::{InputSystem, KeyCode},
-        render::RenderSystem,
-        terminal::TerminalController,
-    },
-    util::math::lerp,
-};
+use crate::input::InputSystem;
+use crate::render::render::RenderSystem;
+use crate::terminal::TerminalController;
+use super::common::{GameState, GameStateID, StateContext, StateTransition};
 use anyhow::Result;
 use crossterm::event::Event;
 use std::time::{Duration, Instant};
 
-use crate::ui::states::common::StateContext;
+use super::common::StateContext;
 
 /// 状态堆栈管理器
 pub struct StateStack {

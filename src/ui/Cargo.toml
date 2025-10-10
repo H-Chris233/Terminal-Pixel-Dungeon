@@ -8,6 +8,7 @@ anyhow = "1.0.97"
 crossterm = "0.29.0"
 dungeon = { version = "0.1.0", path = "../dungeon" }
 hero = { version = "0.1.0", path = "../hero" }
+items = { version = "0.1.0", path = "../items" }
 ratatui = "0.28.1"
 save = { version = "0.1.0", path = "../save" }
 util = "0.1.3"

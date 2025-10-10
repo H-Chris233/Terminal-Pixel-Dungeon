@@ -6,17 +6,11 @@
 //! - 状态驱动渲染
 
 use super::*;
-use crate::ui::states::common::GameState;
-use crate::ui::states::common::GameStateID;
-use crate::ui::states::common::StateContext;
-use crate::ui::states::common::StateTransition;
-use crate::{
-    dungeon::Dungeon,
-    dungeon::level::level::*,
-    dungeon::level::tiles::*,
-    hero::{Hero, HeroAction},
-    ui::terminal::TerminalController,
-};
+use super::common::{GameState, GameStateID, StateContext, StateTransition};
+use dungeon::Dungeon;
+use dungeon::level::tiles::Tile;
+use hero::{Hero, HeroAction};
+use crate::terminal::TerminalController;
 use crossterm::event::{KeyCode, KeyEvent};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
@@ -63,7 +57,7 @@ impl GameplayState {
 
     /// 保存游戏状态
     pub fn save(&self, filename: &str) -> anyhow::Result<()> {
-        let data = bincode::serialize(self)?;
+        let data = bincode::serde::encode_to_vec(self, bincode::config::standard())?;
         std::fs::write(filename, data)?;
         Ok(())
     }
@@ -71,7 +65,7 @@ impl GameplayState {
     /// 加载游戏状态
     pub fn load(filename: &str) -> anyhow::Result<Self> {
         let data = std::fs::read(filename)?;
-        let mut state: Self = bincode::deserialize(&data)?;
+        let mut state: Self = bincode::serde::decode_from_slice(&data, bincode::config::standard())?.0;
         state.last_input_time = Instant::now();
         Ok(state)
     }

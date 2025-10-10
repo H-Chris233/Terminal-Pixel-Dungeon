@@ -1,13 +1,13 @@
 //src/ui/render/render.rs
-use crate::{ui::terminal::TerminalController};
+use crate::terminal::TerminalController;
 use dungeon::Dungeon;
 use hero::Hero;
 use anyhow::{Context, Result};
 use ratatui::style::Color;
 use ratatui::widgets::Widget;
 use ratatui::{
-    backend::Backend,
     layout::{Constraint, Direction, Layout, Rect},
+    style::Style,
     text::{Span, Line},
     widgets::{Block, Borders, Paragraph},
     Frame,
@@ -84,7 +84,7 @@ impl RenderSystem {
     }
 
     /// 消息日志渲染（带滚动缓冲）
-    fn render_message_log<B: Backend>(&self, f: &mut Frame<B>, area: Rect, messages: &[String]) {
+    fn render_message_log(&self, f: &mut Frame, area: Rect, messages: &[String]) {
         let visible_messages: Vec<Line> = messages
             .iter()
             .rev()

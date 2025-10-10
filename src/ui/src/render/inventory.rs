@@ -4,7 +4,6 @@ use hero::Hero;
 use crossterm::event::KeyCode;
 use ratatui::widgets::ListState;
 use ratatui::{
-    backend::Backend,
     layout::{Alignment, Rect},
     style::{Color, Modifier, Style},
     text::{Span, Line},
@@ -31,9 +30,9 @@ impl InventoryRenderer {
     }
 
     /// 主渲染方法（整合分页和选择高亮）
-    pub fn render<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect, hero: &Hero) {
+    pub fn render(&mut self, f: &mut Frame, area: Rect, hero: &Hero) {
         // 1. 直接访问Vec<Item> (Inventory是Vec<Item>的别名)
-        let items = &hero.inventory; // 直接引用Vec
+        let items = &hero.bag_items; // 适配现有Hero字段名
 
         // 2. 分页计算（增加防零除保护）
         let total_pages = if self.max_items_per_page == 0 {
@@ -59,7 +58,8 @@ impl InventoryRenderer {
         let end_idx = (start_idx + self.max_items_per_page).min(items.len());
 
         // 5. 构建列表项（修复颜色引用）
-        let mut list_state = ListState::default().with_selected(Some(self.selected_index));
+        let mut list_state = ListState::default();
+        list_state.select(Some(self.selected_index));
 
         let list_items = items[start_idx..end_idx]
             .iter()
@@ -75,11 +75,17 @@ impl InventoryRenderer {
                 };
 
                 // 物品类型颜色映射
-                let (prefix, color) = match item.item_type {
-                    ItemKind::Weapon => ("W:", Color::LightRed),
-                    ItemKind::Armor => ("A:", Color::LightBlue),
-                    // ...其他类型匹配
-                    _ => ("", Color::White),
+                let (prefix, color) = match &item.kind {
+                    items::ItemKind::Weapon(_) => ("W:", Color::LightRed),
+                    items::ItemKind::Armor(_) => ("A:", Color::LightBlue),
+                    items::ItemKind::Potion(_) => ("P:", Color::LightGreen),
+                    items::ItemKind::Scroll(_) => ("S:", Color::LightYellow),
+                    items::ItemKind::Food(_) => ("F:", Color::LightMagenta),
+                    items::ItemKind::Ring(_) => ("R:", Color::LightCyan),
+                    items::ItemKind::Wand(_) => ("Wn:", Color::LightYellow),
+                    items::ItemKind::Seed(_) => ("Se:", Color::Green),
+                    items::ItemKind::Stone(_) => ("St:", Color::Gray),
+                    items::ItemKind::Misc(_) => ("M:", Color::Gray),
                 };
 
                 ListItem::new(Line::from(vec![
@@ -89,7 +95,7 @@ impl InventoryRenderer {
                     ),
                     Span::styled(prefix, Style::default().fg(color)),
                     Span::styled(
-                        item.name.clone(),
+                        item.name(),
                         Style::default().fg(color).add_modifier(Modifier::BOLD),
                     ),
                     Span::styled(
@@ -113,7 +119,7 @@ impl InventoryRenderer {
         f.render_stateful_widget(list, area, &mut list_state);
 
         // 7. 渲染选中物品详情（增加空检查）
-        if let Some(item) = items.get(self.selected_index) {
+        if let Some(item) = items.get(self.selected_index).cloned() {
             let desc_area = Rect {
                 x: area.x,
                 y: area.y + area.height.saturating_sub(4),
@@ -125,14 +131,14 @@ impl InventoryRenderer {
     }
 
     /// 渲染物品详细信息（参考像素地牢底部说明栏）
-    fn render_item_details<B: Backend>(&self, f: &mut Frame<B>, area: Rect, item: &Item) {
+    fn render_item_details(&self, f: &mut Frame, area: Rect, item: &Item) {
         let desc_block = Block::default()
             .borders(Borders::TOP)
             .border_style(Style::default().fg(Color::DarkGray));
 
         let text = vec![
             Line::from(Span::styled(
-                format!("{}", item.name),
+                item.name(),
                 Style::default()
                     .fg(Color::White)
                     .add_modifier(Modifier::BOLD),
@@ -199,15 +205,17 @@ impl InventoryRenderer {
 }
 
 /// 物品类型颜色映射（扩展像素地牢经典配色）
-pub fn item_color(item_type: ItemType) -> Color {
-    match item_type {
-        ItemType::Weapon => Color::LightRed,
-        ItemType::Armor => Color::LightBlue,
-        ItemType::Potion => Color::LightGreen,
-        ItemType::Scroll => Color::LightYellow,
-        ItemType::Food => Color::LightMagenta,
-        ItemType::Ring => Color::LightCyan,
-        ItemType::Wand => Color::LightYellow,
-        ItemType::Misc => Color::Gray,
+pub fn item_color(kind: &items::ItemKind) -> Color {
+    match kind {
+        items::ItemKind::Weapon(_) => Color::LightRed,
+        items::ItemKind::Armor(_) => Color::LightBlue,
+        items::ItemKind::Potion(_) => Color::LightGreen,
+        items::ItemKind::Scroll(_) => Color::LightYellow,
+        items::ItemKind::Food(_) => Color::LightMagenta,
+        items::ItemKind::Ring(_) => Color::LightCyan,
+        items::ItemKind::Wand(_) => Color::LightYellow,
+        items::ItemKind::Seed(_) => Color::Green,
+        items::ItemKind::Stone(_) => Color::Gray,
+        items::ItemKind::Misc(_) => Color::Gray,
     }
 }

@@ -11,7 +11,7 @@ use ratatui::widgets::Widget;
 use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
+    style::{Color, Style, Modifier},
     text::{Span, Line},
     widgets::{Block, Borders, Paragraph},
 };
@@ -92,31 +92,31 @@ impl GameState for MainMenuState {
         &mut self,
         context: &mut StateContext,
         event: &crossterm::event::Event,
-    ) -> Option<GameStateID> {
+    ) -> bool {
         if let crossterm::event::Event::Key(key) = event {
             match key.code {
                 KeyCode::Up => {
                     self.selected_index = self.selected_index.saturating_sub(1);
-                    None
+                    false
                 }
                 KeyCode::Down => {
                     self.selected_index = (self.selected_index + 1).min(self.options.len() - 1);
-                    None
+                    false
                 }
-                KeyCode::Enter => match self.selected_index {
-                    0 => Some(GameStateID::Gameplay),
-                    1 => None, // 加载游戏
-                    2 => Some(GameStateID::Settings),
-                    3 => {
-                        context.request_quit();
-                        None
+                KeyCode::Enter => {
+                    match self.selected_index {
+                        0 => { context.transition_progress = 1.0; }
+                        1 => {}
+                        2 => { context.transition_progress = 1.0; }
+                        3 => { context.request_quit(); }
+                        _ => {}
                     }
-                    _ => None,
-                },
-                _ => None,
+                    true
+                }
+                _ => false,
             }
         } else {
-            None
+            false
         }
     }
 

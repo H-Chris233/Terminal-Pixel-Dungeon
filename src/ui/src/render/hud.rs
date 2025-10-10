@@ -1,8 +1,8 @@
 //src/ui/render/hud.rs
-use crate::{hero::class::Class, ui::terminal::TerminalController};
+use hero::class::Class;
 use hero::Hero;
+use crate::terminal::TerminalController;
 use ratatui::{
-    backend::Backend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Span, Line},
@@ -56,7 +56,7 @@ impl HudRenderer {
     }
 
     /// 主渲染方法（整合所有动画效果）
-    pub fn render<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect, hero: &Hero) {
+    pub fn render(&mut self, f: &mut Frame, area: Rect, hero: &Hero) {
         // 更新动画状态（需在游戏循环中每帧调用update）
         self.current_exp = hero.exp;
         self.next_level_exp = hero.exp_to_next_level();
@@ -117,7 +117,7 @@ impl HudRenderer {
 
 // ===== 私有实现 =====
 impl HudRenderer {
-    fn render_level<B: Backend>(&self, f: &mut Frame<B>, area: Rect, hero: &Hero) {
+    fn render_level(&self, f: &mut Frame, area: Rect, hero: &Hero) {
         let class_icon = match hero.class {
             Class::Warrior => "⚔",
             Class::Mage => "🔮",
@@ -143,7 +143,7 @@ impl HudRenderer {
         );
     }
 
-    fn render_health<B: Backend>(&self, f: &mut Frame<B>, area: Rect, hero: &Hero) {
+    fn render_health(&self, f: &mut Frame, area: Rect, hero: &Hero) {
         let ratio = hero.health as f64 / hero.max_health as f64;
         let is_danger = ratio <= 0.25;
         let label = format!("{}/{}", hero.health, hero.max_health);
@@ -169,7 +169,7 @@ impl HudRenderer {
         f.render_widget(gauge, area);
     }
 
-    fn render_gold<B: Backend>(&self, f: &mut Frame<B>, area: Rect, hero: &Hero) {
+    fn render_gold(&self, f: &mut Frame, area: Rect, hero: &Hero) {
         let gold_style = if self.gold_flash_alpha > 0.0 {
             Style::default().fg(Color::LightYellow).bg(Color::Yellow)
         } else {
@@ -190,7 +190,7 @@ impl HudRenderer {
         );
     }
 
-    fn render_depth<B: Backend>(&self, f: &mut Frame<B>, area: Rect, hero: &Hero) {
+    fn render_depth(&self, f: &mut Frame, area: Rect, hero: &Hero) {
         let stairs_icon = if hero.on_stairs {
             Span::styled(
                 ">",
@@ -219,7 +219,7 @@ impl HudRenderer {
         );
     }
 
-    fn render_damage_numbers<B: Backend>(&mut self, f: &mut Frame<B>) {
+    fn render_damage_numbers(&mut self, f: &mut Frame) {
         for num in &self.damage_numbers {
             let color = if num.is_critical {
                 Color::Yellow
