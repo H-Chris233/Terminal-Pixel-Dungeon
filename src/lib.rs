@@ -6,6 +6,9 @@ pub mod input;
 pub mod systems;
 pub mod turn_system;
 
+pub mod hero_adapter;
+pub mod event_bus;
+
 pub use combat::*;
 pub use dungeon::*;
 pub use hero::*;

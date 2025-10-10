@@ -28,7 +28,6 @@ impl ECSWorld {
                 config: GameConfig::new(),
                 rng: 12345, // default seed
                 dungeon: None,
-                dungeon_instance: None,
             },
         }
     }
@@ -42,7 +41,6 @@ impl ECSWorld {
             config: GameConfig::new(),
             rng: 12345, // default seed
             dungeon: None,
-            dungeon_instance: None,
         };
     }
 }
@@ -65,11 +63,8 @@ pub struct Resources {
     /// RNG state
     pub rng: u64,
     
-    /// Dungeon state (may be moved to components later)
+    /// Dungeon state marker entity (actual dungeon stored as a component)
     pub dungeon: Option<hecs::Entity>,
-    
-    /// Actual dungeon instance
-    pub dungeon_instance: Option<dungeon::Dungeon>,
 }
 
 pub struct GameClock {
@@ -435,7 +430,7 @@ impl ECSWorld {
         }
         
         // Extract dungeon data
-        let dungeon = self.resources.dungeon_instance.clone()
+        let dungeon = get_dungeon_clone(&self.world)
             .ok_or_else(|| GameError::InvalidLevelData)?;
         
         // Create save data
@@ -463,7 +458,7 @@ impl ECSWorld {
         // Set up resources from save data
         self.resources.rng = save_data.game_seed;
         self.resources.game_state.depth = save_data.metadata.dungeon_depth;
-        self.resources.dungeon_instance = Some(save_data.dungeon);
+        set_dungeon_instance(&mut self.world, save_data.dungeon);
         
         // Convert hero to ECS components and spawn player entity
         let hero = save_data.hero;
@@ -503,59 +498,90 @@ impl ECSWorld {
     }
 }
 
+// Dungeon component and helper APIs
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DungeonComponent(pub dungeon::Dungeon);
+
+/// Get a cloned dungeon instance from the world if present
+pub fn get_dungeon_clone(world: &World) -> Option<dungeon::Dungeon> {
+    for (entity, dungeon_comp) in world.query::<&DungeonComponent>().iter() {
+        return Some(dungeon_comp.0.clone());
+    }
+    None
+}
+
+/// Set or replace the dungeon instance in the world. If no dungeon entity exists, one is created.
+pub fn set_dungeon_instance(world: &mut World, dungeon: dungeon::Dungeon) {
+    // Collect entity ids into a temporary vector to avoid holding a QueryBorrow while mutating
+    let existing_entities: Vec<_> = world.query::<&DungeonComponent>().iter().map(|(e, _)| e).collect();
+    if let Some(&entity) = existing_entities.first() {
+        let _ = world.remove_one::<DungeonComponent>(entity);
+        let _ = world.insert_one(entity, DungeonComponent(dungeon));
+        return;
+    }
+
+    // No existing dungeon component, spawn a new entity with it
+    let _ = world.spawn((DungeonComponent(dungeon),));
+}
+
 impl From<&Inventory> for Bag {
     fn from(inventory: &Inventory) -> Self {
         let mut bag = Bag::new();
-        
+
+        fn map_item(item: &ECSItem) -> game_items::ItemKind {
+            match &item.item_type {
+                ItemType::Weapon { damage: _ } => {
+                    game_items::ItemKind::Weapon(game_items::Weapon::new(1, game_items::weapon::WeaponKind::Dagger))
+                }
+                ItemType::Armor { defense: _ } => {
+                    game_items::ItemKind::Armor(game_items::Armor::new(1))
+                }
+                ItemType::Consumable { effect: _ } => {
+                    game_items::ItemKind::Potion(game_items::Potion::new_alchemy(game_items::potion::PotionKind::Healing))
+                }
+                ItemType::Key => {
+                    game_items::ItemKind::Misc(game_items::MiscItem::new(game_items::misc::MiscKind::Torch))
+                }
+                ItemType::Quest => {
+                    game_items::ItemKind::Misc(game_items::MiscItem::new(game_items::misc::MiscKind::Gold(10)))
+                }
+            }
+        }
+
         for item_slot in &inventory.items {
             if let Some(item) = &item_slot.item {
-                // Convert the ECS Item to Hero module Item
-                let hero_item = game_items::Item::new(match &item.item_type {
-                    ItemType::Weapon { damage } => game_items::ItemKind::Weapon(
-                        game_items::Weapon::new(1, game_items::weapon::WeaponKind::Dagger) // Using tier=1 and existing weapon kind
-                    ),
-                    ItemType::Armor { defense } => game_items::ItemKind::Armor(
-                        game_items::Armor::new(1) // Using tier=1 only (no second parameter)
-                    ),
-                    ItemType::Consumable { effect } => {
-                        // Map to appropriate consumable type based on effect
-                        match effect {
-                            ConsumableEffect::Healing { amount } => {
-                                game_items::ItemKind::Potion(
-                                    game_items::Potion::new_alchemy(game_items::potion::PotionKind::Healing)
-                                )
-                            }
-                            _ => game_items::ItemKind::Potion(
-                                game_items::Potion::new_alchemy(game_items::potion::PotionKind::Healing)
-                            ),
-                        }
-                    }
-                    ItemType::Key => game_items::ItemKind::Misc(
-                        game_items::MiscItem::new(game_items::misc::MiscKind::Torch) // Using existing kind as fallback
-                    ),
-                    ItemType::Quest => game_items::ItemKind::Misc(
-                        game_items::MiscItem::new(game_items::misc::MiscKind::Gold(10)) // Using existing kind with value
-                    ),
-                });
-                
-                // Add the item to the bag
+                let kind = map_item(item);
+                let hero_item = game_items::Item::new(kind);
                 let _ = bag.add_item(hero_item);
             }
         }
-        
+
         bag
     }
 }
 
+/// Convenience helper to get a mutable dungeon reference and run a closure on it
+pub fn with_dungeon_mut<F>(world: &mut World, f: F)
+where
+    F: FnOnce(&mut dungeon::Dungeon),
+{
+    // Collect entity ids to avoid holding the query borrow while mutating
+    let ids: Vec<_> = world.query::<&DungeonComponent>().iter().map(|(e, _)| e).collect();
+    if let Some(&entity) = ids.first() {
+        if let Ok(mut comp) = world.get::<&mut DungeonComponent>(entity) {
+            f(&mut comp.0);
+        }
+    }
+}
+
+
 impl From<&Bag> for Inventory {
     fn from(bag: &Bag) -> Self {
-        // Since Bag has complex internal structure, we'll just return an empty inventory for now
-        // A full implementation would need to iterate through all the various inventory types
-        // weapons, armors, potions, etc. and convert each item
-        
+        // Conservative fallback: create empty inventory to avoid depending on Bag internals
         Self {
-            items: Vec::new(), // Using empty vector for now
-            max_slots: 20, // Using a default size
+            items: Vec::new(),
+            max_slots: 20,
         }
     }
 }

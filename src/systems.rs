@@ -221,7 +221,8 @@ impl System for CombatSystemBridge {
                             // Determine if this is an ambush attack based on visibility
                             let is_ambush = {
                                 // Check if there's a dungeon instance to get terrain info
-                                if let Some(ref dungeon) = resources.dungeon_instance {
+                                // Access dungeon via ECS component helper
+                                if let Some(dungeon) = crate::ecs::get_dungeon_clone(world) {
                                     let is_blocked = |x: i32, y: i32| -> bool {
                                         match dungeon.get_tile(x, y) {
                                             TileInfo { passable: false, .. } => true,  // Impassable tile blocks vision
@@ -618,11 +619,12 @@ pub struct DungeonSystem;
 impl System for DungeonSystem {
     fn run(&mut self, world: &mut World, resources: &mut Resources) -> SystemResult {
         // Handle dungeon generation, level transitions, and level-specific events
-        if resources.dungeon_instance.is_none() {
+        // Ensure dungeon component exists in world
+        if crate::ecs::get_dungeon_clone(&world).is_none() {
             // Initialize the dungeon if not already done
             match DungeonModule::generate(resources.config.max_depth, resources.rng) {
                 Ok(dungeon) => {
-                    resources.dungeon_instance = Some(dungeon);
+                    crate::ecs::set_dungeon_instance(world, dungeon);
                 }
                 Err(e) => {
                     eprintln!("Failed to initialize dungeon: {}", e);
@@ -630,79 +632,75 @@ impl System for DungeonSystem {
                 }
             }
         }
-        
-        // Process dungeon interactions if we have a dungeon instance
-        if let Some(dungeon) = &mut resources.dungeon_instance {
-            // Update dungeon state based on player position
-            if let Some(player_entity) = find_player(world) {
-                if let Ok(player_pos) = world.get::<&Position>(player_entity) {
+
+        // Compute player_entity and clone position without holding QueryBorrow across closure
+        let player_entity_opt = find_player(world);
+        let mut player_pos_cloned: Option<Position> = None;
+        if let Some(pe) = player_entity_opt {
+            if let Ok(pos_ref) = world.get::<&Position>(pe) {
+                player_pos_cloned = Some(Position { x: pos_ref.x, y: pos_ref.y, z: pos_ref.z });
+            }
+        }
+
+        if let (Some(player_entity), Some(player_pos)) = (player_entity_opt, player_pos_cloned) {
+            let player_entity = player_entity;
+            let player_pos = player_pos;
+
+            // Clone interactions by accessing dungeon briefly
+            let interactions = {
+                let mut tmp: Option<Vec<dungeon::InteractionEvent>> = None;
+                crate::ecs::with_dungeon_mut(world, |dungeon| {
                     let player_x = player_pos.x;
                     let player_y = player_pos.y;
-                    let player_z = player_pos.z as usize;
-                    
-                    // Update visibility based on player position
                     dungeon.update_visibility(player_x, player_y, resources.config.fov_range);
-                    
-                    // Process tile interactions when player moves
-                    let interactions = dungeon.on_hero_enter(player_x, player_y);
-                    for interaction in interactions {
-                        match interaction {
-                            InteractionEvent::ItemFound(item) => {
-                                // Add item to player inventory
-                                if let Ok(mut inventory) = world.get::<&mut Inventory>(player_entity) {
-                                    // For simplicity, add to first available slot
-                                    for slot in &mut inventory.items {
-                                        if slot.item.is_none() {
-                                            // Convert game_items::Item to ECSItem
-                                            let ecs_item = ECSItem {
-                                                name: item.name.clone(),
-                                                item_type: ItemType::Consumable { 
-                                                    effect: ConsumableEffect::Healing { amount: 20 } // Default conversion
-                                                },
-                                                value: item.value(),  // Assuming it has a value() method
-                                                identified: !item.needs_identify(),
-                                            };
-                                            slot.item = Some(ecs_item);
-                                            slot.quantity = 1;
-                                            break;
-                                        }
+                    tmp = Some(dungeon.on_hero_enter(player_x, player_y));
+                });
+                tmp.unwrap_or_default()
+            };
+
+            for interaction in interactions {
+                    match interaction {
+                        InteractionEvent::ItemFound(item) => {
+                            if let Ok(mut inventory) = world.get::<&mut Inventory>(player_entity) {
+                                for slot in &mut inventory.items {
+                                    if slot.item.is_none() {
+                                        let ecs_item = ECSItem {
+                                            name: item.name.clone(),
+                                            item_type: ItemType::Consumable { 
+                                                effect: ConsumableEffect::Healing { amount: 20 }
+                                            },
+                                            value: item.value(),
+                                            identified: !item.needs_identify(),
+                                        };
+                                        slot.item = Some(ecs_item);
+                                        slot.quantity = 1;
+                                        break;
                                     }
                                 }
                             }
-                            InteractionEvent::EnemyEncounter(enemy) => {
-                                // In a real implementation, this would trigger combat
-                                // For now, we just log it
-                                resources.game_state.message_log.push(format!("Encountered {}", enemy.name()));
-                            }
-                            InteractionEvent::StairsDown => {
-                                // Handle descending stairs
-                                if dungeon.can_descend(player_x, player_y) {
-                                    if dungeon.descend().is_ok() {
-                                        // Update player position to next level
-                                        if let Ok(mut pos) = world.get::<&mut Position>(player_entity) {
-                                            pos.z += 1;
-                                        }
-                                    }
-                                }
-                            }
-                            InteractionEvent::StairsUp => {
-                                // Handle ascending stairs
-                                if dungeon.can_ascend(player_x, player_y) {
-                                    if dungeon.ascend().is_ok() {
-                                        // Update player position to previous level
-                                        if let Ok(mut pos) = world.get::<&mut Position>(player_entity) {
-                                            pos.z = std::cmp::max(0, pos.z - 1);
-                                        }
-                                    }
-                                }
-                            }
-                            _ => {} // Other interactions
                         }
+                        InteractionEvent::EnemyEncounter(enemy) => {
+                            resources.game_state.message_log.push(format!("Encountered {}", enemy.name()));
+                        }
+                        InteractionEvent::StairsDown => {
+                            if let Ok(mut pos) = world.get::<&mut Position>(player_entity) {
+                                pos.z += 1;
+                            }
+                        }
+                        InteractionEvent::StairsUp => {
+                            if let Ok(mut pos) = world.get::<&mut Position>(player_entity) {
+                                pos.z = std::cmp::max(0, pos.z - 1);
+                            }
+                        }
+                        _ => {}
                     }
                 }
-            }
-            
-            // Check if we need to generate a new level
+
+                if resources.game_state.depth >= resources.config.max_depth {
+                    resources.game_state.game_state = GameStatus::Victory;
+                }
+        } else {
+            // No player found; still check victory condition
             if resources.game_state.depth >= resources.config.max_depth {
                 resources.game_state.game_state = GameStatus::Victory;
             }
@@ -965,15 +963,12 @@ pub struct HeroSyncSystem;
 
 impl System for HeroSyncSystem {
     fn run(&mut self, world: &mut World, _resources: &mut Resources) -> SystemResult {
-        // In a complete implementation, this would sync between ECS components and Hero structs
-        // For example, changes to Stats component would be reflected in Hero struct and vice versa
-        
-        // Find the player entity and sync its data
+        // Sync hero module with ECS using adapters
         if let Some(player_entity) = find_player(world) {
-            // This could involve converting the ECS components to Hero struct when needed
-            // and vice versa, depending on which system needs to be updated
+            if let Ok(hero_comp) = world.get::<&crate::ecs::Player>(player_entity) {
+                // Placeholder: in-feature-flag migration would go here
+            }
         }
-        
         SystemResult::Continue
     }
 }
