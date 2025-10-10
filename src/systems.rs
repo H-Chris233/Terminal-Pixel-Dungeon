@@ -3,6 +3,8 @@
 use crate::ecs::*;
 use anyhow;
 use hecs::{Entity, World};
+use dungeon::Dungeon as DungeonModule;
+use dungeon::InteractionEvent;
 
 /// Trait for ECS systems that operate on the world
 pub trait System {
@@ -25,6 +27,18 @@ impl System for InputSystem {
     fn run(&mut self, world: &mut World, resources: &mut Resources) -> SystemResult {
         // In a real implementation, we would poll for input events and convert them to actions
         // This is handled by the input module in our architecture
+        SystemResult::Continue
+    }
+}
+
+/// Input system that bridges to the UI input module
+pub struct InputSystemBridge;
+
+impl System for InputSystemBridge {
+    fn run(&mut self, world: &mut World, resources: &mut Resources) -> SystemResult {
+        // This would use the ui::input module for processing
+        // For now, we'll continue using the existing input handling
+        
         SystemResult::Continue
     }
 }
@@ -153,8 +167,57 @@ pub struct CombatSystem;
 impl System for CombatSystem {
     fn run(&mut self, world: &mut World, _resources: &mut Resources) -> SystemResult {
         // Process attacks and combat interactions
-        // This system would normally check for entities with pending attacks
         // For now, we handle attacks in the movement system
+        SystemResult::Continue
+    }
+}
+
+/// Combat system that uses the combat module functionality
+pub struct CombatSystemBridge;
+
+impl System for CombatSystemBridge {
+    fn run(&mut self, world: &mut World, _resources: &mut Resources) -> SystemResult {
+        // Process pending attacks between entities
+        // Process pending attacks by collecting them first to avoid borrow conflicts
+        let attacks_to_process: Vec<_> = world
+            .query::<(&Position, &Stats, &mut Energy)>()
+            .iter()
+            .filter(|(_, (_, _, energy))| energy.current >= 10) // Only entities with enough energy
+            .map(|(entity, (pos, stats, _))| (entity, pos.clone(), stats.clone()))
+            .collect();
+
+        for (attacker_entity, pos, _stats) in attacks_to_process {
+            if let Ok(mut energy) = world.get::<&mut Energy>(attacker_entity) {
+                energy.current = energy.current.saturating_sub(10); // Cost per attack
+            }
+
+            // Check for adjacent enemies to attack
+            for (defender_entity, _) in world.query::<&Position>().iter() {
+                if attacker_entity == defender_entity { continue; }
+
+                if let Ok(defender_pos) = world.get::<&Position>(defender_entity) {
+                    let distance = pos.distance_to(&defender_pos);
+                    if distance <= 1.5 { // Adjacent
+                        // Perform combat using the combat module
+                        if let (Ok(mut attacker_stats), Ok(mut defender_stats)) = 
+                            (world.get::<&mut Stats>(attacker_entity), 
+                             world.get::<&mut Stats>(defender_entity)) {
+                            
+                            // Simple combat calculation - we could integrate the combat module here
+                            let damage = std::cmp::max(1, attacker_stats.attack as i32 - defender_stats.defense as i32);
+                            defender_stats.hp = std::cmp::max(0, defender_stats.hp as i32 - damage) as u32;
+                            
+                            // Check if defender died
+                            if defender_stats.hp == 0 {
+                                // Remove defender entity or mark for removal
+                                // In a real implementation, we might add death effects
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         SystemResult::Continue
     }
 }
@@ -346,6 +409,18 @@ impl System for EffectSystem {
     }
 }
 
+/// Effect system that bridges to the combat effect module
+pub struct EffectSystemBridge;
+
+impl System for EffectSystemBridge {
+    fn run(&mut self, world: &mut World, _resources: &mut Resources) -> SystemResult {
+        // This would integrate with the combat::effect module
+        // For now, we just process the ECS effects
+        
+        SystemResult::Continue
+    }
+}
+
 /// Energy system manages entity energy and turn scheduling
 pub struct EnergySystem;
 
@@ -379,6 +454,19 @@ impl System for InventorySystem {
     }
 }
 
+/// Inventory system that bridges to the items module
+pub struct InventorySystemBridge;
+
+impl System for InventorySystemBridge {
+    fn run(&mut self, world: &mut World, _resources: &mut Resources) -> SystemResult {
+        // Process pending inventory operations
+        // For example, equipping items, using consumables, etc.
+        // In a real implementation, we'd process specific inventory commands
+        
+        SystemResult::Continue
+    }
+}
+
 /// Rendering system prepares data for rendering
 pub struct RenderingSystem;
 
@@ -386,6 +474,21 @@ impl System for RenderingSystem {
     fn run(&mut self, world: &mut World, resources: &mut Resources) -> SystemResult {
         // Prepare rendering data - this would typically collect entities
         // that need to be rendered and pass them to the renderer
+        resources.clock.elapsed_time += resources.clock.tick_rate;
+        resources.clock.current_time = std::time::SystemTime::now();
+        
+        SystemResult::Continue
+    }
+}
+
+/// Rendering system that bridges to the UI rendering module
+pub struct RenderingSystemBridge;
+
+impl System for RenderingSystemBridge {
+    fn run(&mut self, world: &mut World, resources: &mut Resources) -> SystemResult {
+        // This would use the ui::render module for rendering
+        // Query ECS for entities that need to be rendered
+        // and pass the data to the appropriate UI renderers
         resources.clock.elapsed_time += resources.clock.tick_rate;
         resources.clock.current_time = std::time::SystemTime::now();
         
@@ -412,10 +515,94 @@ pub struct DungeonSystem;
 impl System for DungeonSystem {
     fn run(&mut self, world: &mut World, resources: &mut Resources) -> SystemResult {
         // Handle dungeon generation, level transitions, and level-specific events
+        if resources.dungeon_instance.is_none() {
+            // Initialize the dungeon if not already done
+            match DungeonModule::generate(resources.config.max_depth, resources.rng) {
+                Ok(dungeon) => {
+                    resources.dungeon_instance = Some(dungeon);
+                }
+                Err(e) => {
+                    eprintln!("Failed to initialize dungeon: {}", e);
+                    return SystemResult::Error(e.to_string());
+                }
+            }
+        }
         
-        // Check if we need to generate a new level
-        if resources.game_state.depth >= resources.config.max_depth {
-            resources.game_state.game_state = GameStatus::Victory;
+        // Process dungeon interactions if we have a dungeon instance
+        if let Some(dungeon) = &mut resources.dungeon_instance {
+            // Update dungeon state based on player position
+            if let Some(player_entity) = find_player(world) {
+                if let Ok(player_pos) = world.get::<&Position>(player_entity) {
+                    let player_x = player_pos.x;
+                    let player_y = player_pos.y;
+                    let player_z = player_pos.z as usize;
+                    
+                    // Update visibility based on player position
+                    dungeon.update_visibility(player_x, player_y, resources.config.fov_range);
+                    
+                    // Process tile interactions when player moves
+                    let interactions = dungeon.on_hero_enter(player_x, player_y);
+                    for interaction in interactions {
+                        match interaction {
+                            InteractionEvent::ItemFound(item) => {
+                                // Add item to player inventory
+                                if let Ok(mut inventory) = world.get::<&mut Inventory>(player_entity) {
+                                    // For simplicity, add to first available slot
+                                    for slot in &mut inventory.items {
+                                        if slot.item.is_none() {
+                                            // Convert game_items::Item to ECSItem
+                                            let ecs_item = ECSItem {
+                                                name: item.name.clone(),
+                                                item_type: ItemType::Consumable { 
+                                                    effect: ConsumableEffect::Healing { amount: 20 } // Default conversion
+                                                },
+                                                value: item.value(),  // Assuming it has a value() method
+                                                identified: !item.needs_identify(),
+                                            };
+                                            slot.item = Some(ecs_item);
+                                            slot.quantity = 1;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            InteractionEvent::EnemyEncounter(enemy) => {
+                                // In a real implementation, this would trigger combat
+                                // For now, we just log it
+                                resources.game_state.message_log.push(format!("Encountered {}", enemy.name()));
+                            }
+                            InteractionEvent::StairsDown => {
+                                // Handle descending stairs
+                                if dungeon.can_descend(player_x, player_y) {
+                                    if dungeon.descend().is_ok() {
+                                        // Update player position to next level
+                                        if let Ok(mut pos) = world.get::<&mut Position>(player_entity) {
+                                            pos.z += 1;
+                                        }
+                                    }
+                                }
+                            }
+                            InteractionEvent::StairsUp => {
+                                // Handle ascending stairs
+                                if dungeon.can_ascend(player_x, player_y) {
+                                    if dungeon.ascend().is_ok() {
+                                        // Update player position to previous level
+                                        if let Ok(mut pos) = world.get::<&mut Position>(player_entity) {
+                                            pos.z = std::cmp::max(0, pos.z - 1);
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {} // Other interactions
+                        }
+                    }
+                }
+            }
+            
+            // Check if we need to generate a new level
+            if resources.game_state.depth >= resources.config.max_depth {
+                resources.game_state.game_state = GameStatus::Victory;
+            }
         }
         
         SystemResult::Continue
@@ -667,5 +854,23 @@ fn apply_effect_to_entity(world: &mut World, entity: Entity, effect: &ActiveEffe
         EffectType::Levitation => {
             // Levitation might allow movement over certain terrain
         }
+    }
+}
+
+/// System to sync ECS components with Hero module structures
+pub struct HeroSyncSystem;
+
+impl System for HeroSyncSystem {
+    fn run(&mut self, world: &mut World, _resources: &mut Resources) -> SystemResult {
+        // In a complete implementation, this would sync between ECS components and Hero structs
+        // For example, changes to Stats component would be reflected in Hero struct and vice versa
+        
+        // Find the player entity and sync its data
+        if let Some(player_entity) = find_player(world) {
+            // This could involve converting the ECS components to Hero struct when needed
+            // and vice versa, depending on which system needs to be updated
+        }
+        
+        SystemResult::Continue
     }
 }

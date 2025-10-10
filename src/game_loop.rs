@@ -4,6 +4,8 @@ use crate::ecs::*;
 use crate::renderer::*;
 use crate::systems::*;
 use crate::input::*;
+use save::{SaveSystem, AutoSave};
+use error::GameError;
 use anyhow;
 use hecs::World;
 use std::time::{Duration, Instant};
@@ -16,6 +18,7 @@ pub struct GameLoop<R: Renderer, I: InputSource, C: Clock> {
     pub clock: C,
     pub systems: Vec<Box<dyn System>>,
     pub is_running: bool,
+    pub save_system: Option<AutoSave>,
 }
 
 impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> GameLoop<R, I, C> {
@@ -47,6 +50,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
             clock,
             systems,
             is_running: true,
+            save_system: None,
         }
     }
     
@@ -147,7 +151,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                 bg_color: Some(Color::Black),
                 order: 1,
             },
-            Item {
+            ECSItem {
                 name: "Health Potion".to_string(),
                 item_type: ItemType::Consumable {
                     effect: ConsumableEffect::Healing { amount: 20 },
@@ -255,6 +259,15 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
             }
         }
         
+        // Check for auto-save
+        if let Some(auto_save) = &mut self.save_system {
+            if let Ok(save_data) = self.ecs_world.to_save_data() {
+                if let Err(e) = auto_save.try_save(&save_data) {
+                    eprintln!("Auto-save failed: {}", e);
+                }
+            }
+        }
+        
         Ok(())
     }
     
@@ -273,6 +286,24 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
         self.renderer.cleanup()?;
         Ok(())
     }
+    
+    /// Save the current game state
+    pub fn save_game(&mut self, slot: usize) -> anyhow::Result<()> {
+        if let Some(auto_save) = &mut self.save_system {
+            let save_data = self.ecs_world.to_save_data()?;
+            auto_save.save_system.save_game(slot, &save_data)?;
+        }
+        Ok(())
+    }
+    
+    /// Load a saved game state
+    pub fn load_game(&mut self, slot: usize) -> anyhow::Result<()> {
+        if let Some(auto_save) = &mut self.save_system {
+            let save_data = auto_save.save_system.load_game(slot)?;
+            self.ecs_world.from_save_data(save_data)?;
+        }
+        Ok(())
+    }
 }
 
 /// Headless game loop for testing purposes
@@ -280,6 +311,7 @@ pub struct HeadlessGameLoop {
     pub ecs_world: ECSWorld,
     pub systems: Vec<Box<dyn System>>,
     pub is_running: bool,
+    pub save_system: Option<AutoSave>,
 }
 
 impl HeadlessGameLoop {
@@ -298,10 +330,19 @@ impl HeadlessGameLoop {
             Box::new(RenderingSystem),
         ];
         
+        let save_system = match SaveSystem::new("saves", 10) {
+            Ok(save_sys) => Some(AutoSave::new(save_sys, std::time::Duration::from_secs(300))), // 5 min auto-save
+            Err(e) => {
+                eprintln!("Failed to initialize save system: {}", e);
+                None
+            }
+        };
+        
         Self {
             ecs_world: ECSWorld::new(),
             systems,
             is_running: true,
+            save_system,
         }
     }
     
@@ -318,6 +359,24 @@ impl HeadlessGameLoop {
         Ok(())
     }
     
+    /// Save the current game state
+    pub fn save_game(&mut self, slot: usize) -> anyhow::Result<()> {
+        if let Some(auto_save) = &mut self.save_system {
+            let save_data = self.ecs_world.to_save_data()?;
+            auto_save.save_system.save_game(slot, &save_data)?;
+        }
+        Ok(())
+    }
+    
+    /// Load a saved game state
+    pub fn load_game(&mut self, slot: usize) -> anyhow::Result<()> {
+        if let Some(auto_save) = &mut self.save_system {
+            let save_data = auto_save.save_system.load_game(slot)?;
+            self.ecs_world.from_save_data(save_data)?;
+        }
+        Ok(())
+    }
+    
     /// Update game state by running all systems
     fn update(&mut self) -> anyhow::Result<()> {
         for system in &mut self.systems {
@@ -330,6 +389,15 @@ impl HeadlessGameLoop {
                 SystemResult::Error(msg) => {
                     eprintln!("System error: {}", msg);
                     return Err(anyhow::anyhow!(msg));
+                }
+            }
+        }
+        
+        // Check for auto-save
+        if let Some(auto_save) = &mut self.save_system {
+            if let Ok(save_data) = self.ecs_world.to_save_data() {
+                if let Err(e) = auto_save.try_save(&save_data) {
+                    eprintln!("Auto-save failed: {}", e);
                 }
             }
         }
