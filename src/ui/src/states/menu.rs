@@ -131,7 +131,7 @@ impl GameState for MainMenuState {
 
     fn render(&mut self, context: &mut StateContext) -> anyhow::Result<()> {
         context.terminal.draw(|f| {
-            let size = f.size();
+            let size = f.area();
 
             // 主标题
             let title_block = Paragraph::new(self.render_title())
@@ -207,32 +207,32 @@ impl GameState for PauseMenuState {
         &mut self,
         context: &mut StateContext,
         event: &crossterm::event::Event,
-    ) -> Option<GameStateID> {
+    ) -> bool {
         if let crossterm::event::Event::Key(key) = event {
             match key.code {
-                KeyCode::Esc => Some(GameStateID::Gameplay),
+                KeyCode::Esc => true,
                 KeyCode::Up => {
                     self.selected_index = self.selected_index.saturating_sub(1);
-                    None
+                    false
                 }
                 KeyCode::Down => {
                     self.selected_index = (self.selected_index + 1).min(self.options.len() - 1);
-                    None
+                    false
                 }
                 KeyCode::Enter => match self.selected_index {
-                    0 => Some(GameStateID::Gameplay),
-                    1 => None, // 保存游戏
-                    2 => Some(GameStateID::MainMenu),
+                    0 => true,
+                    1 => false,
+                    2 => true,
                     3 => {
                         context.request_quit();
-                        None
+                        false
                     }
-                    _ => None,
+                    _ => false,
                 },
-                _ => None,
+                _ => false,
             }
         } else {
-            None
+            false
         }
     }
 
@@ -246,7 +246,7 @@ impl GameState for PauseMenuState {
 
     fn render(&mut self, context: &mut StateContext) -> anyhow::Result<()> {
         context.terminal.draw(|f| {
-            let size = f.size();
+            let size = f.area();
             let area = centered_rect(50, 50, size);
 
             let block = Block::default()
@@ -322,15 +322,15 @@ impl GameState for GameOverState {
         &mut self,
         context: &mut StateContext,
         event: &crossterm::event::Event,
-    ) -> Option<GameStateID> {
+    ) -> bool {
         if let crossterm::event::Event::Key(key) = event {
             if key.code == KeyCode::Enter {
-                Some(GameStateID::MainMenu)
+                true
             } else {
-                None
+                false
             }
         } else {
-            None
+            false
         }
     }
 
@@ -341,7 +341,7 @@ impl GameState for GameOverState {
 
     fn render(&mut self, context: &mut StateContext) -> anyhow::Result<()> {
         context.terminal.draw(|f| {
-            let size = f.size();
+            let size = f.area();
             let area = centered_rect(60, 40, size);
 
             let show_prompt = self.blink_timer % 1.0 < 0.5;
@@ -358,7 +358,7 @@ impl GameState for GameOverState {
                     Style::default().fg(Color::White),
                 )),
                 Line::from(Span::raw("")),
-                Spans::from(Span::styled(
+                Line::from(Span::styled(
                     format!("Score: {}", self.score),
                     Style::default().fg(Color::Yellow),
                 )),

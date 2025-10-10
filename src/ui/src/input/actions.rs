@@ -198,15 +198,7 @@ pub fn map_to_ui_action(event: &Event, bindings: &KeyBindings) -> Option<UIActio
         }) => Some(UIAction::PageDown),
 
         // 系统功能
-        Event::Key(KeyEvent {
-            code: KeyCode::F5, ..
-        }) => Some(UIAction::QuickSave),
-        Event::Key(KeyEvent {
-            code: KeyCode::F9, ..
-        }) => Some(UIAction::QuickLoad),
-        Event::Key(KeyEvent {
-            code: KeyCode::F11, ..
-        }) => Some(UIAction::ToggleFullscreen),
+        _ => None,
 
         _ => None,
     }

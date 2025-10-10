@@ -1,6 +1,6 @@
 //src/ui/render/dungeon.rs
 use dungeon::Dungeon;
-use dungeon::level::tiles::Tile;
+use dungeon::level::tiles::{TerrainType, Tile, StairDirection};
 use hero::Hero;
 use ratatui::widgets::ListState;
 use ratatui::{
@@ -63,14 +63,14 @@ impl DungeonRenderer {
         // 渲染每个单元格
         for y in top..=bottom {
             for x in left..=right {
-                if let Some(tile) = dungeon.get_tile(x, y) {
+                if let Some(tile) = dungeon.current_level().get_tile(x, y) {
                     let cell_x = area.x + (x - left) as u16 * cell_width;
                     let cell_y = area.y + (y - top) as u16 * cell_height;
                     let cell_rect = Rect::new(cell_x, cell_y, cell_width, cell_height);
 
                     // 可见性检查
                     let is_visible = self.check_visibility(x, y, hero, dungeon);
-                    let is_remembered = dungeon.is_remembered(x, y);
+                    let is_remembered = dungeon.current_level().is_explored(x, y);
 
                     // 渲染逻辑
                     if is_visible || is_remembered || self.show_all {
@@ -88,17 +88,18 @@ impl DungeonRenderer {
     }
 
     /// 计算可见区域边界
-    fn calculate_view_bounds(&self, hero: &Hero, dungeon: &Dungeon) -> (u8, u8, u8, u8) {
+    fn calculate_view_bounds(&self, hero: &Hero, dungeon: &Dungeon) -> (i32, i32, i32, i32) {
+        let level = dungeon.current_level();
         (
-            hero.x.saturating_sub(self.visible_range),
-            hero.y.saturating_sub(self.visible_range),
-            (hero.x + self.visible_range).min(dungeon.width - 1),
-            (hero.y + self.visible_range).min(dungeon.height - 1),
+            (hero.x - self.visible_range as i32).max(0),
+            (hero.y - self.visible_range as i32).max(0),
+            (hero.x + self.visible_range as i32).min(level.width - 1),
+            (hero.y + self.visible_range as i32).min(level.height - 1),
         )
     }
 
     /// 可见性检查（根据FOV算法）
-    fn check_visibility(&self, x: u8, y: u8, hero: &Hero, dungeon: &Dungeon) -> bool {
+    fn check_visibility(&self, x: i32, y: i32, hero: &Hero, dungeon: &Dungeon) -> bool {
         if self.show_all {
             return true;
         }
@@ -111,13 +112,13 @@ impl DungeonRenderer {
     }
 
     /// 阴影投射FOV算法（参考Roguelike视野算法）
-    fn shadow_casting_fov(&self, x: u8, y: u8, hero: &Hero, dungeon: &Dungeon) -> bool {
+    fn shadow_casting_fov(&self, x: i32, y: i32, hero: &Hero, dungeon: &Dungeon) -> bool {
         // 简化的八方向阴影投射实现
-        let dx = (x as i16 - hero.x as i16).abs();
-        let dy = (y as i16 - hero.y as i16).abs();
-        let distance = dx.max(dy) as u8;
+        let dx = (x - hero.x).abs();
+        let dy = (y - hero.y).abs();
+        let distance = dx.max(dy) as i32;
 
-        if distance > self.visible_range {
+        if distance as u8 > self.visible_range {
             return false;
         }
 
@@ -130,17 +131,17 @@ impl DungeonRenderer {
         let x_inc = x_diff / steps;
         let y_inc = y_diff / steps;
 
-        for _ in 0..distance {
+        for _ in 0..distance as i32 {
             x_step += x_inc;
             y_step += y_inc;
-            let check_x = x_step.round() as u8;
-            let check_y = y_step.round() as u8;
+            let check_x = x_step.round() as i32;
+            let check_y = y_step.round() as i32;
 
             if check_x == x && check_y == y {
                 break;
             }
 
-            if let Some(tile) = dungeon.get_tile(check_x, check_y) {
+            if let Some(tile) = dungeon.current_level().get_tile(check_x, check_y) {
                 if tile.blocks_sight() {
                     return false;
                 }
@@ -151,13 +152,13 @@ impl DungeonRenderer {
     }
 
     /// 菱形墙FOV算法
-    fn diamond_walls_fov(&self, x: u8, y: u8, hero: &Hero, dungeon: &Dungeon) -> bool {
+    fn diamond_walls_fov(&self, x: i32, y: i32, hero: &Hero, dungeon: &Dungeon) -> bool {
         // 简化的菱形墙算法实现
-        let dx = (x as i16 - hero.x as i16).abs();
-        let dy = (y as i16 - hero.y as i16).abs();
+        let dx = (x - hero.x).abs();
+        let dy = (y - hero.y).abs();
         let distance = dx + dy;
 
-        if distance > self.visible_range as i16 * 2 {
+        if distance > self.visible_range as i32 * 2 {
             return false;
         }
 
@@ -173,18 +174,18 @@ impl DungeonRenderer {
         for _ in 0..=distance {
             x_step += x_inc;
             y_step += y_inc;
-            let check_x = x_step.round() as u8;
-            let check_y = y_step.round() as u8;
+            let check_x = x_step.round() as i32;
+            let check_y = y_step.round() as i32;
 
             if check_x == x && check_y == y {
                 break;
             }
 
-            if let Some(tile) = dungeon.get_tile(check_x, check_y) {
+            if let Some(tile) = dungeon.current_level().get_tile(check_x, check_y) {
                 if tile.blocks_sight() {
                     // 菱形墙特殊处理
-                    if (check_x as i16 - hero.x as i16).abs() <= 1
-                        && (check_y as i16 - hero.y as i16).abs() <= 1
+                    if (check_x - hero.x).abs() <= 1
+                        && (check_y - hero.y).abs() <= 1
                     {
                         continue; // 允许看到相邻墙
                     }
@@ -197,20 +198,20 @@ impl DungeonRenderer {
     }
 
     /// 光线投射FOV算法
-    fn ray_casting_fov(&self, x: u8, y: u8, hero: &Hero, dungeon: &Dungeon) -> bool {
+    fn ray_casting_fov(&self, x: i32, y: i32, hero: &Hero, dungeon: &Dungeon) -> bool {
         // 简化的Bresenham算法实现
-        let dx = (x as i16 - hero.x as i16).abs();
-        let dy = (y as i16 - hero.y as i16).abs();
-        let distance = dx.max(dy) as u8;
+        let dx = (x - hero.x).abs();
+        let dy = (y - hero.y).abs();
+        let distance = dx.max(dy);
 
-        if distance > self.visible_range {
+        if distance as u8 > self.visible_range {
             return false;
         }
 
-        let mut x_step = hero.x as i16;
-        let mut y_step = hero.y as i16;
-        let x_inc = if hero.x < x { 1i16 } else { -1i16 };
-        let y_inc = if hero.y < y { 1i16 } else { -1i16 };
+        let mut x_step = hero.x as i32;
+        let mut y_step = hero.y as i32;
+        let x_inc = if hero.x < x { 1 } else { -1 };
+        let y_inc = if hero.y < y { 1 } else { -1 };
         let mut error = dx - dy;
 
         loop {
@@ -221,14 +222,14 @@ impl DungeonRenderer {
             let e2 = 2 * error;
             if e2 > -dy {
                 error -= dy;
-                x_step = (x_step as i16 + x_inc) as i16;
+                x_step += x_inc;
             }
             if e2 < dx {
                 error += dx;
-                y_step = (y_step as i16 + y_inc) as u8;
+                y_step += y_inc;
             }
 
-            if let Some(tile) = dungeon.get_tile(x_step, y_step) {
+            if let Some(tile) = dungeon.current_level().get_tile(x_step, y_step) {
                 if tile.blocks_sight() {
                     return false;
                 }
@@ -248,16 +249,15 @@ impl DungeonRenderer {
         is_hero: bool,
     ) {
         // 经典像素地牢符号系统
-        let (symbol, color) = match tile {
-            Tile::Wall => ('#', Color::Gray), // 原DarkGray改为Gray
-            Tile::Floor => ('.', Color::Gray),
-            Tile::Door => ('+', Color::Yellow),
-            Tile::StairsDown => ('>', Color::White),
-            Tile::StairsUp => ('<', Color::White),
-            Tile::Water => ('~', Color::Blue),
-            Tile::Trap => ('^', Color::Red),
-            Tile::Barrel => ('=', Color::Yellow),
-            Tile::Empty => (' ', Color::Reset),
+        let (symbol, color) = match tile.info.terrain_type {
+            TerrainType::Wall => ('#', Color::Gray),
+            TerrainType::Floor => ('.', Color::Gray),
+            TerrainType::Door(_) => ('+', Color::Yellow),
+            TerrainType::Stair(StairDirection::Down) => ('>', Color::White),
+            TerrainType::Stair(StairDirection::Up) => ('<', Color::White),
+            TerrainType::Water => ('~', Color::Blue),
+            TerrainType::Trap(_) => ('^', Color::Red),
+            _ => (' ', Color::Reset),
         };
 
         // 可见性处理（记忆系统）
@@ -287,42 +287,13 @@ impl DungeonRenderer {
 }
 
 /// Tile扩展方法
-impl Tile {
-    /// 是否阻挡视线（用于FOV计算）
-    pub fn blocks_sight(&self) -> bool {
-        match self {
-            Tile::Wall | Tile::Door | Tile::Barrel => true,
-            _ => false,
-        }
-    }
-}
 
 /// 颜色扩展方法
-trait ColorExt {
-    fn dark(&self) -> Self;
-}
-
-impl ColorExt for Color {
-    /// 生成更暗的颜色（用于记忆系统）
-    fn dark(&self) -> Self {
-        match self {
-            Color::Red => Color::Rgb(100, 0, 0),       // DarkRed
-            Color::Green => Color::Rgb(0, 100, 0),     // DarkGreen
-            Color::Yellow => Color::Rgb(100, 100, 0),  // DarkYellow
-            Color::Blue => Color::Rgb(0, 0, 100),      // DarkBlue
-            Color::Magenta => Color::Rgb(100, 0, 100), // DarkMagenta
-            Color::Cyan => Color::Rgb(0, 100, 100),    // DarkCyan
-            Color::Gray => Color::Rgb(50, 50, 50),     // DarkGray
-            other => *other,
-        }
-    }
-}
 
 #[test]
 fn test_shadow_casting_edge() {
     let renderer = DungeonRenderer::new();
-    let hero = Hero::new_at(5, 5);
-    let mut dungeon = Dungeon::new(10, 10);
-    dungeon.set_tile(5, 6, Tile::Wall);
+    let hero = Hero::default();
+    let mut dungeon = Dungeon::generate(3, 0).unwrap();
     assert!(!renderer.shadow_casting_fov(5, 7, &hero, &dungeon)); // 验证视线阻挡
 }

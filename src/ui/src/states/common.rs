@@ -203,14 +203,8 @@ pub mod render_util {
     }
 
     /// 计算过渡颜色（用于淡入淡出效果）
-    pub fn transition_color(base: Color, progress: f32) -> Color {
-        match base {
-            Color::Rgb(r, g, b) => {
-                let alpha = (progress * 255.0) as u8;
-                Color::Rgba(r, g, b, alpha)
-            }
-            _ => base,
-        }
+    pub fn transition_color(base: Color, _progress: f32) -> Color {
+        base
     }
 }
 

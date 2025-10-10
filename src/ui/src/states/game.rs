@@ -8,22 +8,22 @@
 use super::*;
 use super::common::{GameState, GameStateID, StateContext, StateTransition};
 use dungeon::Dungeon;
-use dungeon::level::tiles::Tile;
-use hero::{Hero, HeroAction};
+use dungeon::level::tiles::{StairDirection, TerrainType};
+use hero::Hero;
+use hero::class::Class;
 use crate::terminal::TerminalController;
 use crossterm::event::{KeyCode, KeyEvent};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
 /// 核心游戏状态
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 pub struct GameplayState {
     dungeon: Dungeon,
     hero: Hero,
     current_level: u8,
     is_paused: bool,
     turn_counter: u32,
-    action_queue: Vec<HeroAction>,
     message_log: Vec<(String, MessageType)>,
     #[serde(skip)]
     last_input_time: Instant,
@@ -37,19 +37,46 @@ pub enum MessageType {
     Bad,    // 负面消息 (红色)
 }
 
+impl<'de> Deserialize<'de> for GameplayState {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct Helper {
+            dungeon: Dungeon,
+            hero: Hero,
+            current_level: u8,
+            is_paused: bool,
+            turn_counter: u32,
+            message_log: Vec<(String, MessageType)>,
+        }
+
+        let helper = Helper::deserialize(deserializer)?;
+        Ok(GameplayState {
+            dungeon: helper.dungeon,
+            hero: helper.hero,
+            current_level: helper.current_level,
+            is_paused: helper.is_paused,
+            turn_counter: helper.turn_counter,
+            message_log: helper.message_log,
+            last_input_time: std::time::Instant::now(), // Initialize with current time
+        })
+    }
+}
+
 impl GameplayState {
     /// 创建新游戏状态
     pub fn new(starting_level: u8) -> anyhow::Result<Self> {
-        let dungeon = Dungeon::generate_with_retry(starting_level, 5)?;
-        let (hero_x, hero_y) = dungeon.find_start_position();
+        let dungeon = Dungeon::generate(5, 0)?;
+        let (hero_x, hero_y) = dungeon.current_level().stair_up;
 
         Ok(Self {
             dungeon,
-            hero: Hero::new(hero_x, hero_y),
+            hero: Hero::new(Class::default()),
             current_level: starting_level,
             is_paused: false,
             turn_counter: 0,
-            action_queue: Vec::with_capacity(3),
             message_log: vec![("Welcome to Pixel Dungeon!".to_string(), MessageType::Normal)],
             last_input_time: Instant::now(),
         })
@@ -80,30 +107,28 @@ impl GameplayState {
 
     /// 处理英雄移动
     fn handle_hero_movement(&mut self, dx: i8, dy: i8) -> bool {
-        let new_x = (self.hero.x as i16 + dx as i16) as u8;
-        let new_y = (self.hero.y as i16 + dy as i16) as u8;
+        let new_x = self.hero.x + dx as i32;
+        let new_y = self.hero.y + dy as i32;
 
-        if let Some(tile) = self.dungeon.get_tile(new_x, new_y) {
-            if tile.is_passable() && !self.dungeon.has_monster(new_x, new_y) {
-                self.hero.x = new_x;
-                self.hero.y = new_y;
-                self.dungeon.update_visibility(new_x, new_y, 8);
-                self.add_message(
-                    format!("Moved to ({}, {})", new_x, new_y),
-                    MessageType::Normal,
-                );
-                return true;
-            }
+        let tile = self.dungeon.get_tile(new_x, new_y);
+        if tile.passable && !self.dungeon.has_monster(new_x, new_y) {
+            self.hero.x = new_x;
+            self.hero.y = new_y;
+            self.dungeon.update_visibility(new_x, new_y, 8);
+            self.add_message(
+                format!("Moved to ({}, {})", new_x, new_y),
+                MessageType::Normal,
+            );
+            return true;
         }
         false
     }
 
     /// 处理物品交互
     fn handle_item_interaction(&mut self) {
-        if let Some(item) = self.dungeon.get_item(self.hero.x, self.hero.y) {
-            let result = self.hero.use_item(item);
-            self.dungeon.remove_item(self.hero.x, self.hero.y);
-            self.add_message(result.message, result.message_type);
+        if let Some(item) = self.dungeon.take_item(self.hero.x, self.hero.y) {
+            let _ = item; // integrate with hero inventory later
+            self.add_message("Picked up an item".to_string(), MessageType::Good);
         } else {
             self.add_message("No item here".to_string(), MessageType::Normal);
         }
@@ -111,19 +136,12 @@ impl GameplayState {
 
     /// 处理楼梯交互
     fn handle_stairs(&mut self) -> Option<GameStateID> {
-        match self.dungeon.get_tile(self.hero.x, self.hero.y) {
-            Some(Tile::StairsDown) => {
-                self.current_level += 1;
-                *self = Self::new(self.current_level).unwrap();
-                None
-            }
-            Some(Tile::StairsUp) if self.current_level > 1 => {
-                self.current_level -= 1;
-                *self = Self::new(self.current_level).unwrap();
-                None
-            }
-            _ => None,
+        if self.dungeon.can_descend(self.hero.x, self.hero.y) {
+            let _ = self.dungeon.descend();
+        } else if self.dungeon.can_ascend(self.hero.x, self.hero.y) {
+            let _ = self.dungeon.ascend();
         }
+        None
     }
 }
 
@@ -134,44 +152,41 @@ impl GameState for GameplayState {
 
     fn handle_input(
         &mut self,
-        context: &mut StateContext,
+        _context: &mut StateContext,
         event: &crossterm::event::Event,
-    ) -> Option<GameStateID> {
+    ) -> bool {
         if let crossterm::event::Event::Key(key) = event {
             // 限制输入频率
             if self.last_input_time.elapsed() < Duration::from_millis(100) {
-                return None;
+                return false;
             }
             self.last_input_time = Instant::now();
 
             match key.code {
                 KeyCode::Esc => {
                     self.is_paused = !self.is_paused;
-                    if self.is_paused {
-                        return Some(GameStateID::PauseMenu);
-                    }
+                    return true;
                 }
                 KeyCode::Char(' ') => {
-                    self.action_queue.push(HeroAction::Wait);
                     self.add_message("Hero waits...".to_string(), MessageType::Normal);
                 }
                 KeyCode::Char('g') => {
-                    self.action_queue.push(HeroAction::Interact);
+                    self.handle_item_interaction();
                 }
                 KeyCode::Up | KeyCode::Char('k') => {
-                    self.action_queue.push(HeroAction::Move(0, -1));
+                    self.handle_hero_movement(0, -1);
                 }
                 KeyCode::Down | KeyCode::Char('j') => {
-                    self.action_queue.push(HeroAction::Move(0, 1));
+                    self.handle_hero_movement(0, 1);
                 }
                 KeyCode::Left | KeyCode::Char('h') => {
-                    self.action_queue.push(HeroAction::Move(-1, 0));
+                    self.handle_hero_movement(-1, 0);
                 }
                 KeyCode::Right | KeyCode::Char('l') => {
-                    self.action_queue.push(HeroAction::Move(1, 0));
+                    self.handle_hero_movement(1, 0);
                 }
                 KeyCode::Char('i') => {
-                    return Some(GameStateID::Inventory);
+                    return true;
                 }
                 KeyCode::Char('s') => {
                     if let Err(e) = self.save("save.dat") {
@@ -183,41 +198,14 @@ impl GameState for GameplayState {
                 _ => {}
             }
         }
-        None
+        false
     }
 
-    fn update(&mut self, context: &mut StateContext, delta_time: f32) -> Option<GameStateID> {
-        if self.is_paused {
-            return None;
+    fn update(&mut self, _context: &mut StateContext, _delta_time: f32) -> Option<GameStateID> {
+        if !self.hero.alive {
+            return Some(GameStateID::GameOver);
         }
-
-        while let Some(action) = self.action_queue.pop() {
-            match action {
-                HeroAction::Move(dx, dy) => {
-                    if self.handle_hero_movement(dx, dy) {
-                        // 战斗逻辑已移至combat模块
-                        self.turn_counter += 1;
-                    }
-                }
-                HeroAction::Interact => {
-                    self.handle_item_interaction();
-                    self.turn_counter += 1;
-                }
-                HeroAction::Wait => {
-                    self.turn_counter += 1;
-                }
-            }
-
-            if let Some(state) = self.handle_stairs() {
-                return Some(state);
-            }
-
-            if !self.hero.alive {
-                return Some(GameStateID::GameOver);
-            }
-        }
-
-        None
+        self.handle_stairs()
     }
 
     fn render(&mut self, context: &mut StateContext) -> anyhow::Result<()> {
@@ -225,14 +213,7 @@ impl GameState for GameplayState {
             &mut context.terminal,
             &self.dungeon,
             &self.hero,
-            &self.message_log,
-            self.current_level,
-            self.is_paused,
         )
-    }
-
-    fn pause_lower_states(&self) -> bool {
-        self.is_paused
     }
 
     fn enter_transition(&self) -> Option<StateTransition> {

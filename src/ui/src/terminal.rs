@@ -26,9 +26,11 @@ impl TerminalController {
         let mut stdout = io::stdout();
         execute!(stdout, EnterAlternateScreen).context("Failed to enter alternate screen")?;
         let backend = CrosstermBackend::new(stdout);
+        let terminal = Terminal::new(backend).context("Failed to create terminal")?;
+        // Note: store terminal only; backend can be accessed via terminal
         Ok(Self {
-            backend,
-            terminal: Terminal::new(backend).context("Failed to create terminal")?,
+            backend: CrosstermBackend::new(io::stdout()),
+            terminal,
         })
     }
 
@@ -41,7 +43,7 @@ impl TerminalController {
     }
 
     /// 基础布局划分（适用于像素地牢的经典三栏布局）
-    pub fn create_layout(frame: &mut Frame) -> Vec<layout::Rect> {
+    pub fn create_layout(frame: &mut Frame) -> std::rc::Rc<[layout::Rect]> {
         Layout::default()
             .direction(layout::Direction::Vertical)
             .constraints([
@@ -49,7 +51,7 @@ impl TerminalController {
                 Constraint::Min(10),   // 主游戏区域
                 Constraint::Length(3), // 底部消息栏
             ])
-            .split(frame.size())
+            .split(frame.area())
     }
 
     /// 绘制基础游戏边框（带当前地牢层数显示）
@@ -57,7 +59,7 @@ impl TerminalController {
         let block = Block::default()
             .title(format!("Pixel Dungeon - Depth {}", depth))
             .borders(Borders::ALL);
-        frame.render_widget(block, frame.size());
+        frame.render_widget(block, frame.area());
     }
 
     /// 处理输入事件（适配像素地牢的经典控制方案）

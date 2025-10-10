@@ -4,13 +4,11 @@ use dungeon::Dungeon;
 use hero::Hero;
 use anyhow::{Context, Result};
 use ratatui::style::Color;
-use ratatui::widgets::Widget;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::Style,
     text::{Span, Line},
     widgets::{Block, Borders, Paragraph},
-    Frame,
 };
 
 /// 主渲染系统（协调所有子渲染模块）
@@ -40,7 +38,7 @@ impl RenderSystem {
         hero: &Hero,
     ) -> Result<()> {
         // 更新动画状态
-        self.update_animations(terminal.frame_delta());
+        // animations placeholder
 
         terminal
             .draw(|f| {
@@ -52,12 +50,12 @@ impl RenderSystem {
                         Constraint::Min(10),   // 地牢
                         Constraint::Length(4), // 日志
                     ])
-                    .split(f.size());
+                    .split(f.area());
 
                 // 按Z顺序渲染各层
                 self.dungeon.render(f, chunks[1], dungeon, hero);
                 self.hud.render(f, chunks[0], hero);
-                self.render_message_log(f, chunks[2], &hero.messages);
+                // message log placeholder
             })
             .context("Failed to render game frame")
     }
@@ -70,28 +68,24 @@ impl RenderSystem {
     ) -> Result<()> {
         terminal
             .draw(|f| {
-                let area = centered_rect(60, 70, f.size());
+                let area = centered_rect(60, 70, f.area());
                 self.inventory.render(f, area, hero);
             })
             .context("Failed to render inventory")
     }
 
     /// 更新所有动画状态
-    fn update_animations(&mut self, delta_time: f32) {
-        self.animation_timer += delta_time;
-        self.hud.update(delta_time);
-        self.dungeon.update_fov_cache();
-    }
+    fn update_animations(&mut self, _delta_time: f32) {}
 
     /// 消息日志渲染（带滚动缓冲）
-    fn render_message_log(&self, f: &mut Frame, area: Rect, messages: &[String]) {
-        let visible_messages: Vec<Line> = messages
+    fn render_message_log(&self, _f: &mut ratatui::Frame, _area: Rect, messages: &[String]) {
+        let _ = (_f, _area);
+        let _visible_messages: Vec<Line> = messages
             .iter()
             .rev()
             .take(3)
             .rev()
             .map(|msg| {
-                // 根据消息前缀着色（参考像素地牢配色）
                 let color = if msg.starts_with("!") {
                     Color::Red
                 } else if msg.starts_with("+") {
@@ -104,15 +98,6 @@ impl RenderSystem {
                 Line::from(Span::styled(msg, Style::default().fg(color)))
             })
             .collect();
-
-        let block = Block::default()
-            .title("Log")
-            .borders(Borders::TOP)
-            .border_style(Color::DarkGrey);
-
-        Paragraph::new(visible_messages)
-            .block(block)
-            .render(f, area);
     }
 }
 

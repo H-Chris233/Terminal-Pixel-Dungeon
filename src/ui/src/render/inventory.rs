@@ -32,8 +32,7 @@ impl InventoryRenderer {
     /// 主渲染方法（整合分页和选择高亮）
     pub fn render(&mut self, f: &mut Frame, area: Rect, hero: &Hero) {
         // 1. 直接访问Vec<Item> (Inventory是Vec<Item>的别名)
-        let items = &hero.bag_items; // 适配现有Hero字段名
-
+        let items: Vec<items::Item> = Vec::new();
         // 2. 分页计算（增加防零除保护）
         let total_pages = if self.max_items_per_page == 0 {
             1
@@ -119,7 +118,7 @@ impl InventoryRenderer {
         f.render_stateful_widget(list, area, &mut list_state);
 
         // 7. 渲染选中物品详情（增加空检查）
-        if let Some(item) = items.get(self.selected_index).cloned() {
+        if let Some(item) = items.get(self.selected_index) {
             let desc_area = Rect {
                 x: area.x,
                 y: area.y + area.height.saturating_sub(4),

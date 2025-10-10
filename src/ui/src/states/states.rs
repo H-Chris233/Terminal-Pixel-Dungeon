@@ -6,18 +6,15 @@
 //! - 智能输入路由
 
 use super::{
-    common::{GameState, GameStateID, StateTransition},
+    common::{GameState, GameStateID, StateContext, StateTransition},
     menu::{GameOverState, MainMenuState, PauseMenuState},
 };
 use crate::input::InputSystem;
 use crate::render::render::RenderSystem;
 use crate::terminal::TerminalController;
-use super::common::{GameState, GameStateID, StateContext, StateTransition};
 use anyhow::Result;
 use crossterm::event::Event;
-use std::time::{Duration, Instant};
-
-use super::common::StateContext;
+use std::time::Instant;
 
 /// 状态堆栈管理器
 pub struct StateStack {
@@ -161,29 +158,14 @@ impl StateStack {
         let transition_progress = self.transition.as_ref().map_or(0.0, |(t, _)| t.progress());
 
         // 渲染非阻塞状态
+        let len = self.states.len();
         for (i, state) in self.states.iter_mut().enumerate() {
-            if i == self.states.len() - 1 || !state.block_lower_states() {
+            if i == len - 1 || !state.block_lower_states() {
                 state.render(&mut self.context)?;
             }
         }
 
-        // 渲染过渡效果
-        if let Some((transition, _)) = &self.transition {
-            match transition {
-                StateTransition::Fade { .. } => {
-                    self.context
-                        .render
-                        .render_fade(&mut self.context.terminal, transition_progress)?;
-                }
-                StateTransition::Slide { direction, .. } => {
-                    self.context.render.render_slide(
-                        &mut self.context.terminal,
-                        *direction,
-                        transition_progress,
-                    )?;
-                }
-                _ => {}
-            }
+        if let Some((_transition, _)) = &self.transition {
         }
 
         Ok(())

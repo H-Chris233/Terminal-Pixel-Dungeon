@@ -58,8 +58,8 @@ impl HudRenderer {
     /// 主渲染方法（整合所有动画效果）
     pub fn render(&mut self, f: &mut Frame, area: Rect, hero: &Hero) {
         // 更新动画状态（需在游戏循环中每帧调用update）
-        self.current_exp = hero.exp;
-        self.next_level_exp = hero.exp_to_next_level();
+        self.current_exp = hero.experience;
+        self.next_level_exp = hero.level * 100;
 
         // 经典四栏布局
         let chunks = Layout::default()
@@ -144,9 +144,9 @@ impl HudRenderer {
     }
 
     fn render_health(&self, f: &mut Frame, area: Rect, hero: &Hero) {
-        let ratio = hero.health as f64 / hero.max_health as f64;
+        let ratio = hero.hp as f64 / hero.max_hp as f64;
         let is_danger = ratio <= 0.25;
-        let label = format!("{}/{}", hero.health, hero.max_health);
+        let label = format!("{}/{}", hero.hp, hero.max_hp);
 
         // 动态颜色（危险状态带闪烁）
         let color = if is_danger && self.danger_flash {
@@ -191,23 +191,8 @@ impl HudRenderer {
     }
 
     fn render_depth(&self, f: &mut Frame, area: Rect, hero: &Hero) {
-        let stairs_icon = if hero.on_stairs {
-            Span::styled(
-                ">",
-                Style::default()
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD),
-            )
-        } else {
-            Span::raw(" ")
-        };
-
         let text = Line::from(vec![
-            stairs_icon,
-            Span::styled(
-                format!(" D.{}", hero.depth),
-                Style::default().fg(Color::Blue),
-            ),
+            Span::raw(" D."),
         ]);
 
         let block = Block::default().borders(Borders::NONE);
@@ -221,13 +206,7 @@ impl HudRenderer {
 
     fn render_damage_numbers(&mut self, f: &mut Frame) {
         for num in &self.damage_numbers {
-            let color = if num.is_critical {
-                Color::Yellow
-            } else {
-                Color::Red
-            }
-            .clone()
-            .set_alpha((num.alpha * 255.0) as u8);
+            let color = if num.is_critical { Color::Yellow } else { Color::Red };
 
             let text = Span::styled(
                 format!("{}", num.value),

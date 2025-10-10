@@ -9,6 +9,7 @@ pub mod terminal;
 
 use dungeon::Dungeon;
 use hero::Hero;
+use hero::HeroBehavior;
 use save::AutoSave;
 use save::SaveData;
 use crossterm::{
@@ -41,10 +42,10 @@ impl TerminalUI {
             // 处理输入和游戏逻辑
             if let Event::Key(key) = event::read()? {
                 match key.code {
-                    KeyCode::Char('h') | KeyCode::Left => hero.move_to(-1, 0, dungeon),
-                    KeyCode::Char('j') | KeyCode::Down => hero.move_to(0, 1, dungeon),
-                    KeyCode::Char('k') | KeyCode::Up => hero.move_to(0, -1, dungeon),
-                    KeyCode::Char('l') | KeyCode::Right => hero.move_to(1, 0, dungeon),
+                    KeyCode::Char('h') | KeyCode::Left => { let _ = hero.move_to(-1, 0, dungeon); }
+                    KeyCode::Char('j') | KeyCode::Down => { let _ = hero.move_to(0, 1, dungeon); }
+                    KeyCode::Char('k') | KeyCode::Up => { let _ = hero.move_to(0, -1, dungeon); }
+                    KeyCode::Char('l') | KeyCode::Right => { let _ = hero.move_to(1, 0, dungeon); }
                     KeyCode::Char('i') => self.show_inventory(hero),
                     KeyCode::Char('u') => self.use_item(hero),
                     KeyCode::Char('d') => self.drop_item(hero),
