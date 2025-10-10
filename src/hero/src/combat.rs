@@ -129,6 +129,35 @@ impl Combatant for Hero {
     fn heal(&mut self, amount: u32) {
         self.hp = (self.hp + amount).min(self.max_hp);
     }
+
+    /// 获取力量值
+    fn strength(&self) -> u8 {
+        self.strength
+    }
+
+    /// 获取敏捷值
+    fn dexterity(&self) -> u8 {
+        // 简单的基于职业和等级的计算
+        let base_dex = match self.class {
+            Class::Warrior => 8,
+            Class::Mage => 6,
+            Class::Rogue => 12,
+            Class::Huntress => 10,
+        };
+        ((base_dex as u32 + self.level / 3).min(20) as u8) // Cap at 20
+    }
+
+    /// 获取智力值
+    fn intelligence(&self) -> u8 {
+        // 简单的基于职业和等级的计算
+        let base_int = match self.class {
+            Class::Warrior => 6,
+            Class::Mage => 14,
+            Class::Rogue => 8,
+            Class::Huntress => 10,
+        };
+        ((base_int as u32 + self.level / 3).min(20) as u8) // Cap at 20
+    }
 }
 
 /// 英雄特有的战斗扩展方法

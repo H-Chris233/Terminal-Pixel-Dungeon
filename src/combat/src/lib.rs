@@ -6,6 +6,11 @@ use rand::Rng;
 pub mod combatant;
 pub mod effect;
 pub mod enemy;
+pub mod vision;
+pub mod combat_manager;
+pub mod status_effect;
+#[cfg(test)]
+mod tests;
 
 pub use crate::combatant::Combatant;
 pub use crate::effect::*;
@@ -25,25 +30,56 @@ mod constants {
     pub const DEFENSE_CAP: f32 = 0.8; // Maximum damage reduction from defense
     pub const MIN_DAMAGE: u32 = 1; // Minimum damage dealt
     pub const RANGED_PENALTY_PER_TILE: f32 = 0.15; // 15% penalty per tile closer than max
-    pub const SURPRISE_ATTACK_MODIFIER: f32 = 0.5; // Damage modifier for surprise attacks
+    pub const SURPRISE_ATTACK_MODIFIER: f32 = 2.0; // Damage bonus for surprise attacks (2x damage)
+    pub const AMBUSH_DISTANCE: u32 = 1; // Maximum distance for ambush attacks
 }
 
 impl Combat {
     /// Engage in combat between two combatants (player vs enemy or enemy vs player)
-    pub fn engage<T: Combatant, U: Combatant>(attacker: &mut T, defender: &mut U) -> CombatResult {
+    pub fn engage<T: Combatant, U: Combatant>(
+        attacker: &mut T,
+        defender: &mut U,
+        is_ambush: bool, // Whether this is an ambush attack
+    ) -> CombatResult {
         let mut result = CombatResult::new();
 
-        // Attacker's turn (with potential surprise attack bonus)
-        let attack_result = Self::resolve_attack(attacker, defender, true);
+        // Attacker's turn (with potential ambush bonus)
+        let attack_result = Self::resolve_attack(attacker, defender, is_ambush);
         result.combine(attack_result);
 
-        // Defender's counterattack if alive (no surprise bonus)
+        // Defender's counterattack if alive (no ambush bonus since they know attacker is there)
         if defender.is_alive() {
             let counter_result = Self::resolve_attack(defender, attacker, false);
             result.combine(counter_result);
         }
 
         result
+    }
+
+    /// Perform an attack with consideration for ambush mechanics
+    pub fn perform_attack_with_ambush<T: Combatant, U: Combatant>(
+        attacker: &mut T,
+        attacker_x: i32,
+        attacker_y: i32,
+        defender: &mut U,
+        defender_x: i32,
+        defender_y: i32,
+        is_blocked: &dyn Fn(i32, i32) -> bool,
+        attacker_fov_range: u32,
+    ) -> CombatResult {
+        // Check if attacker can ambush defender
+        let is_ambush = vision::VisionSystem::can_ambush(
+            attacker,
+            attacker_x,
+            attacker_y,
+            defender,
+            defender_x,
+            defender_y,
+            is_blocked,
+            attacker_fov_range,
+        );
+
+        Self::engage(attacker, defender, is_ambush)
     }
 
     /// Calculate hit chance (SPD-style formula)
@@ -66,7 +102,7 @@ impl Combat {
     pub fn calculate_damage<T: Combatant, U: Combatant>(
         attacker: &T,
         defender: &U,
-        is_surprise: bool,
+        is_ambush: bool,
     ) -> u32 {
         // Base damage with weapon variation (80-120%)
         let base_damage = attacker.attack_power() as f32;
@@ -78,8 +114,8 @@ impl Combat {
             raw_damage *= constants::CRIT_MULTIPLIER;
         }
 
-        // Apply surprise attack modifier (50% damage for unaware targets)
-        if is_surprise {
+        // Apply ambush attack modifier (2x damage for unaware targets)
+        if is_ambush {
             raw_damage *= constants::SURPRISE_ATTACK_MODIFIER;
         }
 
@@ -96,12 +132,12 @@ impl Combat {
     pub fn resolve_attack<T: Combatant, U: Combatant>(
         attacker: &mut T,
         defender: &mut U,
-        is_surprise: bool,
+        is_ambush: bool,
     ) -> CombatResult {
         let mut result = CombatResult::new();
 
         if Self::does_attack_hit(attacker, defender) {
-            let damage = Self::calculate_damage(attacker, defender, is_surprise);
+            let damage = Self::calculate_damage(attacker, defender, is_ambush);
             let is_crit = Self::is_critical(attacker);
 
             // Apply damage and check for death
@@ -110,9 +146,9 @@ impl Combat {
             // Build combat message
             let mut damage_msg = if is_crit {
                 format!("Critical hit! {} deals {} damage", attacker.name(), damage)
-            } else if is_surprise {
+            } else if is_ambush {
                 format!(
-                    "Surprise attack! {} deals {} damage",
+                    "Ambush! {} deals {} damage (2x damage bonus)",
                     attacker.name(),
                     damage
                 )
@@ -167,32 +203,4 @@ impl CombatResult {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::hero::Class;
-    use crate::hero::Hero;
-    use crate::items::weapon::{Weapon, WeaponType};
 
-    #[test]
-    #[test]
-    fn test_basic_combat() {
-        let mut hero = Hero::new(Class::Warrior, "Hero".to_string());
-        let mut enemy = Enemy::new(EnemyKind::Rat, 0, 0);
-
-        let result = Combat::engage(&mut hero, &mut enemy);
-        assert!(!result.logs.is_empty());
-        assert!(result.logs[0].contains("hits") || result.logs[0].contains("misses"));
-    }
-
-    #[test]
-    fn test_surprise_attack() {
-        let mut rogue = Hero::new(Class::Rogue, "Rogue".to_string());
-        let mut enemy = Enemy::new(EnemyKind::Guard, 0, 0);
-        enemy.set_state(EnemyState::Sleeping); // Sleeping enemy is surprised
-
-        let result = Combat::engage(&mut rogue, &mut enemy, 1);
-        assert!(!result.logs.is_empty());
-        assert!(result.logs[0].contains("Surprise attack"));
-    }
-}

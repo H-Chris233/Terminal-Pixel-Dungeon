@@ -11,6 +11,7 @@ pub struct Effect {
     effect_type: EffectType,
     turns: u32,      // 剩余回合数
     intensity: u8,   // 效果强度
+    source: Option<String>, // 效果来源（用于UI和追踪）
 }
 
 impl Effect {
@@ -20,6 +21,7 @@ impl Effect {
             effect_type,
             turns,
             intensity: 3,
+            source: None,
         }
     }
 
@@ -28,6 +30,25 @@ impl Effect {
             effect_type,
             turns,
             intensity: intensity.clamp(1, 10),
+            source: None,
+        }
+    }
+
+    pub fn with_source(effect_type: EffectType, turns: u32, source: &str) -> Self {
+        Self {
+            effect_type,
+            turns,
+            intensity: 3,
+            source: Some(source.to_string()),
+        }
+    }
+
+    pub fn with_source_and_intensity(effect_type: EffectType, turns: u32, intensity: u8, source: &str) -> Self {
+        Self {
+            effect_type,
+            turns,
+            intensity: intensity.clamp(1, 10),
+            source: Some(source.to_string()),
         }
     }
 

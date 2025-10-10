@@ -27,6 +27,21 @@ pub trait Combatant {
     /// 获取暴击加成
     fn crit_bonus(&self) -> f32;
 
+    /// 获取力量值
+    fn strength(&self) -> u8 {
+        10 // Default strength
+    }
+
+    /// 获取敏捷值
+    fn dexterity(&self) -> u8 {
+        10 // Default dexterity
+    }
+
+    /// 获取智力值
+    fn intelligence(&self) -> u8 {
+        10 // Default intelligence
+    }
+
     /// 获取武器引用
     fn weapon(&self) -> Option<&Weapon>;
 

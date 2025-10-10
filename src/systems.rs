@@ -3,8 +3,10 @@
 use crate::ecs::*;
 use anyhow;
 use hecs::{Entity, World};
-use dungeon::Dungeon as DungeonModule;
+use dungeon::{Dungeon as DungeonModule, TileInfo};
 use dungeon::InteractionEvent;
+use combat::{Combat, Combatant};
+use items;
 
 /// Trait for ECS systems that operate on the world
 pub trait System {
@@ -176,17 +178,17 @@ impl System for CombatSystem {
 pub struct CombatSystemBridge;
 
 impl System for CombatSystemBridge {
-    fn run(&mut self, world: &mut World, _resources: &mut Resources) -> SystemResult {
+    fn run(&mut self, world: &mut World, resources: &mut Resources) -> SystemResult {
         // Process pending attacks between entities
         // Process pending attacks by collecting them first to avoid borrow conflicts
         let attacks_to_process: Vec<_> = world
-            .query::<(&Position, &Stats, &mut Energy)>()
+            .query::<(&Position, &Stats, &mut Energy, &Actor)>()
             .iter()
-            .filter(|(_, (_, _, energy))| energy.current >= 10) // Only entities with enough energy
-            .map(|(entity, (pos, stats, _))| (entity, pos.clone(), stats.clone()))
+            .filter(|(_, (_, _, energy, _))| energy.current >= 10) // Only entities with enough energy
+            .map(|(entity, (pos, stats, _, actor))| (entity, pos.clone(), stats.clone(), actor.clone()))
             .collect();
 
-        for (attacker_entity, pos, _stats) in attacks_to_process {
+        for (attacker_entity, pos, stats, actor) in attacks_to_process {
             if let Ok(mut energy) = world.get::<&mut Energy>(attacker_entity) {
                 energy.current = energy.current.saturating_sub(10); // Cost per attack
             }
@@ -195,22 +197,68 @@ impl System for CombatSystemBridge {
             for (defender_entity, _) in world.query::<&Position>().iter() {
                 if attacker_entity == defender_entity { continue; }
 
-                if let Ok(defender_pos) = world.get::<&Position>(defender_entity) {
+                if let (Ok(defender_pos), Ok(defender_actor)) = 
+                    (world.get::<&Position>(defender_entity), 
+                     world.get::<&Actor>(defender_entity)) {
                     let distance = pos.distance_to(&defender_pos);
-                    if distance <= 1.5 { // Adjacent
+                    
+                    // Check if entities are adjacent and are on different factions (can attack)
+                    if distance <= 1.5 && are_enemies(&actor, &defender_actor) { // Adjacent
                         // Perform combat using the combat module
                         if let (Ok(mut attacker_stats), Ok(mut defender_stats)) = 
                             (world.get::<&mut Stats>(attacker_entity), 
                              world.get::<&mut Stats>(defender_entity)) {
                             
-                            // Simple combat calculation - we could integrate the combat module here
-                            let damage = std::cmp::max(1, attacker_stats.attack as i32 - defender_stats.defense as i32);
-                            defender_stats.hp = std::cmp::max(0, defender_stats.hp as i32 - damage) as u32;
+                            // Create temporary Combatant implementations for the attack
+                            let mut attacker_combatant = ECSCombatant::new(&mut attacker_stats, &actor);
+                            let mut defender_combatant = ECSCombatant::new(&mut defender_stats, &defender_actor);
+                            
+                            // Determine if this is an ambush attack based on visibility
+                            let is_ambush = {
+                                // Check if there's a dungeon instance to get terrain info
+                                if let Some(ref dungeon) = resources.dungeon_instance {
+                                    let is_blocked = |x: i32, y: i32| -> bool {
+                                        match dungeon.get_tile(x, y) {
+                                            TileInfo { passable: false, .. } => true,  // Impassable tile blocks vision
+                                            TileInfo { passable: true, .. } => false, // Passable tile allows vision
+                                        }
+                                    };
+                                    
+                                    // Calculate if the defender is visible to the attacker
+                                    let fov_range = 8; // Default FOV range
+                                    combat::vision::VisionSystem::can_ambush(
+                                        &attacker_combatant,
+                                        pos.x,
+                                        pos.y,
+                                        &defender_combatant,
+                                        defender_pos.x,
+                                        defender_pos.y,
+                                        &is_blocked,
+                                        fov_range,
+                                    )
+                                } else {
+                                    false // If no dungeon, no ambush possible
+                                }
+                            };
+                            
+                            // Use the combat module for actual combat resolution
+                            let combat_result = combat::Combat::engage(
+                                &mut attacker_combatant,
+                                &mut defender_combatant,
+                                is_ambush
+                            );
+                            
+                            // Process any combat messages
+                            for message in combat_result.logs {
+                                resources.game_state.message_log.push(message);
+                            }
                             
                             // Check if defender died
-                            if defender_stats.hp == 0 {
-                                // Remove defender entity or mark for removal
+                            if combat_result.defeated {
                                 // In a real implementation, we might add death effects
+                                resources.game_state.message_log.push(
+                                    format!("{} defeated {}!", actor.name, defender_actor.name)
+                                );
                             }
                         }
                     }
@@ -220,6 +268,52 @@ impl System for CombatSystemBridge {
 
         SystemResult::Continue
     }
+}
+
+/// Helper function to determine if two actors are enemies
+fn are_enemies(attacker: &Actor, defender: &Actor) -> bool {
+    match (&attacker.faction, &defender.faction) {
+        (Faction::Player, Faction::Enemy) => true,
+        (Faction::Enemy, Faction::Player) => true,
+        _ => false, // For simplicity, only player vs enemy is considered an attack
+    }
+}
+
+/// Temporary struct to implement Combatant for ECS Stats
+struct ECSCombatant<'a> {
+    stats: &'a mut Stats,
+    actor: &'a Actor,
+    // We'll add more fields if needed to properly implement Combatant
+}
+
+impl<'a> ECSCombatant<'a> {
+    fn new(stats: &'a mut Stats, actor: &'a Actor) -> Self {
+        Self { stats, actor }
+    }
+}
+
+impl<'a> Combatant for ECSCombatant<'a> {
+    fn hp(&self) -> u32 { self.stats.hp }
+    fn max_hp(&self) -> u32 { self.stats.max_hp }
+    fn attack_power(&self) -> u32 { self.stats.attack }
+    fn defense(&self) -> u32 { self.stats.defense }
+    fn accuracy(&self) -> u32 { self.stats.accuracy }
+    fn evasion(&self) -> u32 { self.stats.evasion }
+    fn crit_bonus(&self) -> f32 { 0.1 } // Default crit bonus
+    fn weapon(&self) -> Option<&items::Weapon> { None } // Not implemented for ECS combatants yet
+    fn is_alive(&self) -> bool { self.stats.hp > 0 }
+    fn name(&self) -> &str { &self.actor.name }
+    fn attack_distance(&self) -> u32 { 1 } // Default attack distance
+    fn take_damage(&mut self, amount: u32) -> bool {
+        self.stats.hp = self.stats.hp.saturating_sub(amount);
+        self.is_alive()
+    }
+    fn heal(&mut self, amount: u32) {
+        self.stats.hp = (self.stats.hp + amount).min(self.stats.max_hp);
+    }
+    fn strength(&self) -> u8 { 10 } // Default strength
+    fn dexterity(&self) -> u8 { 10 } // Default dexterity
+    fn intelligence(&self) -> u8 { 10 } // Default intelligence
 }
 
 /// Field of View (FOV) system calculates what areas are visible to actors
