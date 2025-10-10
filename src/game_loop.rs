@@ -4,6 +4,7 @@ use crate::ecs::*;
 use crate::renderer::*;
 use crate::systems::*;
 use crate::input::*;
+use crate::turn_system::TurnSystem;
 use save::{SaveSystem, AutoSave};
 use error::GameError;
 use anyhow;
@@ -17,6 +18,7 @@ pub struct GameLoop<R: Renderer, I: InputSource, C: Clock> {
     pub input_source: I,
     pub clock: C,
     pub systems: Vec<Box<dyn System>>,
+    pub turn_system: TurnSystem,
     pub is_running: bool,
     pub save_system: Option<AutoSave>,
 }
@@ -49,6 +51,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
             input_source,
             clock,
             systems,
+            turn_system: TurnSystem::new(),
             is_running: true,
             save_system: None,
         }
@@ -197,18 +200,12 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
     
     /// Main game loop
     pub fn run(&mut self) -> anyhow::Result<()> {
-        let mut last_tick = Instant::now();
-        
         while self.is_running {
             // Handle input
             self.handle_input()?;
             
-            // Update game state at fixed intervals
-            let now = Instant::now();
-            if now.duration_since(last_tick) >= self.clock.tick_rate() {
-                self.update()?;
-                last_tick = now;
-            }
+            // Update game state based on turns
+            self.update_turn()?;
             
             // Render the game
             self.render()?;
@@ -237,6 +234,70 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                     self.renderer.resize(&mut self.ecs_world.resources, width, height)?;
                 },
                 _ => {} // Other events currently ignored
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Update game state by running all systems for a turn
+    fn update_turn(&mut self) -> anyhow::Result<()> {
+        // Run systems based on turn state
+        if self.turn_system.is_player_turn() {
+            // Run non-input systems
+            for system in &mut self.systems {
+                // Skip EnergySystem as we're managing energy through turn system now
+                if system.is_energy_system() {
+                    continue;
+                }
+                
+                match system.run(&mut self.ecs_world.world, &mut self.ecs_world.resources) {
+                    SystemResult::Continue => continue,
+                    SystemResult::Stop => {
+                        self.is_running = false;
+                        return Ok(());
+                    }
+                    SystemResult::Error(msg) => {
+                        eprintln!("System error: {}", msg);
+                        return Err(anyhow::anyhow!(msg));
+                    }
+                }
+            }
+            
+            // Process the player's turn
+            self.turn_system.process_turn_cycle(&mut self.ecs_world.world, &mut self.ecs_world.resources)?;
+        } else {
+            // Process AI turns without player input
+            // Run non-input systems
+            for system in &mut self.systems {
+                // Skip EnergySystem as we're managing energy through turn system now
+                if system.is_energy_system() {
+                    continue;
+                }
+                
+                match system.run(&mut self.ecs_world.world, &mut self.ecs_world.resources) {
+                    SystemResult::Continue => continue,
+                    SystemResult::Stop => {
+                        self.is_running = false;
+                        return Ok(());
+                    }
+                    SystemResult::Error(msg) => {
+                        eprintln!("System error: {}", msg);
+                        return Err(anyhow::anyhow!(msg));
+                    }
+                }
+            }
+            
+            // Process AI turns
+            self.turn_system.process_turn_cycle(&mut self.ecs_world.world, &mut self.ecs_world.resources)?;
+        }
+        
+        // Check for auto-save
+        if let Some(auto_save) = &mut self.save_system {
+            if let Ok(save_data) = self.ecs_world.to_save_data() {
+                if let Err(e) = auto_save.try_save(&save_data) {
+                    eprintln!("Auto-save failed: {}", e);
+                }
             }
         }
         

@@ -12,6 +12,11 @@ use items;
 pub trait System {
     /// Run the system on the ECS world
     fn run(&mut self, world: &mut World, resources: &mut Resources) -> SystemResult;
+    
+    /// Check if this is the energy system
+    fn is_energy_system(&self) -> bool {
+        false
+    }
 }
 
 /// Result of system execution
@@ -532,6 +537,10 @@ impl System for EnergySystem {
         resources.clock.turn_count += 1;
         
         SystemResult::Continue
+    }
+    
+    fn is_energy_system(&self) -> bool {
+        true
     }
 }
 

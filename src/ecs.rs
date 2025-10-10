@@ -235,7 +235,7 @@ pub struct Actor {
 }
 
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum Faction {
     Player,
     Enemy,

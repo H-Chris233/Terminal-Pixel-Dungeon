@@ -6,6 +6,7 @@ pub mod systems;
 pub mod game_loop;
 pub mod input;
 pub mod renderer;
+pub mod turn_system;
 
 use renderer::{Renderer, Clock};
 
