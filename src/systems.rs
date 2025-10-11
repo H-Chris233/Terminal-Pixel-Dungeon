@@ -733,40 +733,52 @@ impl System for InventorySystem {
                         }
                     }
                     
-                    if let Ok(inventory) = world.get::<&Inventory>(player_entity) {
-                        for (item_entity, item_clone, item_name) in items_for_player {
-                            if inventory.items.len() < inventory.max_slots {
-                                actions.push((player_entity, item_entity, item_clone, item_name));
-                            } else {
-                                resources.game_state.message_log.push("Your inventory is full!".to_string());
-                                if resources.game_state.message_log.len() > 10 {
-                                    resources.game_state.message_log.remove(0);
-                                }
-                                break;
-                            }
+                    let mut available_slots = world
+                        .get::<&Inventory>(player_entity)
+                        .ok()
+                        .map(|inventory| inventory.max_slots.saturating_sub(inventory.items.len()))
+                        .unwrap_or(0);
+                    
+                    if available_slots == 0 {
+                        resources.game_state.message_log.push("Your inventory is full!".to_string());
+                        if resources.game_state.message_log.len() > 10 {
+                            resources.game_state.message_log.remove(0);
                         }
+                        continue;
+                    }
+                    
+                    for (item_entity, item_clone, item_name) in items_for_player {
+                        if available_slots == 0 {
+                            break;
+                        }
+                        actions.push((player_entity, item_entity, item_clone, item_name));
+                        available_slots -= 1;
                     }
                 }
                 actions
             };
             
             for (player_entity, item_entity, item, item_name) in pickup_actions {
+                let mut picked_up = false;
                 if let Ok(mut inventory) = world.get::<&mut Inventory>(player_entity) {
                     if inventory.items.len() < inventory.max_slots {
                         inventory.items.push(ItemSlot {
                             item: Some(item),
                             quantity: 1,
                         });
-                        let _ = world.despawn(item_entity);
-                        resources.game_state.message_log.push(format!("You picked up {}.", item_name));
-                        if resources.game_state.message_log.len() > 10 {
-                            resources.game_state.message_log.remove(0);
-                        }
+                        picked_up = true;
                     } else {
                         resources.game_state.message_log.push("Your inventory is full!".to_string());
                         if resources.game_state.message_log.len() > 10 {
                             resources.game_state.message_log.remove(0);
                         }
+                    }
+                }
+                if picked_up {
+                    let _ = world.despawn(item_entity);
+                    resources.game_state.message_log.push(format!("You picked up {}.", item_name));
+                    if resources.game_state.message_log.len() > 10 {
+                        resources.game_state.message_log.remove(0);
                     }
                 }
             }
