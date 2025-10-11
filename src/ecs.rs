@@ -35,6 +35,14 @@ impl ECSWorld {
             },
         }
     }
+
+    pub fn generate_and_set_dungeon(&mut self, max_depth: usize, seed: u64) -> anyhow::Result<()> {
+        let dungeon = dungeon::Dungeon::generate(max_depth, seed)?;
+        set_dungeon_instance(&mut self.world, dungeon);
+        self.resources.rng = seed;
+        self.resources.game_state.depth = 1;
+        Ok(())
+    }
     
     pub fn clear(&mut self) {
         self.world.clear();

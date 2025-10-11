@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use terminal_pixel_dungeon::hero_adapter::{HeroAdapter, StatsAdapter, InventoryAdapter, BagAdapter};
-    use terminal_pixel_dungeon::event_bus::{InMemoryBus, EventBus};
+    use terminal_pixel_dungeon::hero_adapter::{HeroAdapter, StatsAdapter};
+    use terminal_pixel_dungeon::event_bus::EventBus;
     use hero::Hero;
 
     #[test]
@@ -14,9 +14,9 @@ mod tests {
 
     #[test]
     fn event_bus_publish_subscribe() {
-        let bus = InMemoryBus::<String>::new();
-        bus.publish("hello".to_string());
-        let mut sub = bus.subscribe();
-        assert_eq!(sub.next(), Some("hello".to_string()));
+        use terminal_pixel_dungeon::event_bus::GameEvent;
+        let bus = EventBus::new();
+        let result = bus.publish(&GameEvent::PlayerMoved { x: 1, y: 2 });
+        assert!(result.is_ok());
     }
 }

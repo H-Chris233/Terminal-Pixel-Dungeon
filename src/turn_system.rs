@@ -49,28 +49,29 @@ impl TurnSystem {
                 PlayerAction::Move(_) | 
                 PlayerAction::Attack(_) | 
                 PlayerAction::UseItem(_) | 
-                PlayerAction::DropItem(_) => {
-                    // Any action that moves or interacts costs energy
+                PlayerAction::DropItem(_) | 
+                PlayerAction::Descend | 
+                PlayerAction::Ascend => {
+                    // Any interactive action costs full action energy
                     if let Some(player_entity) = find_player(world) {
                         if let Ok(mut energy) = world.get::<&mut Energy>(player_entity) {
+                            let before = energy.current;
                             energy.current = energy.current.saturating_sub(100); // Action cost
+                            if energy.current < before {
+                                self.player_action_taken = true;
+                            }
                         }
                     }
                 }
                 PlayerAction::Wait => {
-                    // Wait action still costs some energy but less than a full action
+                    // Wait costs partial energy and counts as taking an action
                     if let Some(player_entity) = find_player(world) {
                         if let Ok(mut energy) = world.get::<&mut Energy>(player_entity) {
+                            let before = energy.current;
                             energy.current = energy.current.saturating_sub(50); // Wait cost
-                        }
-                    }
-                }
-                PlayerAction::Descend | 
-                PlayerAction::Ascend => {
-                    // Stairs actions cost energy too
-                    if let Some(player_entity) = find_player(world) {
-                        if let Ok(mut energy) = world.get::<&mut Energy>(player_entity) {
-                            energy.current = energy.current.saturating_sub(100); // Action cost
+                            if energy.current < before {
+                                self.player_action_taken = true;
+                            }
                         }
                     }
                 }
@@ -98,41 +99,49 @@ impl TurnSystem {
     }
 
     /// Process AI turns until the player's energy is full again
-    pub fn process_ai_turns(&mut self, world: &mut World, resources: &mut Resources) -> Result<(), anyhow::Error> {
-        // Process AI actions for all entities that have enough energy
-        let ai_entities_with_energy: Vec<_> = world
-            .query::<(&AI, &Energy, &Actor)>()
-            .iter()
-            .filter(|(_, (_, energy, _))| energy.current >= 100)
-            .map(|(entity, (_, _, actor))| (entity, actor.name.clone()))
-            .collect();
-        
-        let mut ai_actions_taken = false;
-        
-        for (ai_entity, actor_name) in ai_entities_with_energy {
-            // Perform AI action (this would typically include moving, attacking, etc.)
-            // For now, we'll just reduce their energy to show they took an action
-            if let Ok(mut energy) = world.get::<&mut Energy>(ai_entity) {
-                energy.current = energy.current.saturating_sub(100); // Cost per action
-                ai_actions_taken = true;
+    pub fn process_ai_turns(&mut self, world: &mut World, _resources: &mut Resources) -> Result<(), anyhow::Error> {
+        // Continue processing AI actions until player energy is refilled or no AI can act
+        loop {
+            // If player has full energy, stop AI processing
+            if let Some(player_entity) = find_player(world) {
+                if let Ok(energy) = world.get::<&Energy>(player_entity) {
+                    if energy.current >= energy.max {
+                        break;
+                    }
+                }
+            } else {
+                break; // no player
+            }
+
+            // Collect AI entities that can act this iteration
+            let ai_entities_with_energy: Vec<_> = world
+                .query::<(&AI, &Energy, &Actor)>()
+                .iter()
+                .filter(|(_, (_, energy, _))| energy.current >= 100)
+                .map(|(entity, (_, _, actor))| entity)
+                .collect();
+
+            if ai_entities_with_energy.is_empty() {
+                break;
+            }
+
+            // Each AI takes one action
+            for ai_entity in ai_entities_with_energy {
+                if let Ok(mut energy) = world.get::<&mut Energy>(ai_entity) {
+                    energy.current = energy.current.saturating_sub(100);
+                }
             }
         }
 
-
-        // If no AI actions were taken, immediately switch back to player
-        if !ai_actions_taken {
-            self.state = TurnState::PlayerTurn;
-        }
-
+        // After AI finishes, switch back to player turn
+        self.state = TurnState::PlayerTurn;
         Ok(())
     }
 
     /// Regenerate energy for all entities after a complete turn
     fn regenerate_energy(&self, world: &mut World) {
         for (_, mut energy) in world.query_mut::<&mut Energy>() {
-            // In a turn-based system, entities typically regain full energy after each turn
-            // except the player who is only full when they have completed their actions
-            energy.current = energy.max;
+            energy.current = (energy.current + energy.regeneration_rate).min(energy.max);
         }
     }
 

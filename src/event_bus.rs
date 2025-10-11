@@ -89,7 +89,7 @@ mod tests {
         let called_clone = called.clone();
         
         event_bus.subscribe(
-            "TestEvent",
+            "PlayerMoved",
             Arc::new(move |event| {
                 if let GameEvent::PlayerMoved { x, y } = event {
                     if *x == 5 && *y == 10 {

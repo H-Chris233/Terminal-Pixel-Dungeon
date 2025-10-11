@@ -49,6 +49,14 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
         let mut ecs_world = ECSWorld::new();
         let game_engine = GameEngine::new();
         
+        let save_system = match SaveSystem::new("saves", 10) {
+            Ok(save_sys) => Some(AutoSave::new(save_sys, std::time::Duration::from_secs(300))),
+            Err(e) => {
+                eprintln!("Failed to initialize save system: {}", e);
+                None
+            }
+        };
+
         Self {
             game_engine,
             ecs_world,
@@ -58,7 +66,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
             systems,
             turn_system: TurnSystem::new(),
             is_running: true,
-            save_system: None,
+            save_system,
         }
     }
     
@@ -74,9 +82,17 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
     
     /// Initialize starting entities
     fn initialize_entities(&mut self) {
+        // Determine player start position from dungeon if available
+        let (start_x, start_y, start_z) = if let Some(dungeon) = crate::ecs::get_dungeon_clone(&self.ecs_world.world) {
+            let lvl = dungeon.current_level();
+            (lvl.stair_up.0, lvl.stair_up.1, dungeon.depth as i32 - 1)
+        } else {
+            (10, 10, 0)
+        };
+
         // Add player entity
         let player_entity = self.ecs_world.world.spawn((
-            Position::new(10, 10, 0), // Start in the middle of a 20x20 map
+            Position::new(start_x, start_y, start_z),
             Actor {
                 name: "Player".to_string(),
                 faction: Faction::Player,

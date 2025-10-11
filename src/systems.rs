@@ -937,6 +937,84 @@ impl System for DungeonSystem {
 impl DungeonSystem {
     /// Generate a basic dungeon level
     fn generate_level(&mut self, world: &mut World, resources: &mut Resources, level: i32) {
+        // Prefer using dungeon::Dungeon if present
+        if let Some(dungeon) = crate::ecs::get_dungeon_clone(world) {
+            // Remove all tiles for the level being generated
+            let tiles_to_remove: Vec<_> = world
+                .query::<(&Position, &Tile)>()
+                .iter()
+                .filter(|(_, (pos, _))| pos.z == level)
+                .map(|(e, _)| e)
+                .collect();
+            for entity in tiles_to_remove {
+                let _ = world.despawn(entity);
+            }
+
+            // Populate tiles from dungeon level data
+            let lvl = &dungeon.levels[(dungeon.depth - 1)];
+            for tile in &lvl.tiles {
+                let terrain = match &tile.info.terrain_type {
+                    dungeon::level::tiles::TerrainType::Floor => TerrainType::Floor,
+                    dungeon::level::tiles::TerrainType::Wall => TerrainType::Wall,
+                    dungeon::level::tiles::TerrainType::Door(_) => TerrainType::Door,
+                    dungeon::level::tiles::TerrainType::Stair(dir) => match dir {
+                        dungeon::level::tiles::StairDirection::Up => TerrainType::StairsUp,
+                        dungeon::level::tiles::StairDirection::Down => TerrainType::StairsDown,
+                    },
+                    dungeon::level::tiles::TerrainType::Water => TerrainType::Water,
+                    dungeon::level::tiles::TerrainType::Trap(_) => TerrainType::Trap,
+                    dungeon::level::tiles::TerrainType::Special => TerrainType::Empty,
+                    dungeon::level::tiles::TerrainType::Grass => TerrainType::Floor,
+                };
+
+                world.spawn((
+                    Position::new(tile.x, tile.y, level),
+                    Tile {
+                        terrain_type: terrain.clone(),
+                        is_passable: tile.info.passable,
+                        blocks_sight: tile.info.blocks_sight,
+                        has_items: lvl.items.iter().any(|i| i.x == tile.x && i.y == tile.y),
+                        has_monster: lvl.enemies.iter().any(|e| e.x == tile.x && e.y == tile.y),
+                    },
+                    Renderable {
+                        symbol: match terrain {
+                            TerrainType::Floor => '.',
+                            TerrainType::Wall => '#',
+                            TerrainType::Door => '+',
+                            TerrainType::StairsDown => '>',
+                            TerrainType::Water => '~',
+                            TerrainType::Trap => '^',
+                            _ => ' ',
+                        },
+                        fg_color: Color::White,
+                        bg_color: Some(Color::Black),
+                        order: 0,
+                    },
+                ));
+            }
+
+            // Spawn enemies and items from level
+            for enemy in &lvl.enemies {
+                world.spawn((
+                    Position::new(enemy.x, enemy.y, level),
+                    Actor { name: enemy.name().to_string(), faction: Faction::Enemy },
+                    Renderable { symbol: enemy.symbol, fg_color: Color::Green, bg_color: Some(Color::Black), order: 5 },
+                    Stats { hp: enemy.hp, max_hp: enemy.max_hp, attack: enemy.attack, defense: enemy.defense, accuracy: 70, evasion: 10, level: enemy.attack_range as u32, experience: enemy.exp_value },
+                    Energy { current: 100, max: 100, regeneration_rate: 1 },
+                ));
+            }
+
+            for item in &lvl.items {
+                world.spawn((
+                    Position::new(item.x, item.y, level),
+                    Renderable { symbol: '!', fg_color: Color::Red, bg_color: Some(Color::Black), order: 1 },
+                    ECSItem { name: item.name.clone(), item_type: ItemType::Consumable { effect: ConsumableEffect::Healing { amount: 10 } }, value: 5, identified: true },
+                    Tile { terrain_type: TerrainType::Empty, is_passable: true, blocks_sight: false, has_items: true, has_monster: false },
+                ));
+            }
+            return;
+        }
+
         // Remove all tiles for the level being generated
         let tiles_to_remove: Vec<_> = world
             .query::<(&Position, &Tile)>()
