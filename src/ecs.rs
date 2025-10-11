@@ -11,6 +11,10 @@ use hero::{Hero, Bag};
 use items as game_items;
 use dungeon::Dungeon;
 
+// 说明：在完全解耦的系统中，这些模块间的通信应该通过事件总线完成
+// 例如，保存系统通过监听 GameSaved 事件来保存游戏状态
+// 而不是直接依赖其他模块的结构体
+
 /// Main ECS world container
 pub struct ECSWorld {
     pub world: World,

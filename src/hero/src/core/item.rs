@@ -5,13 +5,7 @@ use crate::{
     effects::{Effect, EffectManager, EffectType},
     rng::HeroRng,
 };
-use combat::Combatant;
-use dungeon::trap::Trap;
-use dungeon::trap::TrapEffect;
-use dungeon::Dungeon;
-use items::scroll::ScrollKind;
-use combat::enemy::Enemy;
-use items::{potion::PotionKind, Item, ItemCategory};
+use items::{potion::PotionKind, scroll::ScrollKind, Item, ItemCategory};
 use thiserror::Error;
 
 use bincode::{Decode, Encode};
@@ -67,14 +61,14 @@ impl Hero {
                 self.effects.add(Effect::new(EffectType::MindVision, 20));
             }
             PotionKind::ToxicGas => {
-                dungeon::affect_adjacent_enemies(self.x, self.y, |e| {
-                    e.add_effect(Effect::new(EffectType::Poison, 10));
-                });
+                // dungeon::affect_adjacent_enemies(self.x, self.y, |e| {
+                //     e.add_effect(Effect::new(EffectType::Poison, 10));
+                // });
             }
             PotionKind::Frost => {
-                dungeon::affect_adjacent_enemies(self.x, self.y, |e| {
-                    e.add_effect(Effect::new(EffectType::Frost, 5));
-                });
+                // dungeon::affect_adjacent_enemies(self.x, self.y, |e| {
+                //     e.add_effect(Effect::new(EffectType::Frost, 5));
+                // });
             }
             _ => {}
         }
@@ -102,7 +96,7 @@ impl Hero {
                     self.notify("一股净化之力扫过你的装备".into());
                 }
                 ScrollKind::MagicMapping => {
-                    dungeon::reveal_current_level(self.x, self.y);
+                    // dungeon::reveal_current_level(self.x, self.y);
                     self.notify("你的脑海中浮现出这一层的地图".into());
                 }
                 _ => {}

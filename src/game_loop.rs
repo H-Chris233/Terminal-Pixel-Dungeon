@@ -6,13 +6,14 @@ use crate::systems::*;
 use crate::input::*;
 use crate::turn_system::TurnSystem;
 use save::{SaveSystem, AutoSave};
-use error::GameError;
 use anyhow;
 use hecs::World;
 use std::time::{Duration, Instant};
+use crate::core::GameEngine;
 
 /// Main game loop that runs the ECS systems in order
 pub struct GameLoop<R: Renderer, I: InputSource, C: Clock> {
+    pub game_engine: GameEngine,
     pub ecs_world: ECSWorld,
     pub renderer: R,
     pub input_source: I,
@@ -45,8 +46,12 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
         
 
         
+        let mut ecs_world = ECSWorld::new();
+        let game_engine = GameEngine::new();
+        
         Self {
-            ecs_world: ECSWorld::new(),
+            game_engine,
+            ecs_world,
             renderer,
             input_source,
             clock,
@@ -201,11 +206,37 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
     /// Main game loop
     pub fn run(&mut self) -> anyhow::Result<()> {
         while self.is_running {
+            // Check game state before processing
+            match self.ecs_world.resources.game_state.game_state {
+                crate::ecs::GameStatus::GameOver => {
+                    self.is_running = false;
+                    break;
+                }
+                crate::ecs::GameStatus::Victory => {
+                    self.is_running = false;
+                    break;
+                }
+                _ => {} // Continue normal game processing
+            }
+            
             // Handle input
             self.handle_input()?;
             
             // Update game state based on turns
             self.update_turn()?;
+            
+            // Check game state again after update
+            match self.ecs_world.resources.game_state.game_state {
+                crate::ecs::GameStatus::GameOver => {
+                    self.is_running = false;
+                    break;
+                }
+                crate::ecs::GameStatus::Victory => {
+                    self.is_running = false;
+                    break;
+                }
+                _ => {} // Continue normal game processing
+            }
             
             // Render the game
             self.render()?;
@@ -334,11 +365,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
     
     /// Render the current game state
     fn render(&mut self) -> anyhow::Result<()> {
-        use ratatui::backend::CrosstermBackend;
-        use std::io::stdout;
-        
-        // This part is tricky because we need to access the terminal from the renderer
-        // In a real implementation, the renderer would handle this internally
+        self.renderer.draw(&mut self.ecs_world)?;
         Ok(())
     }
     
@@ -369,6 +396,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
 
 /// Headless game loop for testing purposes
 pub struct HeadlessGameLoop {
+    pub game_engine: GameEngine,
     pub ecs_world: ECSWorld,
     pub systems: Vec<Box<dyn System>>,
     pub is_running: bool,
@@ -391,6 +419,9 @@ impl HeadlessGameLoop {
             Box::new(RenderingSystem),
         ];
         
+        let mut ecs_world = ECSWorld::new();
+        let game_engine = GameEngine::new();
+        
         let save_system = match SaveSystem::new("saves", 10) {
             Ok(save_sys) => Some(AutoSave::new(save_sys, std::time::Duration::from_secs(300))), // 5 min auto-save
             Err(e) => {
@@ -400,7 +431,8 @@ impl HeadlessGameLoop {
         };
         
         Self {
-            ecs_world: ECSWorld::new(),
+            game_engine,
+            ecs_world,
             systems,
             is_running: true,
             save_system,

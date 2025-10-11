@@ -18,8 +18,9 @@ pub fn alert_nearby_enemies(_x: i32, _y: i32) {}
 pub use crate::level::tiles::{TerrainType, TileInfo};
 use crate::level::Level;
 use crate::trap::TrapEffect;
-use combat::enemy::Enemy;
+
 use items::Item;
+use combat::enemy::Enemy;
 
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct Dungeon {

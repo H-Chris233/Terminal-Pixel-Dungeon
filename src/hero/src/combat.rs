@@ -3,7 +3,7 @@ use super::core::{Hero, HeroError};
 use crate::class::Class;
 use crate::bag::BagError;
 
-pub use combat::{effect::EffectType, Combat, Combatant};
+use combat::{Combatant, effect::EffectType};
 use items::{armor::Armor, ring::Ring, weapon::Weapon};
 use rand::Rng;
 

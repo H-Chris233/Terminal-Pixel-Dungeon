@@ -11,11 +11,10 @@ use crate::{
 
 use combat::enemy::Enemy;
 use combat::Combatant;
-use combat::EffectType::Poison;
 use dungeon::trap::Trap;
 use dungeon::trap::TrapEffect;
 use dungeon::Dungeon;
-use dungeon::InteractionEvent;
+use crate::InteractionEvent;
 use thiserror::Error;
 
 use bincode::{Decode, Encode};
@@ -175,12 +174,12 @@ impl Hero {
     }
 
     /// 增强的事件处理
-    fn handle_events(&mut self, events: Vec<InteractionEvent>) -> Result<(), HeroError> {
+    fn handle_events(&mut self, events: Vec<dungeon::InteractionEvent>) -> Result<(), HeroError> {
         for event in events {
             match event {
-                InteractionEvent::TrapTriggered(effect) => self.apply_trap_effect(effect),
-                InteractionEvent::ItemFound(item) => self.add_item(item)?,
-                InteractionEvent::EnemyEncounter(enemy) => self.enter_combat(enemy),
+                dungeon::InteractionEvent::TrapTriggered(effect) => self.apply_trap_effect(effect),
+                dungeon::InteractionEvent::ItemFound(item) => self.add_item(item)?,
+                dungeon::InteractionEvent::EnemyEncounter(enemy) => self.enter_combat(enemy),
                 _ => {}
             }
         }
@@ -215,12 +214,13 @@ impl Hero {
     }
 
     /// 应用陷阱效果
-    pub fn apply_trap_effect(&mut self, effect: TrapEffect) {
+    pub fn apply_trap_effect(&mut self, effect: dungeon::trap::TrapEffect) {
+        use dungeon::trap::TrapEffect as DungeonTrapEffect;
         match effect {
-            TrapEffect::Damage(damage) => {
+            DungeonTrapEffect::Damage(damage) => {
                 self.take_damage(damage);
             }
-            TrapEffect::Poison(_, turn) => {
+            DungeonTrapEffect::Poison(damage, turn) => {
                 self.effects.add(Effect::new(EffectType::Poison, turn));
             }
             _ => {}
@@ -228,7 +228,7 @@ impl Hero {
     }
 
     /// 进入战斗状态
-    pub fn enter_combat(&mut self, enemy: Enemy) {
+    pub fn enter_combat(&mut self, enemy: combat::Enemy) {
         // 战斗初始化逻辑
     }
 
@@ -243,7 +243,7 @@ impl HeroBehavior for Hero {
         dx: i32,
         dy: i32,
         dungeon: &mut Dungeon,
-    ) -> Result<Vec<InteractionEvent>, HeroError> {
+    ) -> Result<Vec<dungeon::InteractionEvent>, HeroError> {
         if self.is_immobilized() {
             return Err(HeroError::Immobilized);
         }

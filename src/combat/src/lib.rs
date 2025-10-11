@@ -14,7 +14,7 @@ mod tests;
 
 pub use crate::combatant::Combatant;
 pub use crate::effect::*;
-use crate::enemy::Enemy;
+pub use crate::enemy::Enemy;
 use items::Weapon;
 
 /// Handles combat interactions between entities

@@ -262,54 +262,41 @@ impl System for CombatSystem {
                         
                         if let Some(target) = target_entity {
                             // Perform combat between player and target
-                            // Collect entities to despawn after combat is resolved
-                            let mut entities_to_despawn = Vec::new();
-                            
-                            // We need to temporarily update stats during combat
-                            if world.get::<&Stats>(player_entity).is_ok() && world.get::<&Stats>(target).is_ok() {
-                                // Extract the damage to be applied outside the borrow scope
-                                let damage_result = {
-                                    // Get mutable references to stats for combat calculation
-                                    let (mut player_stats, mut target_stats) = 
-                                        (world.get::<&mut Stats>(player_entity), world.get::<&mut Stats>(target));
-                                    
-                                    if let (Ok(mut p_stats), Ok(mut t_stats)) = (player_stats, target_stats) {
-                                        // Create temporary stats for combat simulation
-                                        let mut temp_player_stats = p_stats.clone();
-                                        let mut temp_target_stats = t_stats.clone();
-                                        
-                                        let mut attacker = SimpleCombatant::new(&mut temp_player_stats);
-                                        let mut defender = SimpleCombatant::new(&mut temp_target_stats);
-                                        
-                                        // Perform the attack using the combat module
-                                        let combat_result = ::combat::Combat::engage(&mut attacker, &mut defender, false);
-                                        Some((temp_player_stats.hp, temp_target_stats.hp, combat_result))
-                                    } else {
-                                        None
-                                    }
-                                };
+                            // We need to get the actual stats and modify them directly
+                            if let (Ok(player_stats), Ok(target_stats)) = 
+                                (world.get::<&Stats>(player_entity), world.get::<&Stats>(target)) {
                                 
-                                if let Some((new_player_hp, new_target_hp, combat_result)) = damage_result {
-                                    // Now apply the actual damage
-                                    if let Ok(mut actual_player_stats) = world.get::<&mut Stats>(player_entity) {
-                                        actual_player_stats.hp = new_player_hp;
+                                // Clone the stats to create combatants
+                                let mut attacker_stats = player_stats.clone();
+                                let mut defender_stats = target_stats.clone();
+                                
+                                let mut attacker = SimpleCombatant::new(&mut attacker_stats);
+                                let mut defender = SimpleCombatant::new(&mut defender_stats);
+                                
+                                // Perform the attack using the combat module
+                                let combat_result = ::combat::Combat::engage(&mut attacker, &mut defender, false);
+                                
+                                // Now update the actual stats in the world
+                                if let Ok(mut actual_player_stats) = world.get::<&mut Stats>(player_entity) {
+                                    *actual_player_stats = attacker_stats; // Update with new stats after combat
+                                }
+                                if let Ok(mut actual_target_stats) = world.get::<&mut Stats>(target) {
+                                    *actual_target_stats = defender_stats; // Update with new stats after combat
+                                }
+                                
+                                // Log combat results
+                                for log in &combat_result.logs {
+                                    resources.game_state.message_log.push(log.clone());
+                                    if resources.game_state.message_log.len() > 10 {
+                                        resources.game_state.message_log.remove(0);
                                     }
-                                    if let Ok(mut actual_target_stats) = world.get::<&mut Stats>(target) {
-                                        actual_target_stats.hp = new_target_hp;
-                                    }
-                                    
-                                    // Log combat results
-                                    for log in &combat_result.logs {
-                                        resources.game_state.message_log.push(log.clone());
-                                        if resources.game_state.message_log.len() > 10 {
-                                            resources.game_state.message_log.remove(0);
-                                        }
-                                    }
-                                    
-                                    // Check if defender was defeated
-                                    if combat_result.defeated {
-                                        // Mark entity for despawn later
-                                        entities_to_despawn.push(target);
+                                }
+                                
+                                // Check if defender was defeated
+                                if combat_result.defeated {
+                                    // Remove the defeated entity
+                                    if world.contains(target) {
+                                        let _ = world.despawn(target);
                                         resources.game_state.message_log.push("Enemy was defeated!".to_string());
                                     }
                                 }
@@ -318,11 +305,6 @@ impl System for CombatSystem {
                                 if let Ok(mut energy) = world.get::<&mut Energy>(player_entity) {
                                     energy.current = energy.current.saturating_sub(100); // Cost for attack
                                 }
-                            }
-                            
-                            // Now despawn defeated entities outside the combat borrow scope
-                            for entity in entities_to_despawn {
-                                let _ = world.despawn(entity);
                             }
                         } else {
                             // No target at this position, add action back
@@ -635,76 +617,67 @@ impl System for InventorySystem {
                     }
                 }
                 PlayerAction::DropItem(slot_index) => {
-                    // Extract item data first to avoid borrow conflicts
-                    let drop_result: Option<(Position, ECSItem)> = if let Some(player_entity) = find_player_entity(world) {
-                        // Get the player's position and item to drop (in separate operations)
-                        let player_pos = match world.get::<&Position>(player_entity) {
-                            Ok(pos) => pos.clone(),
-                            Err(_) => {
-                                new_actions.push(action);
-                                continue;
-                            }
+                    if let Some(player_entity) = find_player_entity(world) {
+                        // First get the player's position (immutable borrow)
+                        let player_pos_opt = match world.get::<&Position>(player_entity) {
+                            Ok(pos) => Some(pos.clone()),
+                            Err(_) => None,
                         };
                         
-                        // Get and remove the item
-                        if let Ok(mut inventory) = world.get::<&mut Inventory>(player_entity) {
-                            if slot_index < inventory.items.len() {
-                                if let Some(item_to_drop) = inventory.items.remove(slot_index).item {
-                                    Some((player_pos.clone(), item_to_drop))  // Clone the position to get owned value
+                        if let Some(player_pos) = player_pos_opt {
+                            // Now get the player's inventory (mutable borrow)
+                            if let Ok(mut inventory) = world.get::<&mut Inventory>(player_entity) {
+                                if slot_index < inventory.items.len() {
+                                    if let Some(item_to_drop) = inventory.items.remove(slot_index).item {
+                                        // Spawn the dropped item at player's position
+                                        world.spawn((
+                                            Position::new(player_pos.x, player_pos.y, player_pos.z),
+                                            Renderable {
+                                                symbol: item_to_drop.name.chars().next().unwrap_or('?'),
+                                                fg_color: Color::Yellow,
+                                                bg_color: Some(Color::Black),
+                                                order: 1,
+                                            },
+                                            ECSItem {
+                                                name: item_to_drop.name.clone(),
+                                                item_type: item_to_drop.item_type.clone(),
+                                                value: item_to_drop.value,
+                                                identified: item_to_drop.identified,
+                                            },
+                                            Tile {
+                                                terrain_type: TerrainType::Empty,
+                                                is_passable: true,
+                                                blocks_sight: false,
+                                                has_items: true,
+                                                has_monster: false,
+                                            },
+                                        ));
+                                        
+                                        resources.game_state.message_log.push(format!("You dropped {}.", item_to_drop.name));
+                                        if resources.game_state.message_log.len() > 10 {
+                                            resources.game_state.message_log.remove(0);
+                                        }
+                                    } else {
+                                        resources.game_state.message_log.push("No item in this slot to drop.".to_string());
+                                        if resources.game_state.message_log.len() > 10 {
+                                            resources.game_state.message_log.remove(0);
+                                        }
+                                    }
                                 } else {
-                                    resources.game_state.message_log.push("No item in this slot to drop.".to_string());
+                                    resources.game_state.message_log.push("Invalid inventory slot.".to_string());
                                     if resources.game_state.message_log.len() > 10 {
                                         resources.game_state.message_log.remove(0);
                                     }
                                     new_actions.push(action);
-                                    None
                                 }
                             } else {
-                                resources.game_state.message_log.push("Invalid inventory slot.".to_string());
-                                if resources.game_state.message_log.len() > 10 {
-                                    resources.game_state.message_log.remove(0);
-                                }
                                 new_actions.push(action);
-                                None
                             }
                         } else {
                             new_actions.push(action);
-                            None
                         }
                     } else {
                         new_actions.push(action);
-                        None
-                    };
-                    
-                    // Now spawn the item if we have the data
-                    if let Some((player_pos, item_to_drop)) = drop_result {
-                        world.spawn((
-                            Position::new(player_pos.x, player_pos.y, player_pos.z),
-                            Renderable {
-                                symbol: item_to_drop.name.chars().next().unwrap_or('?'),
-                                fg_color: Color::Yellow,
-                                bg_color: Some(Color::Black),
-                                order: 1,
-                            },
-                            ECSItem {
-                                name: item_to_drop.name.clone(),
-                                item_type: item_to_drop.item_type.clone(),
-                                value: item_to_drop.value,
-                                identified: item_to_drop.identified,
-                            },
-                            Tile {
-                                terrain_type: TerrainType::Empty,
-                                is_passable: true,
-                                blocks_sight: false,
-                                has_items: true,
-                                has_monster: false,
-                            },
-                        ));
-                        
-                        resources.game_state.message_log.push(format!("You dropped {}.", item_to_drop.name));
-                        if resources.game_state.message_log.len() > 10 {
-                            resources.game_state.message_log.remove(0);
-                        }
                     }
                 }
                 // For non-inventory actions, add back to queue for other systems to handle
@@ -715,58 +688,7 @@ impl System for InventorySystem {
         }
         
         // Process item pickup
-        {
-            // Collect players and items first to resolve borrowing conflicts
-            let pickup_actions: Vec<_> = {
-                let mut actions = Vec::new();
-                for (player_entity, (player_pos, _actor)) in 
-                    world.query::<(&Position, &Actor)>().iter() {
-                    
-                    if world.get::<&Player>(player_entity).is_err() {
-                        continue; // Skip non-player actors
-                    }
-                    
-                    // Look for items at this player's position
-                    for (item_entity, (pos, item)) in world.query::<(&Position, &ECSItem)>().iter() {
-                        if pos.x == player_pos.x && pos.y == player_pos.y && pos.z == player_pos.z {
-                            // Check if player has inventory space
-                            if let Ok(inventory) = world.get::<&Inventory>(player_entity) {
-                                if inventory.items.len() < inventory.max_slots {
-                                    // Clone the item to avoid the move issue
-                                    let item_clone = item.clone();
-                                    let item_name = item.name.clone(); // Clone name separately
-                                    actions.push((player_entity, item_entity, item_clone, item_name));
-                                } else {
-                                    resources.game_state.message_log.push("Your inventory is full!".to_string());
-                                    if resources.game_state.message_log.len() > 10 {
-                                        resources.game_state.message_log.remove(0);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                actions
-            };
-            
-            // Now process the collected actions with mutable access
-            for (player_entity, item_entity, item, item_name) in pickup_actions {
-                if let Ok(mut inventory) = world.get::<&mut Inventory>(player_entity) {
-                    inventory.items.push(ItemSlot {
-                        item: Some(item),
-                        quantity: 1,
-                    });
-                    
-                    // Remove item entity from the world
-                    let _ = world.despawn(item_entity);
-                    
-                    resources.game_state.message_log.push(format!("You picked up {}.", item_name));
-                    if resources.game_state.message_log.len() > 10 {
-                        resources.game_state.message_log.remove(0);
-                    }
-                }
-            }
-        }
+        self.process_item_pickup(world, resources);
         
         // Put unprocessed actions back in the buffer
         resources.input_buffer.pending_actions = new_actions;
@@ -775,7 +697,64 @@ impl System for InventorySystem {
     }
 }
 
-
+impl InventorySystem {
+    /// Process item pickup when player moves to a tile with an item
+    fn process_item_pickup(&mut self, world: &mut World, resources: &mut Resources) {
+        // Check if any player is on the same tile as an item
+        let players_at_items: Vec<_> = {
+            // First collect the players and their positions without mutable borrow
+            let mut players_data = Vec::new();
+            for (player_entity, (player_pos, _actor)) in 
+                world.query::<(&Position, &Actor)>().iter() {
+                
+                if world.get::<&Player>(player_entity).is_err() {
+                    continue; // Skip non-player actors
+                }
+                
+                // Look for items at this player's position
+                let mut items_at_pos = Vec::new();
+                for (item_entity, (pos, item)) in world.query::<(&Position, &ECSItem)>().iter() {
+                    if pos.x == player_pos.x && pos.y == player_pos.y && pos.z == player_pos.z {
+                        items_at_pos.push((item_entity, item.clone()));
+                    }
+                }
+                
+                players_data.push((player_entity, player_pos.clone(), items_at_pos));
+            }
+            players_data
+        };
+        
+        // Now process the collected data with mutable access
+        for (player_entity, _player_pos, items_at_pos) in players_at_items {
+            if let Ok(mut inventory) = world.get::<&mut Inventory>(player_entity) {
+                for (item_entity, item) in items_at_pos {
+                    // Add item to player's inventory
+                    if inventory.items.len() < inventory.max_slots {
+                        inventory.items.push(ItemSlot {
+                            item: Some(item.clone()), // Clone to avoid move issue
+                            quantity: 1,
+                        });
+                        
+                        // Remove item entity from the world
+                        let _ = world.despawn(item_entity);
+                        
+                        resources.game_state.message_log.push(format!("You picked up {}.", item.name));
+                        if resources.game_state.message_log.len() > 10 {
+                            resources.game_state.message_log.remove(0);
+                        }
+                    } else {
+                        // Inventory is full
+                        resources.game_state.message_log.push("Your inventory is full!".to_string());
+                        if resources.game_state.message_log.len() > 10 {
+                            resources.game_state.message_log.remove(0);
+                        }
+                        break; // Stop processing items if inventory is full
+                    }
+                }
+            }
+        }
+    }
+}
 
 pub struct DungeonSystem;
 
@@ -791,7 +770,6 @@ impl System for DungeonSystem {
         
         for action in actions_to_process {
             match action {
-                PlayerAction::Descend => {
                     if let Some(player_entity) = find_player_entity(world) {
                         // Check if player is on stairs - get the position first
                         let player_pos_opt = match world.get::<&Position>(player_entity) {
@@ -812,13 +790,8 @@ impl System for DungeonSystem {
                             }
                             
                             if on_stairs_down {
-                                // Queue up level generation and player movement
-                                resources.game_state.message_log.push("You descend to the next level...".to_string());
-                                if resources.game_state.message_log.len() > 10 {
-                                    resources.game_state.message_log.remove(0);
-                                }
-                                
-                                resources.game_state.depth = (player_pos.z + 1) as usize;
+                                // Create new dungeon level with basic layout
+                                self.generate_level(world, resources, player_pos.z + 1);
                                 
                                 // Move player to new level
                                 if let Ok(mut pos) = world.get::<&mut Position>(player_entity) {
@@ -829,8 +802,12 @@ impl System for DungeonSystem {
                                     pos.y = 10;
                                 }
                                 
-                                // Add generation of new level after all actions are processed
-                                // We'll generate it in a separate pass
+                                resources.game_state.message_log.push("You descend to the next level...".to_string());
+                                if resources.game_state.message_log.len() > 10 {
+                                    resources.game_state.message_log.remove(0);
+                                }
+                                
+                                resources.game_state.depth = (player_pos.z + 1) as usize;
                             } else {
                                 resources.game_state.message_log.push("You need to stand on stairs to descend.".to_string());
                                 if resources.game_state.message_log.len() > 10 {
@@ -845,7 +822,6 @@ impl System for DungeonSystem {
                         new_actions.push(action);
                     }
                 }
-                PlayerAction::Ascend => {
                     if let Some(player_entity) = find_player_entity(world) {
                         // Check if player is on stairs - get the position first
                         let player_pos_opt = match world.get::<&Position>(player_entity) {
@@ -867,6 +843,9 @@ impl System for DungeonSystem {
                             
                             if on_stairs_up {
                                 if player_pos.z > 0 {
+                                    // Create new dungeon level with basic layout for the level above
+                                    self.generate_level(world, resources, player_pos.z - 1);
+                                    
                                     // Move player to new level
                                     if let Ok(mut pos) = world.get::<&mut Position>(player_entity) {
                                         pos.z -= 1;
@@ -881,8 +860,6 @@ impl System for DungeonSystem {
                                     }
                                     
                                     resources.game_state.depth = (player_pos.z - 1) as usize;
-                                    
-                                    // Generate level for the new depth after actions are processed
                                 } else {
                                     // Player is at dungeon level 0, can't go higher
                                     resources.game_state.message_log.push("You can't go up from here.".to_string());

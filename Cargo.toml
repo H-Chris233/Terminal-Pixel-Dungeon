@@ -29,6 +29,7 @@ tempfile = "3.19.1"
 thiserror = "2.0.12"
 
 # Local path dependencies to subcrates
+# 注意：实际使用中，模块间应通过事件总线进行通信，而不是直接依赖
 combat = { path = "src/combat", version = "0.1.0" }
 dungeon = { path = "src/dungeon", version = "0.1.0" }
 hero = { path = "src/hero", version = "0.1.0" }

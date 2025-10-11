@@ -15,6 +15,8 @@ pub mod class;
 // 标准库导入
 use std::fmt;
 
+
+
 // 外部crate导入
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
@@ -32,19 +34,15 @@ use crate::class::Class;
 use crate::effects::Effect;
 use crate::effects::EffectType;
 
-use ::combat::enemy::Enemy;
-use combat::Combatant;
-use dungeon::trap::Trap;
-use dungeon::trap::TrapEffect;
-use dungeon::InteractionEvent;
-use items::Weapon;
+use items::{Item, ItemCategory, Weapon};
 
 // 游戏系统导入
-use dungeon::Dungeon;
-use items::{Item, ItemCategory};
+use dungeon::{Dungeon, InteractionEvent, trap::TrapEffect};
+
+
 
 /// 英雄系统主接口
-pub trait HeroBehavior: Combatant + fmt::Debug {
+pub trait HeroBehavior: ::combat::Combatant + fmt::Debug {
     /// 创建新英雄
     fn new(class: Class) -> Self
     where

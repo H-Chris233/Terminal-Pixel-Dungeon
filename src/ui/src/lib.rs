@@ -8,10 +8,8 @@ pub mod states;
 pub mod terminal;
 
 use dungeon::Dungeon;
-use hero::Hero;
-use hero::HeroBehavior;
-use save::AutoSave;
-use save::SaveData;
+use hero::{Hero, HeroBehavior};
+use save::{AutoSave, SaveData};
 use crossterm::{
     event::{self, Event, KeyCode},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -24,6 +22,8 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 pub struct TerminalUI {
     pub terminal: Terminal<CrosstermBackend<std::io::Stdout>>,
 }
+
+
 
 impl TerminalUI {
     pub fn new() -> anyhow::Result<Self> {

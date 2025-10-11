@@ -1,6 +1,7 @@
 //! Turn-based system implementation for the game.
 
 use crate::ecs::*;
+use crate::systems::AISystem;
 use anyhow;
 use hecs::{Entity, World};
 
@@ -97,7 +98,7 @@ impl TurnSystem {
     }
 
     /// Process AI turns until the player's energy is full again
-    pub fn process_ai_turns(&mut self, world: &mut World, _resources: &mut Resources) -> Result<(), anyhow::Error> {
+    pub fn process_ai_turns(&mut self, world: &mut World, resources: &mut Resources) -> Result<(), anyhow::Error> {
         // Process AI actions for all entities that have enough energy
         let ai_entities_with_energy: Vec<_> = world
             .query::<(&AI, &Energy, &Actor)>()
@@ -116,6 +117,7 @@ impl TurnSystem {
                 ai_actions_taken = true;
             }
         }
+
 
         // If no AI actions were taken, immediately switch back to player
         if !ai_actions_taken {

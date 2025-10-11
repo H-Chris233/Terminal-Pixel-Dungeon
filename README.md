@@ -155,13 +155,19 @@ The game uses vi-keys and numpad for movement:
 └── LICENSE             # Project license
 ```
 
-### ECS Implementation
+### ECS and Modular Architecture
 
-The project uses a custom ECS implementation built on top of `hecs`. The ECS architecture allows for:
-- Decoupled game logic
-- Flexible entity composition
-- Efficient system execution
-- Easy testing and maintenance
+The project combines ECS (Entity-Component-System) architecture with a modular crate structure:
+
+- **ECS Implementation**: Built on top of `hecs` for flexible game entity management
+- **Modular Design**: Separate crates for different game systems (combat, dungeon, hero, etc.)
+- **Core Integration**: Central `core` module to coordinate ECS and modular systems
+- **Benefits**:
+  - Decoupled game logic
+  - Flexible entity composition
+  - Efficient system execution
+  - Clear module boundaries
+  - Easy testing and maintenance
 
 ### Rendering
 
