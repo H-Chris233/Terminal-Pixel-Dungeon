@@ -1,6 +1,5 @@
 //src/hero/src/rng.rs
 use bincode::{
-    config,
     de::{BorrowDecoder, Decoder},
     enc::Encoder,
     error::{DecodeError, EncodeError},

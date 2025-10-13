@@ -6,16 +6,15 @@ pub mod states;
 pub mod terminal;
 
 use dungeon::Dungeon;
-use hero::{Hero, HeroBehavior};
-use save::{AutoSave, SaveData};
+use hero::Hero;
 use crossterm::{
+    terminal::{enable_raw_mode, EnterAlternateScreen},
     event::{self, Event, KeyCode},
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use std::io;
 use std::thread;
 use std::time::{Duration, Instant};
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{prelude::CrosstermBackend, Terminal};
 
 pub struct TerminalUI {
     pub terminal: Terminal<CrosstermBackend<std::io::Stdout>>,
@@ -40,10 +39,10 @@ impl TerminalUI {
             // 处理输入和游戏逻辑
             if let Event::Key(key) = event::read()? {
                 match key.code {
-                    KeyCode::Char('h') | KeyCode::Left => { let _ = hero.move_to(-1, 0, dungeon); }
-                    KeyCode::Char('j') | KeyCode::Down => { let _ = hero.move_to(0, 1, dungeon); }
-                    KeyCode::Char('k') | KeyCode::Up => { let _ = hero.move_to(0, -1, dungeon); }
-                    KeyCode::Char('l') | KeyCode::Right => { let _ = hero.move_to(1, 0, dungeon); }
+                    KeyCode::Char('h') | KeyCode::Left => { hero.x = (hero.x - 1).max(0); }
+                    KeyCode::Char('j') | KeyCode::Down => { hero.y = (hero.y + 1).max(0); }
+                    KeyCode::Char('k') | KeyCode::Up => { hero.y = (hero.y - 1).max(0); }
+                    KeyCode::Char('l') | KeyCode::Right => { hero.x = (hero.x + 1).max(0); }
                     KeyCode::Char('i') => self.show_inventory(hero),
                     KeyCode::Char('u') => self.use_item(hero),
                     KeyCode::Char('d') => self.drop_item(hero),
@@ -68,8 +67,8 @@ impl TerminalUI {
         Ok(())
     }
 
-    fn draw(&mut self, dungeon: &Dungeon, hero: &Hero) -> anyhow::Result<()> {
-        self.terminal.draw(|f| {
+    fn draw(&mut self, _dungeon: &Dungeon, _hero: &Hero) -> anyhow::Result<()> {
+        self.terminal.draw(|_f| {
             // 绘制地牢地图
             // 绘制英雄状态
             // 绘制消息日志
@@ -77,18 +76,18 @@ impl TerminalUI {
         Ok(())
     }
 
-    pub fn show_inventory(&mut self, hero: &Hero) {
+    pub fn show_inventory(&mut self, _hero: &Hero) {
         // 实现物品栏显示逻辑
     }
 
-    pub fn use_item(&mut self, hero: &mut Hero) {
+    pub fn use_item(&mut self, _hero: &mut Hero) {
         // 实现使用物品逻辑
     }
 
     pub fn backend_mut(&mut self) -> &mut CrosstermBackend<io::Stdout> {
         self.terminal.backend_mut()
     }
-    pub fn drop_item(&mut self, hero: &mut Hero) {
+    pub fn drop_item(&mut self, _hero: &mut Hero) {
         // 实现丢弃物品逻辑
         // 例如：从英雄物品栏移除物品并添加到地牢当前层
     }

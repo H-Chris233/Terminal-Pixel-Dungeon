@@ -2,10 +2,9 @@
 use dungeon::Dungeon;
 use dungeon::level::tiles::{TerrainType, Tile, StairDirection};
 use hero::Hero;
-use ratatui::widgets::ListState;
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Color, Style},
     text::Span,
     widgets::{Block, Borders, Paragraph},
     Frame,

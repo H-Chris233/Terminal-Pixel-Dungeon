@@ -16,8 +16,7 @@ use std::fmt;
 
 
 // 外部crate导入
-use bincode::{Decode, Encode};
-use serde::{Deserialize, Serialize};
+
 
 
 // 重新导出主要类型
@@ -32,10 +31,10 @@ use crate::class::Class;
 use crate::effects::Effect;
 use crate::effects::EffectType;
 
-use items::{Item, ItemCategory, Weapon};
+use items::{Item};
 
 // 游戏系统导入
-use dungeon::{Dungeon, InteractionEvent, trap::TrapEffect};
+use dungeon::{Dungeon, InteractionEvent};
 
 
 

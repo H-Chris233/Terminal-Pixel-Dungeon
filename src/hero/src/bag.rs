@@ -1,7 +1,6 @@
 // src/hero/src/bag.rs
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
-use std::cmp::Ordering;
 use thiserror::Error;
 
 use items::{
@@ -195,7 +194,7 @@ impl Bag {
             ItemKind::Food(f) => self.food.add(f),
             ItemKind::Misc(m) => match m.kind {
                 MiscKind::Gold(amount) => {
-                    self.add_gold(amount);
+                    let _ = self.add_gold(amount);
                     Ok(())
                 }
                 _ => self.misc.add(m),
@@ -411,7 +410,7 @@ impl Bag {
     }
 
     pub fn remove_curse(&mut self, slot: EquipmentSlot) {
-        self.equipment.remove_curse(slot);
+        let _ = self.equipment.remove_curse(slot);
     }
 
     pub fn remove_curse_all(&mut self) {

@@ -1,9 +1,7 @@
 // src/dungeon/src/lib.rs
 
 use bincode::{Decode, Encode};
-use rand::Rng;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 
 pub mod level;
 pub mod trap;

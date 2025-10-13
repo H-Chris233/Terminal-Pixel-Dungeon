@@ -6,7 +6,7 @@ use crate::ecs::{AI, Actor, Energy, Player, Position, Resources, Viewshed,
 use crate::event_bus::{GameEvent, LogLevel};
 use hecs::{Entity, World};
 use std::error::Error;
-use combat::Combatant;
+
 use rand;
 
 pub enum SystemResult {
@@ -61,7 +61,7 @@ impl System for MovementSystem {
 
     fn run(&mut self, world: &mut World, resources: &mut Resources) -> SystemResult {
         // Process pending player actions for movement
-        let mut actions_to_process = std::mem::take(&mut resources.input_buffer.pending_actions);
+        let actions_to_process = std::mem::take(&mut resources.input_buffer.pending_actions);
         let mut new_actions = Vec::new();
 
         for action in actions_to_process {
@@ -599,7 +599,7 @@ impl System for InventorySystem {
 
     fn run(&mut self, world: &mut World, resources: &mut Resources) -> SystemResult {
         // Process pending player actions for inventory management
-        let mut actions_to_process = std::mem::take(&mut resources.input_buffer.pending_actions);
+        let actions_to_process = std::mem::take(&mut resources.input_buffer.pending_actions);
         let mut new_actions = Vec::new();
         
         for action in actions_to_process {
@@ -882,7 +882,7 @@ impl System for DungeonSystem {
 
     fn run(&mut self, world: &mut World, resources: &mut Resources) -> SystemResult {
         // Process pending player actions for dungeon navigation
-        let mut actions_to_process = std::mem::take(&mut resources.input_buffer.pending_actions);
+        let actions_to_process = std::mem::take(&mut resources.input_buffer.pending_actions);
         let mut new_actions = Vec::new();
         
         for action in actions_to_process {
@@ -1031,7 +1031,7 @@ impl DungeonSystem {
             }
 
             // Populate tiles from dungeon level data
-            let lvl = &dungeon.levels[(dungeon.depth - 1)];
+            let lvl = &dungeon.levels[dungeon.depth - 1];
             for tile in &lvl.tiles {
                 let terrain = match &tile.info.terrain_type {
                     dungeon::level::tiles::TerrainType::Floor => TerrainType::Floor,

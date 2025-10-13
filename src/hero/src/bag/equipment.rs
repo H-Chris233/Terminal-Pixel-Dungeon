@@ -1,6 +1,6 @@
 // src/hero/src/bag/equipment.rs
 use bincode::{Decode, Encode};
-use items::{armor::Armor, ring::Ring, scroll::Scroll, weapon::Weapon};
+use items::{armor::Armor, ring::Ring, weapon::Weapon};
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumIter};
 use thiserror::Error;

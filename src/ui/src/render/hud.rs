@@ -1,7 +1,6 @@
 //src/ui/render/hud.rs
 use hero::class::Class;
 use hero::Hero;
-use crate::terminal::TerminalController;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},

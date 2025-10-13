@@ -27,9 +27,7 @@ mod constants {
     pub const BASE_CRIT_CHANCE: f32 = 0.1; // Base critical chance
     pub const DEFENSE_CAP: f32 = 0.8; // Maximum damage reduction from defense
     pub const MIN_DAMAGE: u32 = 1; // Minimum damage dealt
-    pub const RANGED_PENALTY_PER_TILE: f32 = 0.15; // 15% penalty per tile closer than max
     pub const SURPRISE_ATTACK_MODIFIER: f32 = 2.0; // Damage bonus for surprise attacks (2x damage)
-    pub const AMBUSH_DISTANCE: u32 = 1; // Maximum distance for ambush attacks
 }
 
 impl Combat {

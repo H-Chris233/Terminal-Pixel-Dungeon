@@ -1,18 +1,12 @@
 //src/hero/src/core/item.rs
 use crate::{
-    bag::{Bag, BagError},
-    class::Class,
-    effects::{Effect, EffectManager, EffectType},
-    rng::HeroRng,
+    bag::BagError,
+    effects::{Effect, EffectType},
 };
 use items::{potion::PotionKind, scroll::ScrollKind, Item, ItemCategory};
-use thiserror::Error;
-
-use bincode::{Decode, Encode};
-use serde::{Deserialize, Serialize};
 
 use crate::Hero;
-use crate::HeroBehavior;
+
 use crate::HeroError;
 use crate::InventorySystem;
 
@@ -21,23 +15,23 @@ impl Hero {
     pub fn use_item(&mut self, category: ItemCategory, index: usize) -> Result<(), HeroError> {
         match category {
             ItemCategory::Potion => {
-                self.use_potion(index);
+                let _ = self.use_potion(index);
                 Ok(())
             }
             ItemCategory::Scroll => {
-                self.use_scroll(index);
+                let _ = self.use_scroll(index);
                 Ok(())
             }
             ItemCategory::Weapon => {
-                self.equip_item(index);
+                let _ = self.equip_item(index);
                 Ok(())
             }
             ItemCategory::Armor => {
-                self.equip_item(index);
+                let _ = self.equip_item(index);
                 Ok(())
             }
             ItemCategory::Ring => {
-                self.equip_item(index);
+                let _ = self.equip_item(index);
                 Ok(())
             }
             _ => Err(HeroError::BagFull(BagError::CannotUseItem)),

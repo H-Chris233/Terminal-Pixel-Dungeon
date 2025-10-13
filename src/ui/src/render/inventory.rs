@@ -1,13 +1,12 @@
 //src/ui/render/inventory.rs
-use items::{Item, ItemKind};
+use items::Item;
 use hero::Hero;
 use crossterm::event::KeyCode;
-use ratatui::widgets::ListState;
 use ratatui::{
     layout::{Alignment, Rect},
     style::{Color, Modifier, Style},
     text::{Span, Line},
-    widgets::{Block, Borders, List, ListItem, Paragraph},
+    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
     Frame,
 };
 

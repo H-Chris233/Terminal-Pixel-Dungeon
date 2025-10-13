@@ -3,9 +3,8 @@ use super::core::{Hero, HeroError};
 use crate::class::Class;
 use crate::bag::BagError;
 
-use combat::{Combatant, effect::EffectType};
-use items::{armor::Armor, ring::Ring, weapon::Weapon};
-use rand::Rng;
+use combat::Combatant;
+use items::weapon::Weapon;
 
 /// 战斗系统实现（确定性版本）
 impl Combatant for Hero {
@@ -144,7 +143,7 @@ impl Combatant for Hero {
             Class::Rogue => 12,
             Class::Huntress => 10,
         };
-        ((base_dex as u32 + self.level / 3).min(20) as u8) // Cap at 20
+        (base_dex as u32 + self.level / 3).min(20) as u8 // Cap at 20
     }
 
     /// 获取智力值
@@ -156,7 +155,7 @@ impl Combatant for Hero {
             Class::Rogue => 8,
             Class::Huntress => 10,
         };
-        ((base_int as u32 + self.level / 3).min(20) as u8) // Cap at 20
+        (base_int as u32 + self.level / 3).min(20) as u8 // Cap at 20
     }
 }
 

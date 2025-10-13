@@ -10,14 +10,9 @@ pub mod warrior;
 
 use items::{
     armor::Armor,
-    food::Food,
-    misc::{MiscItem, MiscKind},
-    potion::{Potion, PotionKind},
-    ring::Ring,
-    scroll::{Scroll, ScrollKind},
+    potion::PotionKind,
+    scroll::ScrollKind,
     seed::Seed,
-    stone::Stone,
-    wand::Wand,
     weapon::{Weapon, WeaponKind},
     Item, ItemKind,
 };

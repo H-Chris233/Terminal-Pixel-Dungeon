@@ -1,30 +1,24 @@
 // src/hero/core.rs
 use crate::bag::Bag;
 use crate::bag::BagError;
-use crate::HeroBehavior;
-use crate::InventorySystem;
+
 use crate::{
     class::Class,
-    effects::{Effect, EffectManager, EffectType},
+    effects::{EffectManager, EffectType},
     rng::HeroRng,
 };
 
-use combat::enemy::Enemy;
 use combat::Combatant;
 use dungeon::trap::Trap;
-use dungeon::trap::TrapEffect;
-use dungeon::Dungeon;
-use crate::InteractionEvent;
-use thiserror::Error;
+
 
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
+use thiserror::Error;
+
 pub mod events;
 pub mod item;
-
-pub use self::events::*;
-pub use items::*;
 
 #[derive(Debug, Error)]
 pub enum HeroError {
@@ -178,7 +172,7 @@ impl Hero {
         for event in events {
             match event {
                 dungeon::InteractionEvent::TrapTriggered(effect) => self.apply_trap_effect(effect),
-                dungeon::InteractionEvent::ItemFound(item) => self.add_item(item)?,
+                dungeon::InteractionEvent::ItemFound(item) => self.bag.add_item(item)?,
                 dungeon::InteractionEvent::EnemyEncounter(enemy) => self.enter_combat(enemy),
                 _ => {}
             }
@@ -220,15 +214,15 @@ impl Hero {
             DungeonTrapEffect::Damage(damage) => {
                 self.take_damage(damage);
             }
-            DungeonTrapEffect::Poison(damage, turn) => {
-                self.effects.add(Effect::new(EffectType::Poison, turn));
+            DungeonTrapEffect::Poison(_damage, turn) => {
+                self.effects.add(crate::effects::Effect::new(EffectType::Poison, turn));
             }
             _ => {}
         };
     }
 
     /// 进入战斗状态
-    pub fn enter_combat(&mut self, enemy: combat::Enemy) {
+    pub fn enter_combat(&mut self, _enemy: combat::enemy::Enemy) {
         // 战斗初始化逻辑
     }
 
@@ -237,61 +231,7 @@ impl Hero {
     }
 }
 
-impl HeroBehavior for Hero {
-    fn move_to(
-        &mut self,
-        dx: i32,
-        dy: i32,
-        dungeon: &mut Dungeon,
-    ) -> Result<Vec<dungeon::InteractionEvent>, HeroError> {
-        if self.is_immobilized() {
-            return Err(HeroError::Immobilized);
-        }
 
-        let new_x = self.x.saturating_add(dx);
-        let new_y = self.y.saturating_add(dy);
-
-        // 边界检查
-        if !dungeon.is_passable(new_x, new_y) {
-            return Err(HeroError::ActionFailed);
-        }
-
-        // 更新位置
-        self.x = new_x;
-        self.y = new_y;
-
-        // 获取事件
-        let events = dungeon.on_hero_enter(new_x, new_y);
-        self.handle_events(events.clone())?;
-        Ok(events)
-    }
-
-    /// 创建新英雄
-    fn new(class: Class) -> Self
-    where
-        Self: Sized,
-    {
-        Hero::new(class)
-    }
-
-    /// 带种子创建英雄
-    fn with_seed(class: Class, seed: u64) -> Self
-    where
-        Self: Sized,
-    {
-        Hero::with_seed(class, seed)
-    }
-
-    /// 每回合更新
-    fn on_turn(&mut self) -> Result<(), HeroError> {
-        self.on_turn()
-    }
-
-    /// 获取经验
-    fn gain_exp(&mut self, exp: u32) {
-        self.gain_exp(exp)
-    }
-}
 
 impl Default for Hero {
     fn default() -> Self {
