@@ -85,10 +85,10 @@ impl VisionSystem {
 
     /// Determine if an attacker can ambush a defender based on visibility
     pub fn can_ambush<T: Combatant, U: Combatant>(
-        attacker: &T,
+        _attacker: &T,
         attacker_x: i32,
         attacker_y: i32,
-        defender: &U,
+        _defender: &U,
         defender_x: i32,
         defender_y: i32,
         is_blocked: &dyn Fn(i32, i32) -> bool,
@@ -112,10 +112,10 @@ impl VisionSystem {
 
     /// Determine if an attacker is vulnerable to a counter-ambush from defender
     pub fn is_vulnerable_to_ambush<T: Combatant, U: Combatant>(
-        attacker: &T,
+        _attacker: &T,
         attacker_x: i32,
         attacker_y: i32,
-        defender: &U,
+        _defender: &U,
         defender_x: i32,
         defender_y: i32,
         is_blocked: &dyn Fn(i32, i32) -> bool,

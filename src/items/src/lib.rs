@@ -1,17 +1,14 @@
 //src/items/src/lib.rs
-#![allow(dead_code)]
-#![allow(unused)]
 
 const BINCODE_CONFIG: bincode::config::Configuration = bincode::config::legacy().with_variable_int_encoding(); // 添加变长整数编码
 
-use bincode::serde::encode_to_vec;
 use bincode::{Decode, Encode};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 pub use crate::armor::Armor;
 pub use crate::food::Food;
-pub use crate::misc::MiscItem;
+pub use crate::misc::{MiscItem, MiscKind};
 pub use crate::potion::Potion;
 pub use crate::ring::Ring;
 pub use crate::scroll::Scroll;
@@ -19,16 +16,6 @@ pub use crate::seed::Seed;
 pub use crate::stone::Stone;
 pub use crate::wand::Wand;
 pub use crate::weapon::Weapon;
-
-use crate::food::FoodKind;
-use crate::misc::MiscKind;
-use crate::potion::PotionKind;
-use crate::ring::RingKind;
-use crate::scroll::ScrollKind;
-use crate::seed::SeedKind;
-use crate::stone::StoneKind;
-use crate::wand::WandKind;
-use crate::weapon::WeaponKind;
 
 pub mod armor;
 pub mod food;

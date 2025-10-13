@@ -2,7 +2,6 @@
 use bincode::serde::encode_to_vec;
 use bincode::{Decode, Encode};
 use rand::prelude::IndexedRandom;
-use rand::seq::SliceRandom;
 use seahash::SeaHasher;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -353,7 +352,6 @@ impl ItemTrait for Potion {
             PotionKind::Strength => 3,
             PotionKind::MindVision => 2,
             PotionKind::Haste => 1,
-            _ => 0,
         }
     }
 }

@@ -1,7 +1,6 @@
 //src/combat/src/effect.rs
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
-use std::fmt;
 use strum::{Display, EnumIter, EnumString};
 use ratatui::style::{Color, Style, Modifier};
 

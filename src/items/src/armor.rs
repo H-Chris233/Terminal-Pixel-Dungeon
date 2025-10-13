@@ -2,10 +2,8 @@
 use bincode::serde::encode_to_vec;
 use bincode::{Decode, Encode};
 use rand::Rng;
-use seahash::SeaHasher;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::hash::Hasher;
 use ratatui::style::Color;
 
 use crate::ItemCategory;

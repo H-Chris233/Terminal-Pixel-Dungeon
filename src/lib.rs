@@ -1,6 +1,3 @@
-#![allow(dead_code)]
-#![allow(unused)]
-
 pub mod ecs;
 pub mod input;
 pub mod systems;

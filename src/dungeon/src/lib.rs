@@ -1,8 +1,5 @@
 // src/dungeon/src/lib.rs
 
-#![allow(dead_code)]
-#![allow(unused)]
-
 use bincode::{Decode, Encode};
 use rand::Rng;
 use serde::{Deserialize, Serialize};

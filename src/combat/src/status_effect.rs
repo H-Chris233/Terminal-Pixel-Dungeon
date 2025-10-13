@@ -1,6 +1,5 @@
 //! Status effect management for combatants
-use crate::{Effect, EffectType};
-use std::collections::HashMap;
+use crate::{Effect, EffectType, Combatant};
 
 /// Manages active status effects for a combatant
 pub struct StatusEffectManager {
@@ -110,8 +109,6 @@ impl Default for StatusEffectManager {
     }
 }
 
-use crate::Combatant;
-
 /// Extension trait to add status effect functionality to combatants
 pub trait StatusEffectCombatant {
     fn add_effect(&mut self, effect: Effect);
@@ -126,7 +123,6 @@ pub trait StatusEffectCombatant {
 mod tests {
     use super::*;
     use crate::enemy::EnemyKind;
-    use crate::Combatant;
 
     // Test implementation of Combatant for testing
     struct TestCombatant {

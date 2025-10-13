@@ -183,7 +183,6 @@ impl ItemTrait for MiscItem {
             MiscKind::Key => 20,           // 钥匙20把
             MiscKind::Torch => 15,         // 火把15支
             MiscKind::Other => 30,         // 神秘碎片30个
-            _ => 1,                        // 其他类型默认不堆叠
         }
     }
 

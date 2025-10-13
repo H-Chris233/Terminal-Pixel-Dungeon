@@ -1,13 +1,12 @@
 // src/combat/src/enemy/enemy.rs
 
 use bincode::{Decode, Encode};
-use rand::distr::Uniform;
 use rand::prelude::IndexedRandom;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 use items::Weapon;
-use crate::effect::{Effect, EffectType};
+use crate::effect::Effect;
 
 /// 敌人实体，包含战斗属性和位置信息
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]

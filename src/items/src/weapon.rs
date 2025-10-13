@@ -8,7 +8,6 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::hash::Hasher;
 
-use crate::weapon::kind::*;
 use crate::ItemCategory;
 use crate::ItemTrait;
 use crate::BINCODE_CONFIG;

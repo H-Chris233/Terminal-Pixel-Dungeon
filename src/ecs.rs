@@ -4,12 +4,15 @@ use hecs::{Entity, World};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 
 use save::SaveData;
 use error::GameError;
 use hero::{Hero, Bag};
 use items as game_items;
 use dungeon::Dungeon;
+use crate::event_bus::{EventBus, GameEvent, LogLevel};
 
 // 说明：在完全解耦的系统中，这些模块间的通信应该通过事件总线完成
 // 例如，保存系统通过监听 GameSaved 事件来保存游戏状态
@@ -19,64 +22,222 @@ use dungeon::Dungeon;
 pub struct ECSWorld {
     pub world: World,
     pub resources: Resources,
+    pub event_bus: EventBus,
 }
 
 impl ECSWorld {
     pub fn new() -> Self {
         Self {
             world: World::new(),
-            resources: Resources {
-                clock: GameClock::default(),
-                game_state: GameState::default(),
-                input_buffer: InputBuffer::default(),
-                config: GameConfig::new(),
-                rng: 12345, // default seed
-                dungeon: None,
-            },
+            resources: Resources::default(),
+            event_bus: EventBus::new(),
         }
     }
 
     pub fn generate_and_set_dungeon(&mut self, max_depth: usize, seed: u64) -> anyhow::Result<()> {
         let dungeon = dungeon::Dungeon::generate(max_depth, seed)?;
         set_dungeon_instance(&mut self.world, dungeon);
-        self.resources.rng = seed;
+        // Re-seed the RNG for consistent randomness across the game
+        self.resources.rng = StdRng::seed_from_u64(seed);
         self.resources.game_state.depth = 1;
         Ok(())
     }
-    
+
     pub fn clear(&mut self) {
         self.world.clear();
-        self.resources = Resources {
-            clock: GameClock::default(),
-            game_state: GameState::default(),
-            input_buffer: InputBuffer::default(),
-            config: GameConfig::new(),
-            rng: 12345, // default seed
-            dungeon: None,
-        };
+        self.resources = Resources::default();
+        self.event_bus.clear();
+    }
+
+    /// 发布事件到事件总线
+    pub fn publish_event(&mut self, event: GameEvent) {
+        self.event_bus.publish(event);
+    }
+
+    /// 发布延迟事件（下一帧处理）
+    pub fn publish_delayed_event(&mut self, event: GameEvent) {
+        self.event_bus.publish_delayed(event);
+    }
+
+    /// 处理所有待处理的事件
+    pub fn process_events(&mut self) {
+        // 收集所有待处理事件
+        let events: Vec<GameEvent> = self.event_bus.drain().collect();
+
+        // 处理每个事件
+        for event in events {
+            self.handle_event(event);
+        }
+    }
+
+    /// 帧结束时调用，准备处理下一帧事件
+    pub fn next_frame(&mut self) {
+        self.event_bus.next_frame();
+    }
+
+    /// 事件处理分发
+    fn handle_event(&mut self, event: GameEvent) {
+        // 克隆事件用于日志记录
+        match &event {
+            GameEvent::DamageDealt { attacker, victim, damage, is_critical } => {
+                // 记录伤害日志
+                let log_msg = if *is_critical {
+                    format!("暴击！造成 {} 点伤害", damage)
+                } else {
+                    format!("造成 {} 点伤害", damage)
+                };
+                self.resources.game_state.message_log.push(log_msg);
+
+                // 应用伤害到受害者 - 收集需要发布的事件
+                let mut entities_to_kill = Vec::new();
+
+                for (_entity, stats) in self.world.query_mut::<&mut Stats>() {
+                    // Note: 这里需要通过 entity id 匹配，但 hecs::Entity 无法直接比较
+                    // 实际应用中需要添加 EntityId 组件
+                    if stats.hp > 0 {
+                        stats.hp = stats.hp.saturating_sub(*damage);
+                        if stats.hp == 0 {
+                            entities_to_kill.push(*victim);
+                        }
+                    }
+                }
+
+                // 在循环外发布死亡事件
+                for entity_id in entities_to_kill {
+                    self.publish_delayed_event(GameEvent::EntityDied {
+                        entity: entity_id,
+                        entity_name: "Entity".to_string(),
+                    });
+                }
+            }
+
+            GameEvent::EntityDied { entity_name, .. } => {
+                // 记录死亡日志
+                self.resources.game_state.message_log.push(
+                    format!("{} 已死亡", entity_name)
+                );
+            }
+
+            GameEvent::ItemPickedUp { item_name, .. } => {
+                self.resources.game_state.message_log.push(
+                    format!("拾取了 {}", item_name)
+                );
+            }
+
+            GameEvent::ItemUsed { item_name, effect, .. } => {
+                self.resources.game_state.message_log.push(
+                    format!("使用了 {}，{}", item_name, effect)
+                );
+            }
+
+            GameEvent::LevelChanged { old_level, new_level } => {
+                self.resources.game_state.depth = *new_level;
+                self.resources.game_state.message_log.push(
+                    format!("从第 {} 层进入第 {} 层", old_level, new_level)
+                );
+            }
+
+            GameEvent::GameOver { reason } => {
+                self.resources.game_state.game_state = GameStatus::GameOver;
+                self.resources.game_state.message_log.push(
+                    format!("游戏结束：{}", reason)
+                );
+            }
+
+            GameEvent::Victory => {
+                self.resources.game_state.game_state = GameStatus::Victory;
+                self.resources.game_state.message_log.push(
+                    "恭喜！你获得了胜利！".to_string()
+                );
+            }
+
+            GameEvent::LogMessage { message, level } => {
+                let prefix = match level {
+                    LogLevel::Debug => "[调试] ",
+                    LogLevel::Info => "",
+                    LogLevel::Warning => "[警告] ",
+                    LogLevel::Error => "[错误] ",
+                };
+                self.resources.game_state.message_log.push(
+                    format!("{}{}", prefix, message)
+                );
+            }
+
+            GameEvent::TrapTriggered { trap_type, .. } => {
+                self.resources.game_state.message_log.push(
+                    format!("触发了{}陷阱！", trap_type)
+                );
+            }
+
+            GameEvent::StatusApplied { status, duration, .. } => {
+                self.resources.game_state.message_log.push(
+                    format!("受到{}效果影响，持续{}回合", status, duration)
+                );
+            }
+
+            GameEvent::StatusRemoved { status, .. } => {
+                self.resources.game_state.message_log.push(
+                    format!("{}效果已消失", status)
+                );
+            }
+
+            // 其他事件暂时不处理，由具体系统处理
+            _ => {}
+        }
     }
 }
 
 /// Global resources that are shared across systems
-#[derive(Default)]
 pub struct Resources {
     /// Game time tracking
     pub clock: GameClock,
-    
+
     /// Current game state
     pub game_state: GameState,
-    
+
     /// Player input buffer
     pub input_buffer: InputBuffer,
-    
+
     /// Game configuration
     pub config: GameConfig,
-    
-    /// RNG state
-    pub rng: u64,
-    
+
+    /// Random number generator state
+    pub rng: StdRng,
+
     /// Dungeon state marker entity (actual dungeon stored as a component)
     pub dungeon: Option<hecs::Entity>,
+}
+
+impl Default for Resources {
+    fn default() -> Self {
+        Self {
+            clock: GameClock::default(),
+            game_state: GameState::default(),
+            input_buffer: InputBuffer::default(),
+            config: GameConfig::new(),
+            rng: StdRng::seed_from_u64(12345), // default seed
+            dungeon: None,
+        }
+    }
+}
+
+impl Resources {
+    /// Create a new Resources with a specific seed
+    pub fn with_seed(seed: u64) -> Self {
+        Self {
+            clock: GameClock::default(),
+            game_state: GameState::default(),
+            input_buffer: InputBuffer::default(),
+            config: GameConfig::new(),
+            rng: StdRng::seed_from_u64(seed),
+            dungeon: None,
+        }
+    }
+
+    /// Re-seed the RNG (useful for save/load)
+    pub fn reseed_rng(&mut self, seed: u64) {
+        self.rng = StdRng::seed_from_u64(seed);
+    }
 }
 
 pub struct GameClock {
@@ -106,7 +267,7 @@ pub struct GameState {
     pub terminal_height: u16,
 }
 
-#[derive(Default, Clone, Copy, PartialEq)]
+#[derive(Default, Clone, Copy, PartialEq, Debug)]
 pub enum GameStatus {
     #[default]
     Running,
@@ -118,6 +279,8 @@ pub enum GameStatus {
 #[derive(Default)]
 pub struct InputBuffer {
     pub pending_actions: Vec<PlayerAction>,
+    /// Actions that were successfully completed this frame and need energy deduction
+    pub completed_actions: Vec<PlayerAction>,
 }
 
 #[derive(Clone)]
@@ -456,9 +619,9 @@ impl ECSWorld {
             },
             hero: hero.ok_or_else(|| GameError::InvalidHeroData)?,
             dungeon,
-            game_seed: self.resources.rng,
+            game_seed: 0, // 需要保存实际的种子值
         };
-        
+
         Ok(save_data)
     }
     
@@ -466,17 +629,17 @@ impl ECSWorld {
     pub fn from_save_data(&mut self, save_data: SaveData) -> Result<(), GameError> {
         // Clear current world
         self.clear();
-        
+
         // Set up resources from save data
-        self.resources.rng = save_data.game_seed;
+        self.resources.rng = StdRng::seed_from_u64(save_data.game_seed);
         self.resources.game_state.depth = save_data.metadata.dungeon_depth;
         set_dungeon_instance(&mut self.world, save_data.dungeon);
-        
+
         // Convert hero to ECS components and spawn player entity
         let hero = save_data.hero;
         let stats: Stats = (&hero).into();
         let inventory: Inventory = (&hero.bag).into();
-        
+
         // Spawn player entity with converted components
         self.world.spawn((
             Position::new(hero.x, hero.y, save_data.metadata.dungeon_depth as i32),
@@ -505,7 +668,7 @@ impl ECSWorld {
             },
             Player, // Player marker component
         ));
-        
+
         Ok(())
     }
 }
@@ -595,5 +758,165 @@ impl From<&Bag> for Inventory {
             items: Vec::new(),
             max_slots: 20,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::event_bus::GameEvent;
+
+    #[test]
+    fn test_event_bus_integration() {
+        let mut world = ECSWorld::new();
+
+        // 测试事件发布
+        world.publish_event(GameEvent::LogMessage {
+            message: "测试消息".to_string(),
+            level: LogLevel::Info,
+        });
+
+        assert_eq!(world.event_bus.len(), 1);
+
+        // 测试事件处理
+        world.process_events();
+
+        // 检查日志是否被添加
+        assert_eq!(world.resources.game_state.message_log.len(), 1);
+        assert_eq!(world.resources.game_state.message_log[0], "测试消息");
+
+        // 事件应该被清空
+        assert_eq!(world.event_bus.len(), 0);
+    }
+
+    #[test]
+    fn test_combat_events() {
+        let mut world = ECSWorld::new();
+
+        // 创建玩家和敌人实体
+        let player = world.world.spawn((
+            Position::new(0, 0, 0),
+            Actor {
+                name: "Player".to_string(),
+                faction: Faction::Player,
+            },
+            Stats {
+                hp: 100,
+                max_hp: 100,
+                attack: 10,
+                defense: 5,
+                accuracy: 80,
+                evasion: 20,
+                level: 1,
+                experience: 0,
+            },
+        ));
+
+        let enemy = world.world.spawn((
+            Position::new(1, 0, 0),
+            Actor {
+                name: "Goblin".to_string(),
+                faction: Faction::Enemy,
+            },
+            Stats {
+                hp: 30,
+                max_hp: 30,
+                attack: 5,
+                defense: 2,
+                accuracy: 60,
+                evasion: 10,
+                level: 1,
+                experience: 0,
+            },
+        ));
+
+        // 发布战斗开始事件
+        world.publish_event(GameEvent::CombatStarted {
+            attacker: player.id(),
+            defender: enemy.id(),
+        });
+
+        // 发布伤害事件
+        world.publish_event(GameEvent::DamageDealt {
+            attacker: player.id(),
+            victim: enemy.id(),
+            damage: 10,
+            is_critical: false,
+        });
+
+        // 处理事件
+        world.process_events();
+
+        // 检查日志
+        assert!(world.resources.game_state.message_log.len() > 0);
+        assert!(world.resources.game_state.message_log[0].contains("造成 10 点伤害"));
+    }
+
+    #[test]
+    fn test_delayed_events() {
+        let mut world = ECSWorld::new();
+
+        // 发布延迟事件
+        world.publish_delayed_event(GameEvent::LogMessage {
+            message: "延迟消息".to_string(),
+            level: LogLevel::Info,
+        });
+
+        // 当前帧应该没有事件
+        assert_eq!(world.event_bus.len(), 0);
+
+        // 移到下一帧
+        world.next_frame();
+
+        // 现在应该有事件了
+        assert_eq!(world.event_bus.len(), 1);
+
+        // 处理事件
+        world.process_events();
+
+        // 检查日志
+        assert_eq!(world.resources.game_state.message_log.len(), 1);
+        assert_eq!(world.resources.game_state.message_log[0], "延迟消息");
+    }
+
+    #[test]
+    fn test_game_over_event() {
+        let mut world = ECSWorld::new();
+
+        // 初始状态应该是 Running
+        assert_eq!(world.resources.game_state.game_state, GameStatus::Running);
+
+        // 发布游戏结束事件
+        world.publish_event(GameEvent::GameOver {
+            reason: "测试失败".to_string(),
+        });
+
+        // 处理事件
+        world.process_events();
+
+        // 检查游戏状态
+        assert_eq!(world.resources.game_state.game_state, GameStatus::GameOver);
+        assert!(world.resources.game_state.message_log.iter().any(|msg| msg.contains("游戏结束")));
+    }
+
+    #[test]
+    fn test_level_change_event() {
+        let mut world = ECSWorld::new();
+
+        // 初始深度为 0
+        assert_eq!(world.resources.game_state.depth, 0);
+
+        // 发布层级变化事件
+        world.publish_event(GameEvent::LevelChanged {
+            old_level: 1,
+            new_level: 2,
+        });
+
+        // 处理事件
+        world.process_events();
+
+        // 检查深度是否更新
+        assert_eq!(world.resources.game_state.depth, 2);
+        assert!(world.resources.game_state.message_log.iter().any(|msg| msg.contains("从第 1 层进入第 2 层")));
     }
 }

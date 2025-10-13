@@ -1,6 +1,4 @@
 // src/hero/src/lib.rs
-#![allow(dead_code)]
-#![allow(unused)]
 
 // 核心模块
 mod bag;

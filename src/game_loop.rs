@@ -7,8 +7,7 @@ use crate::input::*;
 use crate::turn_system::TurnSystem;
 use save::{SaveSystem, AutoSave};
 use anyhow;
-use hecs::World;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use crate::core::GameEngine;
 
 /// Main game loop that runs the ECS systems in order
@@ -43,10 +42,10 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
             Box::new(DungeonSystem),
             Box::new(RenderingSystem),
         ];
-        
 
-        
-        let mut ecs_world = ECSWorld::new();
+
+
+        let ecs_world = ECSWorld::new();
         let game_engine = GameEngine::new();
         
         let save_system = match SaveSystem::new("saves", 10) {
@@ -297,7 +296,23 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                 if system.is_energy_system() {
                     continue;
                 }
-                
+
+                // 特殊处理 CombatSystem，使用事件版本
+                if system.name() == "CombatSystem" {
+                    match CombatSystem::run_with_events(&mut self.ecs_world) {
+                        SystemResult::Continue => continue,
+                        SystemResult::Stop => {
+                            self.is_running = false;
+                            return Ok(());
+                        }
+                        SystemResult::Error(msg) => {
+                            eprintln!("System error: {}", msg);
+                            return Err(anyhow::anyhow!(msg));
+                        }
+                    }
+                    continue;
+                }
+
                 match system.run(&mut self.ecs_world.world, &mut self.ecs_world.resources) {
                     SystemResult::Continue => continue,
                     SystemResult::Stop => {
@@ -310,7 +325,10 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                     }
                 }
             }
-            
+
+            // 处理所有待处理的事件
+            self.ecs_world.process_events();
+
             // Process the player's turn
             self.turn_system.process_turn_cycle(&mut self.ecs_world.world, &mut self.ecs_world.resources)?;
         } else {
@@ -321,7 +339,23 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                 if system.is_energy_system() {
                     continue;
                 }
-                
+
+                // 特殊处理 CombatSystem，使用事件版本
+                if system.name() == "CombatSystem" {
+                    match CombatSystem::run_with_events(&mut self.ecs_world) {
+                        SystemResult::Continue => continue,
+                        SystemResult::Stop => {
+                            self.is_running = false;
+                            return Ok(());
+                        }
+                        SystemResult::Error(msg) => {
+                            eprintln!("System error: {}", msg);
+                            return Err(anyhow::anyhow!(msg));
+                        }
+                    }
+                    continue;
+                }
+
                 match system.run(&mut self.ecs_world.world, &mut self.ecs_world.resources) {
                     SystemResult::Continue => continue,
                     SystemResult::Stop => {
@@ -334,11 +368,17 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                     }
                 }
             }
-            
+
+            // 处理所有待处理的事件
+            self.ecs_world.process_events();
+
             // Process AI turns
             self.turn_system.process_turn_cycle(&mut self.ecs_world.world, &mut self.ecs_world.resources)?;
         }
-        
+
+        // 准备处理下一帧事件
+        self.ecs_world.next_frame();
+
         // Check for auto-save
         if let Some(auto_save) = &mut self.save_system {
             if let Ok(save_data) = self.ecs_world.to_save_data() {
@@ -347,7 +387,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                 }
             }
         }
-        
+
         Ok(())
     }
     
@@ -434,8 +474,8 @@ impl HeadlessGameLoop {
             Box::new(DungeonSystem),
             Box::new(RenderingSystem),
         ];
-        
-        let mut ecs_world = ECSWorld::new();
+
+        let ecs_world = ECSWorld::new();
         let game_engine = GameEngine::new();
         
         let save_system = match SaveSystem::new("saves", 10) {

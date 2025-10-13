@@ -1,7 +1,9 @@
-use crate::ecs::{AI, Actor, Energy, Player, Position, Resources, Viewshed, 
-                PlayerAction, Direction, Tile, TerrainType, Renderable, 
-                Faction, Stats, Inventory, ItemSlot, ECSItem, ItemType, 
-                ConsumableEffect, StatType, GameStatus, Color, ECSWorld};
+use crate::ecs::{AI, Actor, Energy, Player, Position, Resources, Viewshed,
+                PlayerAction, Direction, Tile, TerrainType, Renderable,
+                Faction, Stats, Inventory, ItemSlot, ECSItem, ItemType,
+                ConsumableEffect, StatType, GameStatus, Color, ECSWorld,
+                AIType};
+use crate::event_bus::{GameEvent, LogLevel};
 use hecs::{Entity, World};
 use std::error::Error;
 use combat::Combatant;
@@ -61,7 +63,7 @@ impl System for MovementSystem {
         // Process pending player actions for movement
         let mut actions_to_process = std::mem::take(&mut resources.input_buffer.pending_actions);
         let mut new_actions = Vec::new();
-        
+
         for action in actions_to_process {
             match action {
                 PlayerAction::Move(direction) => {
@@ -90,24 +92,21 @@ impl System for MovementSystem {
 
                         // Check if the new position is passable (tile allows movement)
                         let can_move = Self::can_move_to(world, &new_pos);
-                        
+
                         if can_move {
                             // Update player's position
                             if let Ok(mut pos) = world.get::<&mut Position>(player_entity) {
                                 *pos = new_pos;
                             }
-                            
-                            // Mark that player has taken an action that costs energy
-                            if let Ok(mut energy) = world.get::<&mut Energy>(player_entity) {
-                                energy.current = energy.current.saturating_sub(100); // Cost for movement
-                            }
+                            // Mark action as completed for energy deduction
+                            resources.input_buffer.completed_actions.push(PlayerAction::Move(direction));
                         } else {
                             // If can't move, add action back for later processing
-                            new_actions.push(action);
+                            new_actions.push(PlayerAction::Move(direction));
                         }
                     } else {
                         // No player found, add action back
-                        new_actions.push(action);
+                        new_actions.push(PlayerAction::Move(direction));
                     }
                 }
                 // For non-movement actions, add back to queue for other systems to handle
@@ -116,10 +115,10 @@ impl System for MovementSystem {
                 }
             }
         }
-        
+
         // Put unprocessed actions back in the buffer
         resources.input_buffer.pending_actions = new_actions;
-        
+
         SystemResult::Continue
     }
 }
@@ -162,41 +161,65 @@ impl System for AISystem {
     }
 
     fn run(&mut self, world: &mut World, _resources: &mut Resources) -> SystemResult {
-        let mut entities = Vec::new();
-        for (entity, (ai, pos)) in world.query::<(&AI, &Position)>().iter() {
-            entities.push((entity, ai.clone(), pos.clone()));
-        }
+        // 收集需要处理的 AI 实体信息（只克隆最小必要的数据）
+        let ai_actions: Vec<(Entity, AIType, Position)> = world
+            .query::<(&AI, &Position)>()
+            .iter()
+            .filter(|(entity, _)| {
+                // 过滤掉玩家实体
+                world.get::<&Player>(*entity).is_err()
+            })
+            .map(|(entity, (ai, pos))| {
+                // 只克隆 AI 类型和位置，不克隆整个 AI 结构
+                (entity, ai.ai_type.clone(), pos.clone())
+            })
+            .collect();
 
-        for (entity, ai, pos) in entities {
-            if world.get::<&Player>(entity).is_ok() {
-                continue;
-            }
+        // 找到所有玩家的位置（缓存查询结果）
+        let player_positions: Vec<(Entity, Position)> = world
+            .query::<(&Position, &Player)>()
+            .iter()
+            .map(|(entity, (pos, _))| (entity, pos.clone()))
+            .collect();
 
-            if let crate::ecs::AIType::Aggressive = ai.ai_type {
-                let mut closest_player = None;
-                for (player_entity, (player_pos, _)) in world.query::<(&Position, &Player)>().iter() {
-                    let distance = pos.distance_to(player_pos);
-                    if distance <= ai.range() as f32 {
-                        let update = closest_player.map_or(true, |(_, d)| distance < d);
-                        if update {
-                            closest_player = Some((player_entity, distance));
+        // 处理每个 AI 实体的行为
+        for (entity, ai_type, pos) in ai_actions {
+            match ai_type {
+                AIType::Aggressive => {
+                    // 获取 AI 范围（不需要克隆整个 AI 对象）
+                    let ai_range = match world.get::<&AI>(entity) {
+                        Ok(ai) => ai.range() as f32,
+                        Err(_) => continue,
+                    };
+
+                    // 查找最近的玩家
+                    let mut closest_player = None;
+                    for (player_entity, player_pos) in &player_positions {
+                        let distance = pos.distance_to(player_pos);
+                        if distance <= ai_range {
+                            let update = closest_player.map_or(true, |(_, d)| distance < d);
+                            if update {
+                                closest_player = Some((*player_entity, distance));
+                            }
+                        }
+                    }
+
+                    // 如果找到玩家，向其移动
+                    if let Some((player_entity, _)) = closest_player {
+                        if let Some(player_pos) = player_positions.iter()
+                            .find(|(e, _)| *e == player_entity)
+                            .map(|(_, p)| p) {
+                            let dx = (player_pos.x - pos.x).signum();
+                            let dy = (player_pos.y - pos.y).signum();
+                            let _ = Self::attempt_move_to(world, entity, pos.x + dx, pos.y + dy);
                         }
                     }
                 }
-
-                if let Some((player_entity, _)) = closest_player {
-                    let entity_pos = match world.get::<&Position>(entity) {
-                        Ok(pos) => Position::new(pos.x, pos.y, pos.z),
-                        Err(_) => continue,
-                    };
-                    let player_pos = match world.get::<&Position>(player_entity) {
-                        Ok(pos) => Position::new(pos.x, pos.y, pos.z),
-                        Err(_) => continue,
-                    };
-
-                    let dx = (player_pos.x - entity_pos.x).signum();
-                    let dy = (player_pos.y - entity_pos.y).signum();
-                    let _ = Self::attempt_move_to(world, entity, entity_pos.x + dx, entity_pos.y + dy);
+                AIType::Passive | AIType::Neutral => {
+                    // 被动或中立 AI 暂时不做任何事
+                }
+                AIType::Patrol { .. } => {
+                    // 巡逻 AI 的实现（暂时留空）
                 }
             }
         }
@@ -225,125 +248,181 @@ impl System for CombatSystem {
     }
 
     fn run(&mut self, world: &mut World, resources: &mut Resources) -> SystemResult {
-        // Process pending player actions for combat
-        let mut actions_to_process = std::mem::take(&mut resources.input_buffer.pending_actions);
+        // 注意：这个系统现在需要通过 ECSWorld 来运行，以便访问事件总线
+        // 暂时保留原有逻辑，实际应该通过 run_with_events 方法调用
+        SystemResult::Continue
+    }
+}
+
+impl CombatSystem {
+    /// 使用事件总线的战斗系统运行方法
+    pub fn run_with_events(world: &mut ECSWorld) -> SystemResult {
+        use crate::event_bus::GameEvent;
+
+        // 处理待处理的玩家战斗动作
+        let actions_to_process = std::mem::take(&mut world.resources.input_buffer.pending_actions);
         let mut new_actions = Vec::new();
-        
+
         for action in actions_to_process {
             match action {
                 PlayerAction::Attack(ref target_pos) => {
-                    if let Some(player_entity) = find_player_entity(world) {
-                        let player_pos = match world.get::<&Position>(player_entity) {
+                    if let Some(player_entity) = find_player_entity(&world.world) {
+                        // 获取玩家位置
+                        let player_pos = match world.world.get::<&Position>(player_entity) {
                             Ok(pos) => Position::new(pos.x, pos.y, pos.z),
                             Err(_) => {
                                 new_actions.push(action);
                                 continue;
                             }
                         };
-                        
-                        // Calculate the position of the attack target
+
+                        // 获取玩家名称
+                        let player_name = world.world.get::<&Actor>(player_entity)
+                            .map(|a| a.name.clone())
+                            .unwrap_or_else(|_| "Player".to_string());
+
+                        // 计算攻击目标位置
                         let attack_pos = Position::new(
                             player_pos.x + target_pos.x,
                             player_pos.y + target_pos.y,
                             player_pos.z
                         );
-                        
-                        // Find an enemy at the target position
-                        let mut target_entity = None;
-                        for (entity, (pos, actor)) in world.query::<(&Position, &Actor)>().iter() {
-                            if actor.faction == Faction::Enemy && 
-                               pos.x == attack_pos.x && 
-                               pos.y == attack_pos.y && 
+
+                        // 查找目标位置的敌人
+                        let mut target_info: Option<(Entity, String, u32)> = None;
+                        for (entity, (pos, actor, _stats)) in world.world.query::<(&Position, &Actor, &Stats)>().iter() {
+                            if actor.faction == Faction::Enemy &&
+                               pos.x == attack_pos.x &&
+                               pos.y == attack_pos.y &&
                                pos.z == attack_pos.z {
-                                target_entity = Some(entity);
+                                // 将 entity 转换为 u32 (使用内部表示)
+                                let entity_id = entity.id();
+                                target_info = Some((entity, actor.name.clone(), entity_id));
                                 break;
                             }
                         }
-                        
-                        if let Some(target) = target_entity {
-                            // Perform combat between player and target
-                            // Collect entities to despawn after combat is resolved
-                            let mut entities_to_despawn = Vec::new();
-                            
-                            // We need to temporarily update stats during combat
-                            if world.get::<&Stats>(player_entity).is_ok() && world.get::<&Stats>(target).is_ok() {
-                                // Extract the damage to be applied outside the borrow scope
-                                let damage_result = {
-                                    // Get mutable references to stats for combat calculation
-                                    let (mut player_stats, mut target_stats) = 
-                                        (world.get::<&mut Stats>(player_entity), world.get::<&mut Stats>(target));
-                                    
-                                    if let (Ok(mut p_stats), Ok(mut t_stats)) = (player_stats, target_stats) {
-                                        // Create temporary stats for combat simulation
-                                        let mut temp_player_stats = p_stats.clone();
-                                        let mut temp_target_stats = t_stats.clone();
-                                        
-                                        let mut attacker = SimpleCombatant::new(&mut temp_player_stats);
-                                        let mut defender = SimpleCombatant::new(&mut temp_target_stats);
-                                        
-                                        // Perform the attack using the combat module
-                                        let combat_result = ::combat::Combat::engage(&mut attacker, &mut defender, false);
-                                        Some((temp_player_stats.hp, temp_target_stats.hp, combat_result))
-                                    } else {
-                                        None
-                                    }
-                                };
-                                
-                                if let Some((new_player_hp, new_target_hp, combat_result)) = damage_result {
-                                    // Now apply the actual damage
-                                    if let Ok(mut actual_player_stats) = world.get::<&mut Stats>(player_entity) {
-                                        actual_player_stats.hp = new_player_hp;
-                                    }
-                                    if let Ok(mut actual_target_stats) = world.get::<&mut Stats>(target) {
-                                        actual_target_stats.hp = new_target_hp;
-                                    }
-                                    
-                                    // Log combat results
-                                    for log in &combat_result.logs {
-                                        resources.game_state.message_log.push(log.clone());
-                                        if resources.game_state.message_log.len() > 10 {
-                                            resources.game_state.message_log.remove(0);
-                                        }
-                                    }
-                                    
-                                    // Check if defender was defeated
-                                    if combat_result.defeated {
-                                        // Mark entity for despawn later
-                                        entities_to_despawn.push(target);
-                                        resources.game_state.message_log.push("Enemy was defeated!".to_string());
-                                    }
+
+                        if let Some((target, target_name, target_id)) = target_info {
+                            let player_id = player_entity.id();
+
+                            // 发布战斗开始事件
+                            world.publish_event(GameEvent::CombatStarted {
+                                attacker: player_id,
+                                defender: target_id,
+                            });
+
+                            // 执行战斗计算 - 克隆 Stats 以避免借用问题
+                            let combat_result = {
+                                let player_stats = world.world.get::<&Stats>(player_entity).ok().map(|s| (*s).clone());
+                                let target_stats = world.world.get::<&Stats>(target).ok().map(|s| (*s).clone());
+
+                                if let (Some(mut temp_player), Some(mut temp_target)) = (player_stats, target_stats) {
+                                    let mut attacker = SimpleCombatant::new(&mut temp_player);
+                                    let mut defender = SimpleCombatant::new(&mut temp_target);
+
+                                    // 执行战斗
+                                    let result = ::combat::Combat::engage(&mut attacker, &mut defender, false);
+                                    Some((temp_player.hp, temp_target.hp, result))
+                                } else {
+                                    None
                                 }
-                                
-                                // Spend energy for attack
-                                if let Ok(mut energy) = world.get::<&mut Energy>(player_entity) {
-                                    energy.current = energy.current.saturating_sub(100); // Cost for attack
+                            };
+
+                            if let Some((new_player_hp, new_target_hp, combat_result)) = combat_result {
+                                // 计算伤害值
+                                let player_old_hp = world.world.get::<&Stats>(player_entity)
+                                    .map(|s| s.hp)
+                                    .unwrap_or(0);
+                                let target_old_hp = world.world.get::<&Stats>(target)
+                                    .map(|s| s.hp)
+                                    .unwrap_or(0);
+
+                                let damage_to_target = target_old_hp.saturating_sub(new_target_hp);
+                                let damage_to_player = player_old_hp.saturating_sub(new_player_hp);
+
+                                // 发布伤害事件
+                                if damage_to_target > 0 {
+                                    world.publish_event(GameEvent::DamageDealt {
+                                        attacker: player_id,
+                                        victim: target_id,
+                                        damage: damage_to_target,
+                                        is_critical: combat_result.logs.iter().any(|log| log.contains("Critical")),
+                                    });
                                 }
-                            }
-                            
-                            // Now despawn defeated entities outside the combat borrow scope
-                            for entity in entities_to_despawn {
-                                let _ = world.despawn(entity);
+
+                                if damage_to_player > 0 {
+                                    world.publish_event(GameEvent::DamageDealt {
+                                        attacker: target_id,
+                                        victim: player_id,
+                                        damage: damage_to_player,
+                                        is_critical: false,
+                                    });
+                                }
+
+                                // 应用实际伤害
+                                if let Ok(mut stats) = world.world.get::<&mut Stats>(player_entity) {
+                                    stats.hp = new_player_hp;
+                                }
+                                if let Ok(mut stats) = world.world.get::<&mut Stats>(target) {
+                                    stats.hp = new_target_hp;
+                                }
+
+                                // 发布日志消息
+                                for log in &combat_result.logs {
+                                    world.publish_event(GameEvent::LogMessage {
+                                        message: log.clone(),
+                                        level: LogLevel::Info,
+                                    });
+                                }
+
+                                // 检查目标是否死亡
+                                if new_target_hp == 0 {
+                                    world.publish_event(GameEvent::EntityDied {
+                                        entity: target_id,
+                                        entity_name: target_name.clone(),
+                                    });
+                                    // 移除死亡的实体
+                                    let _ = world.world.despawn(target);
+                                }
+
+                                // 检查玩家是否死亡
+                                if new_player_hp == 0 {
+                                    world.publish_event(GameEvent::EntityDied {
+                                        entity: player_id,
+                                        entity_name: player_name.clone(),
+                                    });
+                                    world.publish_event(GameEvent::GameOver {
+                                        reason: "你被击败了！".to_string(),
+                                    });
+                                }
+
+                                // 消耗能量
+                                if let Ok(mut energy) = world.world.get::<&mut Energy>(player_entity) {
+                                    energy.current = energy.current.saturating_sub(100);
+                                }
                             }
                         } else {
-                            // No target at this position, add action back
-                            resources.game_state.message_log.push("No enemy at this position!".to_string());
+                            // 没有找到目标
+                            world.publish_event(GameEvent::LogMessage {
+                                message: "该位置没有敌人！".to_string(),
+                                level: LogLevel::Info,
+                            });
                             new_actions.push(action);
                         }
                     } else {
-                        // No player found, add action back
                         new_actions.push(action);
                     }
                 }
-                // For non-combat actions, add back to queue for other systems to handle
+                // 其他动作返回队列
                 _ => {
                     new_actions.push(action);
                 }
             }
         }
-        
-        // Put unprocessed actions back in the buffer
-        resources.input_buffer.pending_actions = new_actions;
-        
+
+        // 恢复未处理的动作
+        world.resources.input_buffer.pending_actions = new_actions;
+
         SystemResult::Continue
     }
 }
@@ -586,9 +665,10 @@ impl System for InventorySystem {
                                                 ConsumableEffect::Teleport => {
                                                     // Teleport player to random location in level
                                                     if let Ok(mut pos) = world.get::<&mut Position>(player_entity) {
-                                                        pos.x = 5 + (resources.rng % 15) as i32; // Random position between 5-19
-                                                        pos.y = 5 + ((resources.rng / 100) % 15) as i32; // Random position between 5-19
-                                                        resources.rng = resources.rng.wrapping_add(12345); // Update RNG
+                                                        use rand::Rng;
+                                                        // Use proper RNG for random position
+                                                        pos.x = 5 + resources.rng.gen_range(0..15); // Random position between 5-19
+                                                        pos.y = 5 + resources.rng.gen_range(0..15); // Random position between 5-19
                                                         resources.game_state.message_log.push("You teleport randomly!".to_string());
                                                         if resources.game_state.message_log.len() > 10 {
                                                             resources.game_state.message_log.remove(0);

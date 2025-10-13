@@ -1,6 +1,4 @@
 // src/save.rs
-#![allow(dead_code)]
-#![allow(unused)]
 
 use dungeon::Dungeon;
 use error::GameError;

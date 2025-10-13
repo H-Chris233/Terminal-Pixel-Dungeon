@@ -5,6 +5,16 @@ use crate::systems::AISystem;
 use anyhow;
 use hecs::{Entity, World};
 
+/// Energy cost constants
+pub mod energy_costs {
+    /// Full action energy cost (movement, attack, use item, etc.)
+    pub const FULL_ACTION: u32 = 100;
+    /// Wait action energy cost (half of full action)
+    pub const WAIT: u32 = 50;
+    /// No energy cost (for actions like quit)
+    pub const FREE: u32 = 0;
+}
+
 /// Trait for entities that can take turns
 pub trait TurnTaker {
     /// Returns the energy cost to perform an action
@@ -39,63 +49,37 @@ impl TurnSystem {
         }
     }
 
-    /// Process all pending player actions and advance the turn
-    pub fn process_player_actions(&mut self, world: &mut World, resources: &mut Resources) -> Result<(), anyhow::Error> {
-        // Process all pending player actions
-        let mut actions_to_process = std::mem::take(&mut resources.input_buffer.pending_actions);
-        
-        for action in actions_to_process.drain(..) {
-            match action {
-                PlayerAction::Move(_) | 
-                PlayerAction::Attack(_) | 
-                PlayerAction::UseItem(_) | 
-                PlayerAction::DropItem(_) | 
-                PlayerAction::Descend | 
-                PlayerAction::Ascend => {
-                    // Any interactive action costs full action energy
-                    if let Some(player_entity) = find_player(world) {
-                        if let Ok(mut energy) = world.get::<&mut Energy>(player_entity) {
-                            let before = energy.current;
-                            energy.current = energy.current.saturating_sub(100); // Action cost
-                            if energy.current < before {
-                                self.player_action_taken = true;
-                            }
-                        }
-                    }
-                }
-                PlayerAction::Wait => {
-                    // Wait costs partial energy and counts as taking an action
-                    if let Some(player_entity) = find_player(world) {
-                        if let Ok(mut energy) = world.get::<&mut Energy>(player_entity) {
-                            let before = energy.current;
-                            energy.current = energy.current.saturating_sub(50); // Wait cost
-                            if energy.current < before {
-                                self.player_action_taken = true;
-                            }
-                        }
-                    }
-                }
-                PlayerAction::Quit => {
-                    resources.game_state.game_state = GameStatus::GameOver;
-                    return Ok(());
-                }
-            }
-        }
+    /// Deduct energy for a completed player action
+    pub fn consume_player_energy(&mut self, world: &mut World, action: &PlayerAction) -> Result<(), anyhow::Error> {
+        let energy_cost = match action {
+            PlayerAction::Move(_) |
+            PlayerAction::Attack(_) |
+            PlayerAction::UseItem(_) |
+            PlayerAction::DropItem(_) |
+            PlayerAction::Descend |
+            PlayerAction::Ascend => energy_costs::FULL_ACTION, // Full action cost
+            PlayerAction::Wait => energy_costs::WAIT,          // Wait costs half
+            PlayerAction::Quit => energy_costs::FREE,          // No energy cost for quitting
+        };
 
-        // Put back any unprocessed actions
-        resources.input_buffer.pending_actions = actions_to_process;
-        
-        // Check if player has enough energy for another action
-        if let Some(player_entity) = find_player(world) {
-            if let Ok(energy) = world.get::<&Energy>(player_entity) {
-                if energy.current < 100 {
-                    // Player has used their action, switch to AI turns
-                    // The state is already managed in process_player_actions
+        if energy_cost > 0 {
+            if let Some(player_entity) = find_player(world) {
+                if let Ok(mut energy) = world.get::<&mut Energy>(player_entity) {
+                    let before = energy.current;
+                    energy.current = energy.current.saturating_sub(energy_cost);
+                    if energy.current < before {
+                        self.player_action_taken = true;
+                    }
                 }
             }
         }
 
         Ok(())
+    }
+
+    /// Check if player has actions to process
+    pub fn has_pending_actions(&self, resources: &Resources) -> bool {
+        !resources.input_buffer.pending_actions.is_empty()
     }
 
     /// Process AI turns until the player's energy is full again
@@ -149,23 +133,33 @@ impl TurnSystem {
     pub fn process_turn_cycle(&mut self, world: &mut World, resources: &mut Resources) -> Result<(), anyhow::Error> {
         match self.state {
             TurnState::PlayerTurn => {
-                // Check for pending actions
-                if !resources.input_buffer.pending_actions.is_empty() {
-                    self.process_player_actions(world, resources)?;
-                    if self.player_action_taken {
-                        // After player action, go to AI turn
-                        self.state = TurnState::AITurn;
-                        self.player_action_taken = false; // Reset for next turn
+                // Process completed actions and deduct energy
+                let completed_actions = std::mem::take(&mut resources.input_buffer.completed_actions);
+
+                for action in completed_actions {
+                    // Handle Quit action specially
+                    if matches!(action, PlayerAction::Quit) {
+                        resources.game_state.game_state = GameStatus::GameOver;
+                        return Ok(());
                     }
+
+                    // Consume energy for the completed action
+                    self.consume_player_energy(world, &action)?;
+                }
+
+                // If player has taken an action, switch to AI turn
+                if self.player_action_taken {
+                    self.state = TurnState::AITurn;
+                    self.player_action_taken = false; // Reset for next turn
                 }
             }
             TurnState::AITurn => {
                 // Process AI turns
                 self.process_ai_turns(world, resources)?;
-                
+
                 // After AI turn, regenerate energy for all entities
                 self.regenerate_energy(world);
-                
+
                 // Switch back to player turn
                 self.state = TurnState::PlayerTurn;
             }

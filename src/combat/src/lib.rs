@@ -1,8 +1,7 @@
 // src/combat/src/lib.rs
-#![allow(dead_code)]
-#![allow(unused)]
 
-use rand::Rng;
+use rand::Rng; // 添加这个导入以修复 random_bool 和 random_range 错误
+
 pub mod combatant;
 pub mod effect;
 pub mod enemy;
@@ -15,7 +14,6 @@ mod tests;
 pub use crate::combatant::Combatant;
 pub use crate::effect::*;
 pub use crate::enemy::Enemy;
-use items::Weapon;
 
 /// Handles combat interactions between entities
 pub struct Combat;

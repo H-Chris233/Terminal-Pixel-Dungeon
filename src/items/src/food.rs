@@ -104,7 +104,7 @@ impl Food {
         };
 
         // 状态修正
-        let mut value = if self.contaminated {
+        let value = if self.contaminated {
             (base_value as f32 * 0.6) as u32 // 污染食物价值降低40%
         } else {
             base_value

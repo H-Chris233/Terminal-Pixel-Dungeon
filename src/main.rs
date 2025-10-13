@@ -1,6 +1,3 @@
-#![allow(dead_code)]
-#![allow(unused)]
-
 pub mod ecs;
 pub mod systems;
 pub mod game_loop;
@@ -8,6 +5,7 @@ pub mod input;
 pub mod renderer;
 pub mod turn_system;
 pub mod core;
+pub mod event_bus;
 
 use renderer::{Renderer, Clock};
 
