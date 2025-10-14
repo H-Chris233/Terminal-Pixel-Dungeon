@@ -12,7 +12,8 @@ use error::GameError;
 use hero::{Hero, Bag};
 use items as game_items;
 use dungeon::Dungeon;
-use crate::event_bus::{EventBus, GameEvent, LogLevel};
+use crate::event_bus::{EventBus, GameEvent, LogLevel, EventHandler, Priority};
+use std::sync::{Arc, Mutex};
 
 // 说明：在完全解耦的系统中，这些模块间的通信应该通过事件总线完成
 // 例如，保存系统通过监听 GameSaved 事件来保存游戏状态
@@ -27,11 +28,23 @@ pub struct ECSWorld {
 
 impl ECSWorld {
     pub fn new() -> Self {
-        Self {
+        let mut ecs_world = Self {
             world: World::new(),
             resources: Resources::default(),
             event_bus: EventBus::new(),
-        }
+        };
+
+        // 注册默认的事件处理器
+        ecs_world.register_default_handlers();
+
+        ecs_world
+    }
+
+    /// 注册默认的事件处理器
+    fn register_default_handlers(&mut self) {
+        // 暂时不注册默认处理器
+        // 事件处理将在 process_events 中直接完成
+        // 外部模块可以根据需要注册自己的处理器
     }
 
     pub fn generate_and_set_dungeon(&mut self, max_depth: usize, seed: u64) -> anyhow::Result<()> {
@@ -60,59 +73,31 @@ impl ECSWorld {
     }
 
     /// 处理所有待处理的事件
+    /// 这个方法在 ECSWorld 级别处理核心游戏状态更新
+    /// 外部处理器（通过 subscribe）用于日志、UI 等非核心功能
     pub fn process_events(&mut self) {
-        // 收集所有待处理事件
+        // 事件已通过订阅者模式处理（日志、统计等）
+        // 这里处理核心游戏状态的更新
         let events: Vec<GameEvent> = self.event_bus.drain().collect();
 
-        // 处理每个事件
         for event in events {
-            self.handle_event(event);
+            self.handle_core_event(&event);
         }
     }
 
-    /// 帧结束时调用，准备处理下一帧事件
-    pub fn next_frame(&mut self) {
-        self.event_bus.next_frame();
-    }
-
-    /// 事件处理分发
-    fn handle_event(&mut self, event: GameEvent) {
-        // 克隆事件用于日志记录
-        match &event {
-            GameEvent::DamageDealt { attacker, victim, damage, is_critical } => {
-                // 记录伤害日志
-                let log_msg = if *is_critical {
+    /// 处理核心游戏状态事件（更新 Resources）
+    fn handle_core_event(&mut self, event: &GameEvent) {
+        match event {
+            GameEvent::DamageDealt { damage, is_critical, .. } => {
+                let msg = if *is_critical {
                     format!("暴击！造成 {} 点伤害", damage)
                 } else {
                     format!("造成 {} 点伤害", damage)
                 };
-                self.resources.game_state.message_log.push(log_msg);
-
-                // 应用伤害到受害者 - 收集需要发布的事件
-                let mut entities_to_kill = Vec::new();
-
-                for (_entity, stats) in self.world.query_mut::<&mut Stats>() {
-                    // Note: 这里需要通过 entity id 匹配，但 hecs::Entity 无法直接比较
-                    // 实际应用中需要添加 EntityId 组件
-                    if stats.hp > 0 {
-                        stats.hp = stats.hp.saturating_sub(*damage);
-                        if stats.hp == 0 {
-                            entities_to_kill.push(*victim);
-                        }
-                    }
-                }
-
-                // 在循环外发布死亡事件
-                for entity_id in entities_to_kill {
-                    self.publish_delayed_event(GameEvent::EntityDied {
-                        entity: entity_id,
-                        entity_name: "Entity".to_string(),
-                    });
-                }
+                self.resources.game_state.message_log.push(msg);
             }
 
             GameEvent::EntityDied { entity_name, .. } => {
-                // 记录死亡日志
                 self.resources.game_state.message_log.push(
                     format!("{} 已死亡", entity_name)
                 );
@@ -181,9 +166,106 @@ impl ECSWorld {
                 );
             }
 
-            // 其他事件暂时不处理，由具体系统处理
             _ => {}
         }
+    }
+
+    /// 帧结束时调用，准备处理下一帧事件
+    pub fn next_frame(&mut self) {
+        self.event_bus.next_frame();
+
+        // 同步消息日志到 resources
+        self.sync_message_log();
+    }
+
+    /// 同步事件处理器的消息日志到 Resources
+    fn sync_message_log(&mut self) {
+        // 这里可以从事件处理器获取日志并同步到 Resources
+        // 目前保持简单实现
+    }
+}
+
+// ========== 事件处理器实现 ==========
+
+/// 游戏状态事件处理器
+/// 负责处理游戏状态相关的事件，如伤害、死亡、物品使用等
+pub struct GameStateHandler {
+    message_log: Arc<Mutex<Vec<String>>>,
+}
+
+impl EventHandler for GameStateHandler {
+    fn handle(&mut self, event: &GameEvent) {
+        let message = match event {
+            GameEvent::DamageDealt { damage, is_critical, .. } => {
+                Some(if *is_critical {
+                    format!("暴击！造成 {} 点伤害", damage)
+                } else {
+                    format!("造成 {} 点伤害", damage)
+                })
+            }
+
+            GameEvent::EntityDied { entity_name, .. } => {
+                Some(format!("{} 已死亡", entity_name))
+            }
+
+            GameEvent::ItemPickedUp { item_name, .. } => {
+                Some(format!("拾取了 {}", item_name))
+            }
+
+            GameEvent::ItemUsed { item_name, effect, .. } => {
+                Some(format!("使用了 {}，{}", item_name, effect))
+            }
+
+            GameEvent::LevelChanged { old_level, new_level } => {
+                Some(format!("从第 {} 层进入第 {} 层", old_level, new_level))
+            }
+
+            GameEvent::GameOver { reason } => {
+                Some(format!("游戏结束：{}", reason))
+            }
+
+            GameEvent::Victory => {
+                Some("恭喜！你获得了胜利！".to_string())
+            }
+
+            GameEvent::LogMessage { message, level } => {
+                let prefix = match level {
+                    LogLevel::Debug => "[调试] ",
+                    LogLevel::Info => "",
+                    LogLevel::Warning => "[警告] ",
+                    LogLevel::Error => "[错误] ",
+                };
+                Some(format!("{}{}", prefix, message))
+            }
+
+            GameEvent::TrapTriggered { trap_type, .. } => {
+                Some(format!("触发了{}陷阱！", trap_type))
+            }
+
+            GameEvent::StatusApplied { status, duration, .. } => {
+                Some(format!("受到{}效果影响，持续{}回合", status, duration))
+            }
+
+            GameEvent::StatusRemoved { status, .. } => {
+                Some(format!("{}效果已消失", status))
+            }
+
+            _ => None,
+        };
+
+        if let Some(msg) = message {
+            if let Ok(mut log) = self.message_log.lock() {
+                log.push(msg);
+            }
+        }
+    }
+
+    fn name(&self) -> &str {
+        "GameStateHandler"
+    }
+
+    fn priority(&self) -> Priority {
+        Priority::High
     }
 }
 

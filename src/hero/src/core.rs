@@ -167,18 +167,7 @@ impl Hero {
         }
     }
 
-    /// 增强的事件处理
-    fn handle_events(&mut self, events: Vec<dungeon::InteractionEvent>) -> Result<(), HeroError> {
-        for event in events {
-            match event {
-                dungeon::InteractionEvent::TrapTriggered(effect) => self.apply_trap_effect(effect),
-                dungeon::InteractionEvent::ItemFound(item) => self.bag.add_item(item)?,
-                dungeon::InteractionEvent::EnemyEncounter(enemy) => self.enter_combat(enemy),
-                _ => {}
-            }
-        }
-        Ok(())
-    }
+
 
     pub fn gain_exp(&mut self, exp: u32) {
         self.experience += exp;

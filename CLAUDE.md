@@ -152,15 +152,92 @@ damage = base_damage × random(0.8-1.2) × crit_multiplier × ambush_multiplier 
 - 向上的楼梯在每层的 `stair_up` 位置
 - 向下的楼梯在每层的 `stair_down` 位置
 
-### 模块通信
-优先使用事件总线（EventBus）进行模块间通信，而非直接依赖：
-```rust
-// 发布事件
-event_bus.publish(&GameEvent::PlayerMoved { x: 5, y: 10 })?;
+### 模块通信 - 事件总线系统
 
-// 订阅事件
-event_bus.subscribe("PlayerMoved", Arc::new(|event| { ... }));
+**核心理念**：使用事件总线（EventBus）进行模块间解耦通信
+
+#### 基本使用
+
+```rust
+// 发布事件（立即处理）
+ecs_world.publish_event(GameEvent::DamageDealt {
+    attacker: 1,
+    victim: 2,
+    damage: 10,
+    is_critical: false,
+});
+
+// 发布延迟事件（下一帧处理）
+ecs_world.publish_delayed_event(GameEvent::EntityDied {
+    entity: 2,
+    entity_name: "哥布林".to_string(),
+});
 ```
+
+#### 订阅事件
+
+```rust
+// 创建自定义事件处理器
+struct MyHandler;
+
+impl EventHandler for MyHandler {
+    fn handle(&mut self, event: &GameEvent) {
+        match event {
+            GameEvent::DamageDealt { damage, .. } => {
+                println!("造成 {} 点伤害", damage);
+            }
+            _ => {}
+        }
+    }
+
+    fn name(&self) -> &str { "MyHandler" }
+    fn priority(&self) -> Priority { Priority::Normal }
+}
+
+// 注册处理器
+ecs_world.event_bus.subscribe_all(Box::new(MyHandler));
+```
+
+#### 内置事件类型
+
+- **战斗事件**：`CombatStarted`, `DamageDealt`, `EntityDied`
+- **移动事件**：`EntityMoved`
+- **物品事件**：`ItemPickedUp`, `ItemUsed`, `ItemEquipped`
+- **游戏状态**：`GameOver`, `Victory`, `LevelChanged`
+- **AI 事件**：`AIDecisionMade`, `AITargetChanged`
+- 更多事件见 `src/event_bus.rs`
+
+#### 优先级系统
+
+处理器按优先级执行（Critical > High > Normal > Low > Lowest）：
+- **Critical**: 崩溃处理、紧急保存
+- **High**: 核心游戏逻辑（战斗、移动）
+- **Normal**: 一般功能（默认）
+- **Low**: UI 更新、音效
+- **Lowest**: 日志、统计
+
+#### 示例：战斗模块发布事件
+
+```rust
+// src/combat/src/combat_manager.rs
+pub fn resolve_attack(&mut self, event_bus: &mut EventBus) {
+    event_bus.publish(GameEvent::CombatStarted { ... });
+
+    let damage = self.calculate_damage();
+    event_bus.publish(GameEvent::DamageDealt {
+        attacker: self.attacker_id,
+        victim: self.defender_id,
+        damage,
+        is_critical: self.is_critical_hit(),
+    });
+}
+```
+
+#### 完整文档
+
+- 使用指南：`EVENT_BUS_GUIDE.md`
+- 示例代码：`examples/event_handlers.rs`
+- 架构文档：`EVENT_BUS_SUMMARY.md`
 
 ## 渲染系统
 
