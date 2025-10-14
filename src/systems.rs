@@ -445,6 +445,10 @@ impl<'a> SimpleCombatant<'a> {
 }
 
 impl<'a> ::combat::Combatant for SimpleCombatant<'a> {
+    fn id(&self) -> u32 {
+        0 // 在ECS上下文中，这将由ECS Entity ID替换
+    }
+    
     fn hp(&self) -> u32 {
         self.stats.hp
     }
@@ -606,6 +610,8 @@ impl System for InventorySystem {
             match action {
                 PlayerAction::UseItem(slot_index) => {
                     if let Some(player_entity) = find_player_entity(world) {
+                        let player_id = player_entity.id();
+                        
                         // Get player's inventory
                         if let Ok(mut inventory) = world.get::<&mut Inventory>(player_entity) {
                             if slot_index < inventory.items.len() {
@@ -618,9 +624,10 @@ impl System for InventorySystem {
                                                     // Apply healing to player
                                                     if let Ok(mut stats) = world.get::<&mut Stats>(player_entity) {
                                                         stats.hp = (stats.hp + amount).min(stats.max_hp);
-                                                        resources.game_state.message_log.push(
-                                                            format!("You drink a {}, healing {} HP.", item.name, amount)
-                                                        );
+                                                        let message = format!("You drink a {}, healing {} HP.", item.name, amount);
+                                                        
+                                                        // Add message to game state log (original behavior)
+                                                        resources.game_state.message_log.push(message);
                                                         if resources.game_state.message_log.len() > 10 {
                                                             resources.game_state.message_log.remove(0);
                                                         }
@@ -630,9 +637,10 @@ impl System for InventorySystem {
                                                     // Apply damage to player (negative effect)
                                                     if let Ok(mut stats) = world.get::<&mut Stats>(player_entity) {
                                                         stats.hp = stats.hp.saturating_sub(*amount);
-                                                        resources.game_state.message_log.push(
-                                                            format!("You drink a {}, taking {} damage!", item.name, amount)
-                                                        );
+                                                        let message = format!("You drink a {}, taking {} damage!", item.name, amount);
+                                                        
+                                                        // Add message to game state log (original behavior)
+                                                        resources.game_state.message_log.push(message);
                                                         if resources.game_state.message_log.len() > 10 {
                                                             resources.game_state.message_log.remove(0);
                                                         }
@@ -648,15 +656,16 @@ impl System for InventorySystem {
                                                             StatType::Accuracy => stats.accuracy = (stats.accuracy as i32 + value) as u32,
                                                             StatType::Evasion => stats.evasion = (stats.evasion as i32 + value) as u32,
                                                         }
-                                                        resources.game_state.message_log.push(
-                                                            format!("You feel {}!", match stat {
-                                                                StatType::Hp => format!("healthier ({})", value),
-                                                                StatType::Attack => format!("stronger ({})", value),
-                                                                StatType::Defense => format!("tougher ({})", value),
-                                                                StatType::Accuracy => format!("more accurate ({})", value),
-                                                                StatType::Evasion => format!("more evasive ({})", value),
-                                                            })
-                                                        );
+                                                        let message = format!("You feel {}!", match stat {
+                                                            StatType::Hp => format!("healthier ({})", value),
+                                                            StatType::Attack => format!("stronger ({})", value),
+                                                            StatType::Defense => format!("tougher ({})", value),
+                                                            StatType::Accuracy => format!("more accurate ({})", value),
+                                                            StatType::Evasion => format!("more evasive ({})", value),
+                                                        });
+                                                        
+                                                        // Add message to game state log (original behavior)
+                                                        resources.game_state.message_log.push(message);
                                                         if resources.game_state.message_log.len() > 10 {
                                                             resources.game_state.message_log.remove(0);
                                                         }
@@ -669,7 +678,10 @@ impl System for InventorySystem {
                                                         // Use proper RNG for random position
                                                         pos.x = 5 + resources.rng.gen_range(0..15); // Random position between 5-19
                                                         pos.y = 5 + resources.rng.gen_range(0..15); // Random position between 5-19
-                                                        resources.game_state.message_log.push("You teleport randomly!".to_string());
+                                                        let message = "You teleport randomly!".to_string();
+                                                        
+                                                        // Add message to game state log (original behavior)
+                                                        resources.game_state.message_log.push(message);
                                                         if resources.game_state.message_log.len() > 10 {
                                                             resources.game_state.message_log.remove(0);
                                                         }
@@ -677,7 +689,10 @@ impl System for InventorySystem {
                                                 }
                                                 ConsumableEffect::Identify => {
                                                     // For now, just add a message
-                                                    resources.game_state.message_log.push("You feel more perceptive.".to_string());
+                                                    let message = "You feel more perceptive.".to_string();
+                                                    
+                                                    // Add message to game state log (original behavior)
+                                                    resources.game_state.message_log.push(message);
                                                     if resources.game_state.message_log.len() > 10 {
                                                         resources.game_state.message_log.remove(0);
                                                     }
@@ -688,24 +703,33 @@ impl System for InventorySystem {
                                             inventory.items.remove(slot_index);
                                         }
                                         _ => {
-                                            resources.game_state.message_log.push("Cannot use this item.".to_string());
+                                            let message = "Cannot use this item.".to_string();
+                                            
+                                            // Add message to game state log (original behavior)
+                                            resources.game_state.message_log.push(message);
                                             if resources.game_state.message_log.len() > 10 {
                                                 resources.game_state.message_log.remove(0);
                                             }
                                         }
                                     }
                                 } else {
-                                    resources.game_state.message_log.push("No item in this slot.".to_string());
+                                    let message = "No item in this slot.".to_string();
+                                    
+                                    // Add message to game state log (original behavior)
+                                    resources.game_state.message_log.push(message);
                                     if resources.game_state.message_log.len() > 10 {
                                         resources.game_state.message_log.remove(0);
                                     }
                                 }
                             } else {
-                                resources.game_state.message_log.push("Invalid inventory slot.".to_string());
+                                let message = "Invalid inventory slot.".to_string();
+                                new_actions.push(action);
+                                
+                                // Add message to game state log (original behavior)
+                                resources.game_state.message_log.push(message);
                                 if resources.game_state.message_log.len() > 10 {
                                     resources.game_state.message_log.remove(0);
                                 }
-                                new_actions.push(action);
                             }
                         } else {
                             new_actions.push(action);
@@ -716,7 +740,9 @@ impl System for InventorySystem {
                 }
                 PlayerAction::DropItem(slot_index) => {
                     // Extract item data first to avoid borrow conflicts
-                    let drop_result: Option<(Position, ECSItem)> = if let Some(player_entity) = find_player_entity(world) {
+                    let drop_result: Option<(Position, ECSItem, u32)> = if let Some(player_entity) = find_player_entity(world) {
+                        let player_id = player_entity.id();
+                        
                         // Get the player's position and item to drop (in separate operations)
                         let player_pos = match world.get::<&Position>(player_entity) {
                             Ok(pos) => Position::new(pos.x, pos.y, pos.z),
@@ -730,8 +756,9 @@ impl System for InventorySystem {
                         if let Ok(mut inventory) = world.get::<&mut Inventory>(player_entity) {
                             if slot_index < inventory.items.len() {
                                 if let Some(item_to_drop) = inventory.items.remove(slot_index).item {
-                                    Some((player_pos.clone(), item_to_drop))  // Clone the position to get owned value
+                                    Some((player_pos.clone(), item_to_drop, player_id))  // Clone the position to get owned value
                                 } else {
+                                    // Add message to game state log (original behavior)
                                     resources.game_state.message_log.push("No item in this slot to drop.".to_string());
                                     if resources.game_state.message_log.len() > 10 {
                                         resources.game_state.message_log.remove(0);
@@ -740,6 +767,7 @@ impl System for InventorySystem {
                                     None
                                 }
                             } else {
+                                // Add message to game state log (original behavior)
                                 resources.game_state.message_log.push("Invalid inventory slot.".to_string());
                                 if resources.game_state.message_log.len() > 10 {
                                     resources.game_state.message_log.remove(0);
@@ -757,7 +785,7 @@ impl System for InventorySystem {
                     };
                     
                     // Now spawn the item if we have the data
-                    if let Some((player_pos, item_to_drop)) = drop_result {
+                    if let Some((player_pos, item_to_drop, player_id)) = drop_result {
                         world.spawn((
                             Position::new(player_pos.x, player_pos.y, player_pos.z),
                             Renderable {
@@ -781,6 +809,7 @@ impl System for InventorySystem {
                             },
                         ));
                         
+                        // Add message to game state log (original behavior)
                         resources.game_state.message_log.push(format!("You dropped {}.", item_to_drop.name));
                         if resources.game_state.message_log.len() > 10 {
                             resources.game_state.message_log.remove(0);
@@ -909,10 +938,13 @@ impl System for DungeonSystem {
                             
                             if on_stairs_down {
                                 // Queue up level generation and player movement
-                                resources.game_state.message_log.push("You descend to the next level...".to_string());
-                                if resources.game_state.message_log.len() > 10 {
-                                    resources.game_state.message_log.remove(0);
-                                }
+                                let message = "You descend to the next level...".to_string();
+                                
+                                // Message already added above in the game state log
+                                // resources.game_state.message_log.push(message);
+                                // if resources.game_state.message_log.len() > 10 {
+                                //     resources.game_state.message_log.remove(0);
+                                // }
                                 
                                 resources.game_state.depth = (player_pos.z + 1) as usize;
                                 
@@ -923,6 +955,12 @@ impl System for DungeonSystem {
                                     // For now, we'll place them at a default position (10, 10) on the new level
                                     pos.x = 10;
                                     pos.y = 10;
+                                }
+                                
+                                // Add message to game state log (original behavior)
+                                resources.game_state.message_log.push("You descend to the next level...".to_string());
+                                if resources.game_state.message_log.len() > 10 {
+                                    resources.game_state.message_log.remove(0);
                                 }
                                 
                                 // Add generation of new level after all actions are processed
@@ -971,27 +1009,42 @@ impl System for DungeonSystem {
                                         pos.y = 10;
                                     }
                                     
-                                    resources.game_state.message_log.push("You ascend to the previous level...".to_string());
+                                    let message = "You ascend to the previous level...".to_string();
+                                    
+                                    // Add message to game state log (original behavior)
+                                    resources.game_state.message_log.push(message);
                                     if resources.game_state.message_log.len() > 10 {
                                         resources.game_state.message_log.remove(0);
                                     }
                                     
                                     resources.game_state.depth = (player_pos.z - 1) as usize;
                                     
+                                    // Add message to game state log (original behavior)
+                                    resources.game_state.message_log.push("You ascend to the previous level...".to_string());
+                                    if resources.game_state.message_log.len() > 10 {
+                                        resources.game_state.message_log.remove(0);
+                                    }
+                                    
                                     // Generate level for the new depth after actions are processed
                                 } else {
                                     // Player is at dungeon level 0, can't go higher
-                                    resources.game_state.message_log.push("You can't go up from here.".to_string());
+                                    let message = "You can't go up from here.".to_string();
+                                    
+                                    // Add message to game state log (original behavior)
+                                    resources.game_state.message_log.push(message);
                                     if resources.game_state.message_log.len() > 10 {
                                         resources.game_state.message_log.remove(0);
                                     }
                                 }
                             } else {
-                                resources.game_state.message_log.push("You need to stand on stairs to ascend.".to_string());
+                                let message = "You need to stand on stairs to ascend.".to_string();
+                                new_actions.push(action);
+                                
+                                // Add message to game state log (original behavior)
+                                resources.game_state.message_log.push(message);
                                 if resources.game_state.message_log.len() > 10 {
                                     resources.game_state.message_log.remove(0);
                                 }
-                                new_actions.push(action);
                             }
                         } else {
                             new_actions.push(action);

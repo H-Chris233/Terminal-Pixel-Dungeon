@@ -8,6 +8,10 @@ use items::weapon::Weapon;
 
 /// 战斗系统实现（确定性版本）
 impl Combatant for Hero {
+    fn id(&self) -> u32 {
+        self.entity_id.unwrap_or(0) // 使用entity_id字段或默认值0
+    }
+
     fn hp(&self) -> u32 {
         self.hp
     }

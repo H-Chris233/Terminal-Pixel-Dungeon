@@ -144,6 +144,7 @@ mod tests {
     }
 
     impl Combatant for TestCombatant {
+        fn id(&self) -> u32 { 0 }  // 添加缺失的id方法
         fn hp(&self) -> u32 { self.hp }
         fn max_hp(&self) -> u32 { self.max_hp }
         fn attack_power(&self) -> u32 { 10 }

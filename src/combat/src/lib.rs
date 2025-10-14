@@ -37,30 +37,17 @@ impl Combat {
         defender: &mut U,
         is_ambush: bool, // Whether this is an ambush attack
     ) -> CombatResult {
-        let mut result = CombatResult::new();
-
-        // Attacker's turn (with potential ambush bonus)
-        if is_ambush {
-            result.log(format!("Ambush by {}!", attacker.name()));
-        }
-        let attack_result = Self::resolve_attack(attacker, defender, is_ambush);
-        result.combine(attack_result);
-
-        // Defender's counterattack if alive (no ambush bonus since they know attacker is there)
-        if defender.is_alive() {
-            let counter_result = Self::resolve_attack(defender, attacker, false);
-            result.combine(counter_result);
-        }
-
-        result
+        Self::engage_with_ids(attacker, attacker.id(), defender, defender.id(), is_ambush)
     }
 
     /// Perform an attack with consideration for ambush mechanics
     pub fn perform_attack_with_ambush<T: Combatant, U: Combatant>(
         attacker: &mut T,
+        attacker_id: u32,
         attacker_x: i32,
         attacker_y: i32,
         defender: &mut U,
+        defender_id: u32,
         defender_x: i32,
         defender_y: i32,
         is_blocked: &dyn Fn(i32, i32) -> bool,
@@ -78,7 +65,33 @@ impl Combat {
             attacker_fov_range,
         );
 
-        Self::engage(attacker, defender, is_ambush)
+        Self::engage_with_ids(attacker, attacker_id, defender, defender_id, is_ambush)
+    }
+
+    /// Engage in combat between two combatants with explicit IDs (for event bus purposes)
+    pub fn engage_with_ids<T: Combatant, U: Combatant>(
+        attacker: &mut T,
+        attacker_id: u32,
+        defender: &mut U,
+        defender_id: u32,
+        is_ambush: bool, // Whether this is an ambush attack
+    ) -> CombatResult {
+        let mut result = CombatResult::new();
+
+        // Attacker's turn (with potential ambush bonus)
+        if is_ambush {
+            result.log(format!("Ambush by {}!", attacker.name()));
+        }
+        let attack_result = Self::resolve_attack_with_ids(attacker, attacker_id, defender, defender_id, is_ambush);
+        result.combine(attack_result);
+
+        // Defender's counterattack if alive (no ambush bonus since they know attacker is there)
+        if defender.is_alive() {
+            let counter_result = Self::resolve_attack_with_ids(defender, defender_id, attacker, attacker_id, false);
+            result.combine(counter_result);
+        }
+
+        result
     }
 
     /// Calculate hit chance (SPD-style formula)
@@ -131,6 +144,17 @@ impl Combat {
     pub fn resolve_attack<T: Combatant, U: Combatant>(
         attacker: &mut T,
         defender: &mut U,
+        is_ambush: bool,
+    ) -> CombatResult {
+        Self::resolve_attack_with_ids(attacker, attacker.id(), defender, defender.id(), is_ambush)
+    }
+
+    /// Resolve a single attack with combat logs and explicit IDs
+    fn resolve_attack_with_ids<T: Combatant, U: Combatant>(
+        attacker: &mut T,
+        _attacker_id: u32,
+        defender: &mut U,
+        _defender_id: u32,
         is_ambush: bool,
     ) -> CombatResult {
         let mut result = CombatResult::new();

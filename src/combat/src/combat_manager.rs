@@ -20,9 +20,11 @@ impl CombatManager {
         // Perform the attack with ambush consideration
         Combat::perform_attack_with_ambush(
             attacker,
+            0, // attacker_id - 现在需要提供ID
             attacker_x,
             attacker_y,
             defender,
+            0, // defender_id - 现在需要提供ID
             defender_x,
             defender_y,
             is_blocked,
@@ -49,9 +51,11 @@ impl CombatManager {
         // Attacker's turn
         let attack_result = Combat::perform_attack_with_ambush(
             attacker,
+            0, // attacker_id
             attacker_x,
             attacker_y,
             defender,
+            0, // defender_id
             defender_x,
             defender_y,
             is_blocked,
@@ -60,10 +64,9 @@ impl CombatManager {
         
         result.combine(attack_result);
 
-        // Defender's turn if still alive
+        // Defender knows about the attacker now, so no ambush possible
         if defender.is_alive() {
-            // Defender knows about the attacker now, so no ambush possible
-            let defender_result = Combat::engage(defender, attacker, false);
+            let defender_result = Combat::engage_with_ids(defender, 0, attacker, 0, false);
             result.combine(defender_result);
         }
 
@@ -102,9 +105,11 @@ impl CombatManager {
         // Perform the ranged attack
         Combat::perform_attack_with_ambush(
             attacker,
+            0, // attacker_id
             attacker_x,
             attacker_y,
             defender,
+            0, // defender_id
             defender_x,
             defender_y,
             is_blocked,
@@ -155,6 +160,7 @@ mod tests {
     }
 
     impl Combatant for TestCombatant {
+        fn id(&self) -> u32 { 0 }  // 添加缺失的id方法
         fn hp(&self) -> u32 { self.hp }
         fn max_hp(&self) -> u32 { self.max_hp }
         fn attack_power(&self) -> u32 { self.attack }

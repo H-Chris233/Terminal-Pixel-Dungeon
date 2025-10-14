@@ -39,10 +39,18 @@ impl TerminalUI {
             // 处理输入和游戏逻辑
             if let Event::Key(key) = event::read()? {
                 match key.code {
-                    KeyCode::Char('h') | KeyCode::Left => { hero.x = (hero.x - 1).max(0); }
-                    KeyCode::Char('j') | KeyCode::Down => { hero.y = (hero.y + 1).max(0); }
-                    KeyCode::Char('k') | KeyCode::Up => { hero.y = (hero.y - 1).max(0); }
-                    KeyCode::Char('l') | KeyCode::Right => { hero.x = (hero.x + 1).max(0); }
+                    KeyCode::Char('h') | KeyCode::Left => { 
+                        hero.x = (hero.x - 1).max(0);
+                    }
+                    KeyCode::Char('j') | KeyCode::Down => { 
+                        hero.y = (hero.y + 1).max(0);
+                    }
+                    KeyCode::Char('k') | KeyCode::Up => { 
+                        hero.y = (hero.y - 1).max(0);
+                    }
+                    KeyCode::Char('l') | KeyCode::Right => { 
+                        hero.x = (hero.x + 1).max(0);
+                    }
                     KeyCode::Char('i') => self.show_inventory(hero),
                     KeyCode::Char('u') => self.use_item(hero),
                     KeyCode::Char('d') => self.drop_item(hero),
@@ -95,7 +103,9 @@ impl TerminalUI {
     pub fn descend(&mut self, dungeon: &mut Dungeon, hero: &mut Hero) {
         // 实现下楼逻辑
         if dungeon.can_descend(hero.x, hero.y) {
-            dungeon.depth += 1;
+            if dungeon.descend().is_ok() {
+                // 重置英雄位置到新层的楼梯位置
+            }
             // 重置英雄位置到新层的楼梯位置
         }
     }
@@ -103,7 +113,9 @@ impl TerminalUI {
     pub fn ascend(&mut self, dungeon: &mut Dungeon, hero: &mut Hero) {
         // 实现上楼逻辑
         if dungeon.depth > 1 && dungeon.can_ascend(hero.x, hero.y) {
-            dungeon.depth -= 1;
+            if dungeon.ascend().is_ok() {
+                // 重置英雄位置到上层的楼梯位置
+            }
             // 重置英雄位置到上层的楼梯位置
         }
     }

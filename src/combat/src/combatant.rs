@@ -6,6 +6,9 @@ use items::weapon::Weapon;
 
 /// 表示可以参加战斗的活体
 pub trait Combatant {
+    /// 获取实体ID（用于事件总线）
+    fn id(&self) -> u32;
+
     /// 获取当前生命值
     fn hp(&self) -> u32;
 
@@ -73,6 +76,10 @@ pub trait Combatant {
 
 // 为Enemy实现Combatant
 impl Combatant for Enemy {
+    fn id(&self) -> u32 {
+        self.entity_id.unwrap_or(0) // 使用entity_id字段或默认值0
+    }
+
     fn hp(&self) -> u32 {
         self.hp
     }

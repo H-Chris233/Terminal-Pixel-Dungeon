@@ -121,12 +121,17 @@ impl Dungeon {
 
     /// 统一处理英雄进入新格子的所有交互
     pub fn on_hero_enter(&mut self, x: i32, y: i32) -> Vec<InteractionEvent> {
+        self.on_hero_enter_with_events(x, y)
+    }
+    
+    /// 统一处理英雄进入新格子的所有交互
+    pub fn on_hero_enter_with_events(&mut self, x: i32, y: i32) -> Vec<InteractionEvent> {
         let mut events = Vec::new();
 
         // 1. 陷阱检测（优先处理）
         if let Some(mut trap) = self.current_level_mut().get_trap(x, y) {
             if let Some(effect) = trap.trigger() {
-                events.push(InteractionEvent::TrapTriggered(effect));
+                events.push(InteractionEvent::TrapTriggered(effect.clone()));
             }
         }
 

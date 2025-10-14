@@ -64,6 +64,9 @@ pub struct Hero {
     pub effects: EffectManager,
     pub rng: HeroRng,
     pub bag: Bag,
+    
+    // 用于事件总线的ID
+    pub entity_id: Option<u32>,
 }
 
 impl Hero {
@@ -91,6 +94,7 @@ impl Hero {
             effects: EffectManager::new(),
             rng: HeroRng::new(seed),
             bag: Bag::new(),
+            entity_id: None,
         };
 
         // 根据职业初始化属性（SPD标准值）

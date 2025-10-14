@@ -28,6 +28,7 @@ pub struct Enemy {
     pub is_surprised: bool,
     pub weapon: Option<Weapon>,
     pub crit_bonus: f32,
+    pub entity_id: Option<u32>, // 添加entity_id用于事件总线
 }
 
 impl Enemy {
@@ -107,6 +108,7 @@ impl Enemy {
             weapon: None,
             crit_bonus: 0.0,
             effects: Vec::new(),
+            entity_id: None, // 添加entity_id字段
         }
     }
 

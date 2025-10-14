@@ -157,6 +157,7 @@ mod tests {
     }
 
     impl Combatant for MockCombatant {
+        fn id(&self) -> u32 { 0 }  // 添加缺失的id方法
         fn hp(&self) -> u32 { 100 }
         fn max_hp(&self) -> u32 { 100 }
         fn attack_power(&self) -> u32 { 10 }
