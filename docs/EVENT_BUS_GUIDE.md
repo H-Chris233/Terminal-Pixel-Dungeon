@@ -9,6 +9,8 @@
 - **事件过滤**：处理器可以选择性地处理特定事件
 - **历史记录**：保留最近的事件历史用于调试
 - **队列模式**：兼容游戏循环的单向数据流
+- **中间件系统**：在事件处理前后插入逻辑
+- **高级过滤功能**：支持条件过滤和速率限制
 
 ## 核心概念
 
@@ -62,6 +64,33 @@ pub trait EventHandler: Send + Sync {
 }
 ```
 
+### 3. EventMiddleware Trait
+
+事件中间件可以拦截和处理事件：
+
+```rust
+pub trait EventMiddleware: Send + Sync {
+    /// 在事件处理之前调用，可以修改事件或阻止处理
+    /// 返回 true 表示继续处理，false 表示阻止处理
+    fn before_handle(&mut self, event: &GameEvent) -> bool {
+        true // 默认允许处理
+    }
+
+    /// 在事件处理之后调用
+    fn after_handle(&mut self, event: &GameEvent) {
+        // 默认不执行任何操作
+    }
+
+    /// 中间件名称（用于调试）
+    fn name(&self) -> &str;
+
+    /// 中间件优先级
+    fn priority(&self) -> Priority {
+        Priority::Normal
+    }
+}
+```
+
 ### 3. 优先级
 
 ```rust
@@ -100,6 +129,41 @@ event_bus.publish_delayed(GameEvent::EntityDied {
     entity: 2,
     entity_name: "哥布林".to_string(),
 });
+```
+
+### 注册中间件
+
+#### 基本中间件注册
+
+```rust
+// 注册一个中间件
+let logging_middleware = LoggingMiddleware::new(messages.clone());
+event_bus.register_middleware(Box::new(logging_middleware));
+```
+
+#### 条件过滤中间件
+
+```rust
+use std::time::Duration;
+
+// 创建一个只处理高伤害事件的过滤器
+let high_damage_filter = ConditionalFilter::new(
+    |event| match event {
+        GameEvent::DamageDealt { damage, .. } => *damage > 10, // 只处理伤害大于10的事件
+        _ => true, // 其他事件不过滤
+    },
+    "HighDamageFilter"
+);
+
+event_bus.register_middleware(Box::new(high_damage_filter));
+```
+
+#### 速率限制中间件
+
+```rust
+// 创建一个限制每秒最多处理5个事件的速率限制器
+let rate_limiter = RateLimitMiddleware::new(5, Duration::from_secs(1));
+event_bus.register_middleware(Box::new(rate_limiter));
 ```
 
 ### 订阅事件
@@ -242,6 +306,51 @@ let all_events = event_bus.full_history();
 
 // 清空历史记录
 event_bus.clear_history();
+```
+
+### 5. 高级中间件用法
+
+#### 复杂条件过滤
+
+```rust
+// 创建一个复合条件过滤器
+let complex_filter = ConditionalFilter::new(
+    |event| match event {
+        GameEvent::DamageDealt { attacker, victim, damage, .. } => {
+            // 只处理玩家对敌人的高伤害攻击
+            *attacker == PLAYER_ENTITY_ID && 
+            *damage > 20
+        }
+        GameEvent::EntityDied { entity, .. } => {
+            // 只处理敌人死亡事件
+            is_enemy_entity(*entity)
+        }
+        _ => true, // 其他事件不过滤
+    },
+    "ComplexFilter"
+);
+
+event_bus.register_middleware(Box::new(complex_filter));
+```
+
+#### 事件统计中间件
+
+```rust
+// 使用计数中间件统计事件
+let mut counting_middleware = CountingMiddleware::new();
+event_bus.register_middleware(Box::new(counting_middleware));
+
+// 在某个时间点检查统计信息
+println!("DamageDealt 事件数量: {}", counting_middleware.get_count("DamageDealt"));
+println!("总事件数: {}", counting_middleware.total_events());
+```
+
+#### 调试中间件
+
+```rust
+// 仅调试特定类型的事件
+let debug_middleware = DebuggingMiddleware::new(vec!["DamageDealt", "EntityDied"]);
+event_bus.register_middleware(Box::new(debug_middleware));
 ```
 
 ## 模块解耦示例
@@ -477,6 +586,115 @@ println!("总事件数: {}", stats.total_events());
 }
 ```
 
+## 完整示例：战斗日志系统
+
+以下是一个完整的示例，展示如何使用事件总线构建一个战斗日志系统：
+
+```rust
+use std::sync::{Arc, Mutex};
+use terminal_pixel_dungeon::event_bus::{EventBus, GameEvent, EventHandler, EventMiddleware, Priority};
+
+// 战斗日志处理器
+struct BattleLogHandler {
+    log_buffer: Arc<Mutex<Vec<String>>>,
+}
+
+impl BattleLogHandler {
+    fn new(log_buffer: Arc<Mutex<Vec<String>>>) -> Self {
+        Self { log_buffer }
+    }
+}
+
+impl EventHandler for BattleLogHandler {
+    fn handle(&mut self, event: &GameEvent) {
+        let message = match event {
+            GameEvent::DamageDealt { attacker, victim, damage, is_critical } => {
+                let crit_text = if *is_critical { " [暴击!]" } else { "" };
+                format!("实体{}对实体{}造成{}点伤害{}", attacker, victim, damage, crit_text)
+            }
+            GameEvent::EntityDied { entity_name, .. } => {
+                format!("{}已死亡", entity_name)
+            }
+            _ => return, // 只处理战斗相关事件
+        };
+
+        if let Ok(mut logs) = self.log_buffer.lock() {
+            logs.push(message);
+        }
+    }
+
+    fn name(&self) -> &str {
+        "BattleLogHandler"
+    }
+
+    fn should_handle(&self, event: &GameEvent) -> bool {
+        matches!(event, 
+            GameEvent::DamageDealt { .. } | 
+            GameEvent::EntityDied { .. }
+        )
+    }
+}
+
+// 战斗事件过滤器：只处理玩家参与的战斗
+struct PlayerBattleFilter;
+
+impl EventMiddleware for PlayerBattleFilter {
+    fn before_handle(&mut self, event: &GameEvent) -> bool {
+        match event {
+            GameEvent::DamageDealt { attacker, victim, .. } => {
+                // 假设玩家实体ID为0
+                *attacker == 0 || *victim == 0
+            }
+            GameEvent::EntityDied { entity, .. } => {
+                // 只记录玩家死亡事件
+                *entity == 0
+            }
+            _ => true, // 其他事件不过滤
+        }
+    }
+
+    fn name(&self) -> &str {
+        "PlayerBattleFilter"
+    }
+}
+
+// 使用示例
+fn setup_battle_logging() {
+    let mut event_bus = EventBus::new();
+    
+    // 创建共享的日志缓冲区
+    let log_buffer = Arc::new(Mutex::new(Vec::new()));
+    
+    // 注册处理器
+    event_bus.subscribe_all(Box::new(BattleLogHandler::new(log_buffer.clone())));
+    
+    // 注册中间件
+    event_bus.register_middleware(Box::new(PlayerBattleFilter));
+    
+    // 测试战斗事件
+    event_bus.publish(GameEvent::DamageDealt {
+        attacker: 0,  // 玩家
+        victim: 1,    // 敌人
+        damage: 15,
+        is_critical: true,
+    });
+    
+    event_bus.publish(GameEvent::DamageDealt {
+        attacker: 2,  // 敌人
+        victim: 3,    // 另一个敌人
+        damage: 10,
+        is_critical: false,
+    });
+    
+    // 只有第一个事件会被处理，因为第二个事件不涉及玩家
+    // (实际上两个事件都会触发中间件，但只有符合过滤条件的会被传递给处理器)
+    
+    // 检查日志
+    let logs = log_buffer.lock().unwrap();
+    println!("战斗日志: {:?}", *logs);
+}
+```
+
 ## 总结
 
 事件总线系统为项目提供了：
@@ -486,5 +704,7 @@ println!("总事件数: {}", stats.total_events());
 ✅ **可测试**：容易模拟和测试事件流
 ✅ **可追踪**：事件历史便于调试
 ✅ **高性能**：优先级系统确保关键逻辑先执行
+✅ **可扩展**：中间件系统允许在事件处理前后插入逻辑
+✅ **可过滤**：高级过滤功能支持复杂条件过滤和速率限制
 
-通过合理使用事件总线，可以构建出松耦合、易维护的游戏架构。
+通过合理使用事件总线，可以构建出松耦合、易维护、可扩展的游戏架构。

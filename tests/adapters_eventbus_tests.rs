@@ -15,8 +15,8 @@ mod tests {
     #[test]
     fn event_bus_publish_subscribe() {
         use terminal_pixel_dungeon::event_bus::GameEvent;
-        let bus = EventBus::new();
-        let result = bus.publish(&GameEvent::PlayerMoved { x: 1, y: 2 });
-        assert!(result.is_ok());
+        let mut bus = EventBus::new();
+        bus.publish(GameEvent::PlayerTurnStarted);
+        assert_eq!(bus.len(), 1);
     }
 }
