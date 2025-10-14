@@ -39,6 +39,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
             Box::new(EffectSystem),
             Box::new(EnergySystem),
             Box::new(InventorySystem),
+            Box::new(HungerSystem),    // 新增：饥饿系统
             Box::new(DungeonSystem),
             Box::new(RenderingSystem),
         ];
@@ -116,6 +117,10 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                 items: vec![],
                 max_slots: 10,
             },
+            // ========== 新增：玩家专属组件 ==========
+            crate::ecs::Hunger::new(5),  // 初始饱食度为5（半饱）
+            crate::ecs::Wealth::new(0),  // 初始金币为0
+            crate::ecs::PlayerProgress::new(10, "Warrior".to_string()),  // 初始力量10，战士职业
             Viewshed {
                 range: 8,
                 visible_tiles: vec![],
@@ -181,6 +186,11 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                 },
                 value: 10,
                 identified: true,
+                quantity: 1,
+                level: 0,
+                cursed: false,
+                charges: None,
+                detailed_data: None,
             },
             Tile {
                 terrain_type: TerrainType::Empty,
@@ -313,6 +323,22 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                     continue;
                 }
 
+                // 特殊处理 HungerSystem，使用事件版本
+                if system.name() == "HungerSystem" {
+                    match HungerSystem::run_with_events(&mut self.ecs_world) {
+                        SystemResult::Continue => continue,
+                        SystemResult::Stop => {
+                            self.is_running = false;
+                            return Ok(());
+                        }
+                        SystemResult::Error(msg) => {
+                            eprintln!("System error: {}", msg);
+                            return Err(anyhow::anyhow!(msg));
+                        }
+                    }
+                    continue;
+                }
+
                 match system.run(&mut self.ecs_world.world, &mut self.ecs_world.resources) {
                     SystemResult::Continue => continue,
                     SystemResult::Stop => {
@@ -343,6 +369,22 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                 // 特殊处理 CombatSystem，使用事件版本
                 if system.name() == "CombatSystem" {
                     match CombatSystem::run_with_events(&mut self.ecs_world) {
+                        SystemResult::Continue => continue,
+                        SystemResult::Stop => {
+                            self.is_running = false;
+                            return Ok(());
+                        }
+                        SystemResult::Error(msg) => {
+                            eprintln!("System error: {}", msg);
+                            return Err(anyhow::anyhow!(msg));
+                        }
+                    }
+                    continue;
+                }
+
+                // 特殊处理 HungerSystem，使用事件版本
+                if system.name() == "HungerSystem" {
+                    match HungerSystem::run_with_events(&mut self.ecs_world) {
                         SystemResult::Continue => continue,
                         SystemResult::Stop => {
                             self.is_running = false;
@@ -471,6 +513,7 @@ impl HeadlessGameLoop {
             Box::new(EffectSystem),
             Box::new(EnergySystem),
             Box::new(InventorySystem),
+            Box::new(HungerSystem),    // 新增：饥饿系统
             Box::new(DungeonSystem),
             Box::new(RenderingSystem),
         ];

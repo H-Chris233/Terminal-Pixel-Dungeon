@@ -47,6 +47,16 @@ pub enum GameEvent {
     /// 卸下物品
     ItemUnequipped { entity: u32, item_name: String, slot: String },
 
+    // ===== 玩家状态事件 =====
+    /// 饥饿度变化
+    HungerChanged { entity: u32, old_satiety: u8, new_satiety: u8 },
+    /// 玩家感到饥饿
+    PlayerHungry { entity: u32, satiety: u8 },
+    /// 玩家正在挨饿
+    PlayerStarving { entity: u32 },
+    /// 饥饿造成伤害
+    StarvationDamage { entity: u32, damage: u32 },
+
     // ===== 游戏状态事件 =====
     /// 回合结束
     TurnEnded { turn: u32 },
@@ -421,6 +431,10 @@ impl GameEvent {
             GameEvent::GameSaved { .. } => "GameSaved",
             GameEvent::GameLoaded { .. } => "GameLoaded",
             GameEvent::LogMessage { .. } => "LogMessage",
+            GameEvent::HungerChanged { .. } => "HungerChanged",
+            GameEvent::PlayerHungry { .. } => "PlayerHungry",
+            GameEvent::PlayerStarving { .. } => "PlayerStarving",
+            GameEvent::StarvationDamage { .. } => "StarvationDamage",
         }
     }
 }

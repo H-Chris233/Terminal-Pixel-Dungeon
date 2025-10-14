@@ -2,7 +2,7 @@ use crate::ecs::{AI, Actor, Energy, Player, Position, Resources, Viewshed,
                 PlayerAction, Direction, Tile, TerrainType, Renderable,
                 Faction, Stats, Inventory, ItemSlot, ECSItem, ItemType,
                 ConsumableEffect, StatType, GameStatus, Color, ECSWorld,
-                AIType};
+                AIType, Hunger, Wealth, PlayerProgress};
 use crate::event_bus::LogLevel;
 use hecs::{Entity, World};
 use std::error::Error;
@@ -799,6 +799,11 @@ impl System for InventorySystem {
                                 item_type: item_to_drop.item_type.clone(),
                                 value: item_to_drop.value,
                                 identified: item_to_drop.identified,
+                                quantity: item_to_drop.quantity,
+                                level: item_to_drop.level,
+                                cursed: item_to_drop.cursed,
+                                charges: item_to_drop.charges,
+                                detailed_data: item_to_drop.detailed_data.clone(),
                             },
                             Tile {
                                 terrain_type: TerrainType::Empty,
@@ -1141,7 +1146,17 @@ impl DungeonSystem {
                 world.spawn((
                     Position::new(item.x, item.y, level),
                     Renderable { symbol: '!', fg_color: Color::Red, bg_color: Some(Color::Black), order: 1 },
-                    ECSItem { name: item.name.clone(), item_type: ItemType::Consumable { effect: ConsumableEffect::Healing { amount: 10 } }, value: 5, identified: true },
+                    ECSItem {
+                        name: item.name.clone(),
+                        item_type: ItemType::Consumable { effect: ConsumableEffect::Healing { amount: 10 } },
+                        value: 5,
+                        identified: true,
+                        quantity: 1,
+                        level: 0,
+                        cursed: false,
+                        charges: None,
+                        detailed_data: None,
+                    },
                     Tile { terrain_type: TerrainType::Empty, is_passable: true, blocks_sight: false, has_items: true, has_monster: false },
                 ));
             }
@@ -1280,6 +1295,11 @@ impl DungeonSystem {
                     },
                     value: 10,
                     identified: true,
+                    quantity: 1,
+                    level: 0,
+                    cursed: false,
+                    charges: None,
+                    detailed_data: None,
                 },
                 Tile {
                     terrain_type: TerrainType::Empty,
@@ -1324,6 +1344,131 @@ impl System for InteractionSystem {
 
     fn run(&mut self, world: &mut World, _resources: &mut Resources) -> SystemResult {
         Self::handle_interactions(world);
+        SystemResult::Continue
+    }
+}
+
+// ========== 新增：HungerSystem（饱食度系统）==========
+
+/// 饥饿系统：处理玩家的饱食度变化
+/// 遵循 SPD 标准：每20回合减少1点饱食度
+/// 饱食度为0时每回合掉血
+pub struct HungerSystem;
+
+impl HungerSystem {
+    /// 带事件总线的运行方法
+    pub fn run_with_events(ecs_world: &mut ECSWorld) -> SystemResult {
+        use crate::event_bus::GameEvent;
+
+        // 获取当前总回合数
+        let current_turn = ecs_world.resources.clock.turn_count;
+
+        // 收集需要处理的实体信息（避免借用冲突）
+        let mut entities_to_process = Vec::new();
+
+        for (entity, (hunger, stats)) in ecs_world.world.query::<(&Hunger, &Stats)>().iter() {
+            let is_player = ecs_world.world.get::<&Player>(entity).is_ok();
+            entities_to_process.push((entity, hunger.clone(), stats.clone(), is_player));
+        }
+
+        // 处理每个实体
+        for (entity, mut hunger, mut stats, is_player) in entities_to_process {
+            // 每20回合减少1点饱食度
+            if current_turn > 0 && (current_turn - hunger.last_hunger_turn) >= 20 {
+                let old_satiety = hunger.satiety;
+                hunger.satiety = hunger.satiety.saturating_sub(1);
+                hunger.last_hunger_turn = current_turn;
+
+                // 发布饥饿度变化事件
+                ecs_world.publish_event(GameEvent::HungerChanged {
+                    entity: entity.id() as u32,
+                    old_satiety,
+                    new_satiety: hunger.satiety,
+                });
+
+                // 饥饿状态处理
+                if hunger.is_starving() {
+                    // 发布挨饿事件
+                    ecs_world.publish_event(GameEvent::PlayerStarving {
+                        entity: entity.id() as u32,
+                    });
+
+                    // 饥饿致死：每回合掉1血
+                    let damage = 1;
+                    stats.hp = stats.hp.saturating_sub(damage);
+
+                    // 发布饥饿伤害事件
+                    ecs_world.publish_event(GameEvent::StarvationDamage {
+                        entity: entity.id() as u32,
+                        damage,
+                    });
+
+                    // 检查玩家是否死亡
+                    if stats.hp == 0 && is_player {
+                        ecs_world.publish_event(GameEvent::GameOver {
+                            reason: "死于饥饿".to_string(),
+                        });
+
+                        // 更新组件
+                        let _ = ecs_world.world.insert(entity, (hunger, stats));
+                        return SystemResult::Stop;
+                    }
+                } else if hunger.is_hungry() {
+                    // 发布饥饿警告事件（每40回合一次，避免刷屏）
+                    if current_turn % 40 == 0 {
+                        ecs_world.publish_event(GameEvent::PlayerHungry {
+                            entity: entity.id() as u32,
+                            satiety: hunger.satiety,
+                        });
+                    }
+                }
+
+                // 更新组件
+                let _ = ecs_world.world.insert(entity, (hunger, stats));
+            }
+        }
+
+        SystemResult::Continue
+    }
+}
+
+impl System for HungerSystem {
+    fn name(&self) -> &str {
+        "HungerSystem"
+    }
+
+    fn run(&mut self, world: &mut World, resources: &mut Resources) -> SystemResult {
+        // 获取当前总回合数
+        let current_turn = resources.clock.turn_count;
+
+        // 处理所有拥有 Hunger 组件的实体（主要是玩家）
+        for (entity, (hunger, stats)) in world.query::<(&mut Hunger, &mut Stats)>().iter() {
+            // 每20回合减少1点饱食度
+            if current_turn > 0 && (current_turn - hunger.last_hunger_turn) >= 20 {
+                hunger.satiety = hunger.satiety.saturating_sub(1);
+                hunger.last_hunger_turn = current_turn;
+
+                // 饥饿状态处理
+                if hunger.is_starving() {
+                    // 饥饿致死：每回合掉1血
+                    stats.hp = stats.hp.saturating_sub(1);
+                    resources.game_state.message_log.push("你正在饿死！".to_string());
+
+                    // 检查玩家是否死亡
+                    if stats.hp == 0 && world.get::<&Player>(entity).is_ok() {
+                        resources.game_state.game_state = GameStatus::GameOver;
+                        resources.game_state.message_log.push("你死于饥饿...".to_string());
+                        return SystemResult::Stop;
+                    }
+                } else if hunger.is_hungry() {
+                    // 饥饿警告状态
+                    if current_turn % 40 == 0 {  // 每40回合提示一次
+                        resources.game_state.message_log.push("你感到饥饿...".to_string());
+                    }
+                }
+            }
+        }
+
         SystemResult::Continue
     }
 }

@@ -165,6 +165,25 @@ impl ECSWorld {
                 );
             }
 
+            // 饥饿事件处理
+            GameEvent::PlayerHungry { satiety, .. } => {
+                self.resources.game_state.message_log.push(
+                    format!("你感到饥饿...（饱食度：{}）", satiety)
+                );
+            }
+
+            GameEvent::PlayerStarving { .. } => {
+                self.resources.game_state.message_log.push(
+                    "你正在饿死！".to_string()
+                );
+            }
+
+            GameEvent::StarvationDamage { damage, .. } => {
+                self.resources.game_state.message_log.push(
+                    format!("饥饿造成了 {} 点伤害", damage)
+                );
+            }
+
             _ => {}
         }
     }
@@ -519,12 +538,23 @@ pub struct ItemSlot {
     pub quantity: u32,
 }
 
+/// 增强的 ECS 物品组件（支持 items 模块的完整功能）
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ECSItem {
     pub name: String,
     pub item_type: ItemType,
     pub value: u32,
     pub identified: bool,
+
+    // ========== 扩展属性（支持 items 模块） ==========
+    pub quantity: u32,        // 堆叠数量（药水、卷轴、食物等）
+    pub level: i32,           // 升级等级（武器、护甲）
+    pub cursed: bool,         // 是否被诅咒
+    pub charges: Option<u32>, // 充能次数（法杖、魔法石）
+
+    /// 详细数据（可选）：序列化的 items::Item
+    /// 用于存储完整的 items 模块对象，实现完全兼容
+    pub detailed_data: Option<Vec<u8>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -543,6 +573,100 @@ pub enum ConsumableEffect {
     Buff { stat: StatType, value: i32, duration: u32 },
     Teleport,
     Identify,
+}
+
+impl ECSItem {
+    /// 创建基础物品（不带详细数据）
+    pub fn new_basic(name: String, item_type: ItemType, value: u32) -> Self {
+        Self {
+            name,
+            item_type,
+            value,
+            identified: false,
+            quantity: 1,
+            level: 0,
+            cursed: false,
+            charges: None,
+            detailed_data: None,
+        }
+    }
+
+    /// 从 items::Item 创建 ECSItem（包含完整数据）
+    pub fn from_items_item(item: &items::Item) -> Result<Self, Box<dyn std::error::Error>> {
+        // 序列化完整的 items::Item
+        let detailed_data = bincode::encode_to_vec(item, bincode::config::standard())?;
+
+        // 映射基础类型
+        let item_type = Self::map_item_kind_to_type(&item.kind);
+
+        Ok(Self {
+            name: item.name.clone(),
+            item_type,
+            value: item.value(),
+            identified: !item.needs_identify(),
+            quantity: item.quantity,
+            level: 0,  // items::Item 没有直接的 level 字段
+            cursed: false,  // 需要根据具体物品类型判断
+            charges: None,  // 需要根据具体物品类型提取
+            detailed_data: Some(detailed_data),
+        })
+    }
+
+    /// 将 items::ItemKind 映射到 ItemType
+    fn map_item_kind_to_type(kind: &items::ItemKind) -> ItemType {
+        match kind {
+            items::ItemKind::Weapon(w) => ItemType::Weapon {
+                damage: w.damage.0,  // 使用 damage 元组的第一个值（最小伤害）
+            },
+            items::ItemKind::Armor(a) => ItemType::Armor {
+                defense: a.defense as u32,
+            },
+            items::ItemKind::Potion(_) => ItemType::Consumable {
+                effect: ConsumableEffect::Healing { amount: 10 },  // 简化处理
+            },
+            items::ItemKind::Food(_) => ItemType::Consumable {
+                effect: ConsumableEffect::Healing { amount: 5 },
+            },
+            items::ItemKind::Scroll(_) => ItemType::Consumable {
+                effect: ConsumableEffect::Identify,
+            },
+            _ => ItemType::Quest,  // 其他类型映射为任务物品
+        }
+    }
+
+    /// 转换回 items::Item（如果有详细数据）
+    pub fn to_items_item(&self) -> Result<items::Item, Box<dyn std::error::Error>> {
+        if let Some(ref data) = self.detailed_data {
+            let (item, _): (items::Item, _) = bincode::decode_from_slice(data, bincode::config::standard())?;
+            Ok(item)
+        } else {
+            Err("No detailed data available".into())
+        }
+    }
+
+    /// 是否为可堆叠物品
+    pub fn is_stackable(&self) -> bool {
+        matches!(
+            self.item_type,
+            ItemType::Consumable { .. }
+        )
+    }
+
+    /// 是否可用
+    pub fn is_usable(&self) -> bool {
+        matches!(
+            self.item_type,
+            ItemType::Consumable { .. }
+        )
+    }
+
+    /// 是否可装备
+    pub fn is_equippable(&self) -> bool {
+        matches!(
+            self.item_type,
+            ItemType::Weapon { .. } | ItemType::Armor { .. }
+        )
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -614,6 +738,127 @@ pub struct Effects {
     pub active_effects: Vec<ActiveEffect>,
 }
 
+// ========== 新增组件：玩家专属属性 ==========
+
+/// 饥饿系统组件（模拟 SPD 的饱食度机制）
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Hunger {
+    pub satiety: u8,           // 饱食度（0-10，SPD标准）
+    pub last_hunger_turn: u32, // 上次饥饿减少的回合数
+}
+
+impl Default for Hunger {
+    fn default() -> Self {
+        Self {
+            satiety: 5,  // 默认半饱状态
+            last_hunger_turn: 0,
+        }
+    }
+}
+
+impl Hunger {
+    pub fn new(satiety: u8) -> Self {
+        Self {
+            satiety: satiety.min(10),
+            last_hunger_turn: 0,
+        }
+    }
+
+    /// 是否处于饥饿状态
+    pub fn is_starving(&self) -> bool {
+        self.satiety == 0
+    }
+
+    /// 是否处于饥饿警告状态
+    pub fn is_hungry(&self) -> bool {
+        self.satiety <= 2
+    }
+
+    /// 进食恢复饱食度
+    pub fn feed(&mut self, amount: u8) {
+        self.satiety = (self.satiety + amount).min(10);
+    }
+
+    /// 每回合自动减少饱食度（每20回合减1）
+    pub fn on_turn(&mut self, current_turn: u32) {
+        if current_turn - self.last_hunger_turn >= 20 {
+            self.satiety = self.satiety.saturating_sub(1);
+            self.last_hunger_turn = current_turn;
+        }
+    }
+}
+
+/// 财富组件（金币系统）
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Wealth {
+    pub gold: u32,
+}
+
+impl Default for Wealth {
+    fn default() -> Self {
+        Self { gold: 0 }
+    }
+}
+
+impl Wealth {
+    pub fn new(gold: u32) -> Self {
+        Self { gold }
+    }
+
+    pub fn add_gold(&mut self, amount: u32) {
+        self.gold = self.gold.saturating_add(amount);
+    }
+
+    pub fn remove_gold(&mut self, amount: u32) -> bool {
+        if self.gold >= amount {
+            self.gold -= amount;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn can_afford(&self, amount: u32) -> bool {
+        self.gold >= amount
+    }
+}
+
+/// 玩家进度组件（回合、力量、职业等）
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PlayerProgress {
+    pub turns: u32,       // 游戏总回合数
+    pub strength: u8,     // 力量值（影响装备需求）
+    pub class: String,    // 职业类型（存储为字符串以避免循环依赖）
+}
+
+impl Default for PlayerProgress {
+    fn default() -> Self {
+        Self {
+            turns: 0,
+            strength: 10,
+            class: "Warrior".to_string(),
+        }
+    }
+}
+
+impl PlayerProgress {
+    pub fn new(strength: u8, class: String) -> Self {
+        Self {
+            turns: 0,
+            strength,
+            class,
+        }
+    }
+
+    pub fn advance_turn(&mut self) {
+        self.turns += 1;
+    }
+
+    pub fn add_strength(&mut self, amount: u8) {
+        self.strength = self.strength.saturating_add(amount);
+    }
+}
+
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ActiveEffect {
@@ -663,32 +908,89 @@ impl From<&Hero> for Stats {
     }
 }
 
+// ========== 新增：Hero 到新组件的转换 ==========
+
+impl From<&Hero> for Hunger {
+    fn from(hero: &Hero) -> Self {
+        Self {
+            satiety: hero.satiety,
+            last_hunger_turn: 0,
+        }
+    }
+}
+
+impl From<&Hero> for Wealth {
+    fn from(hero: &Hero) -> Self {
+        Self {
+            gold: hero.gold,
+        }
+    }
+}
+
+impl From<&Hero> for PlayerProgress {
+    fn from(hero: &Hero) -> Self {
+        Self {
+            turns: hero.turns,
+            strength: hero.strength,
+            class: format!("{:?}", hero.class),
+        }
+    }
+}
+
 impl ECSWorld {
     /// Convert ECS world to save data
     pub fn to_save_data(&self) -> Result<SaveData, GameError> {
         // Extract hero data from ECS
         let mut hero: Option<Hero> = None;
-        
+
         // Find the player entity and convert to hero
-        for (entity, (_player_marker, stats, inventory)) in self.world.query::<(&Player, &Stats, &Inventory)>().iter() {
-            // Convert ECS components to Hero
-            let mut new_hero = Hero::from(stats);
-            new_hero.bag = Bag::from(inventory);
-            
-            // Update hero's position based on ECS Position
+        for (entity, _player_marker) in self.world.query::<&Player>().iter() {
+            // 从各个组件构建 Hero
+            let mut new_hero = if let Ok(stats) = self.world.get::<&Stats>(entity) {
+                Hero::from(&*stats)
+            } else {
+                Hero::default()
+            };
+
+            // 从 Inventory 组件恢复 bag
+            if let Ok(inventory) = self.world.get::<&Inventory>(entity) {
+                new_hero.bag = Bag::from(&*inventory);
+            }
+
+            // 从 Position 组件恢复位置
             if let Ok(pos) = self.world.get::<&Position>(entity) {
                 new_hero.x = pos.x;
                 new_hero.y = pos.y;
             }
-            
+
+            // ========== 新增：从新组件恢复数据 ==========
+
+            // 从 Hunger 组件恢复饱食度
+            if let Ok(hunger) = self.world.get::<&Hunger>(entity) {
+                new_hero.satiety = hunger.satiety;
+            }
+
+            // 从 Wealth 组件恢复金币
+            if let Ok(wealth) = self.world.get::<&Wealth>(entity) {
+                new_hero.gold = wealth.gold;
+            }
+
+            // 从 PlayerProgress 组件恢复进度信息
+            if let Ok(progress) = self.world.get::<&PlayerProgress>(entity) {
+                new_hero.turns = progress.turns;
+                new_hero.strength = progress.strength;
+                // class 从 progress.class 字符串恢复（需要解析）
+                // 暂时保持原有的 class
+            }
+
             hero = Some(new_hero);
             break;
         }
-        
+
         // Extract dungeon data
         let dungeon = get_dungeon_clone(&self.world)
             .ok_or_else(|| GameError::InvalidLevelData)?;
-        
+
         // Create save data
         let save_data = SaveData {
             metadata: save::SaveMetadata {
@@ -705,7 +1007,7 @@ impl ECSWorld {
 
         Ok(save_data)
     }
-    
+
     /// Load data from save into ECS world
     pub fn from_save_data(&mut self, save_data: SaveData) -> Result<(), GameError> {
         // Clear current world
@@ -721,7 +1023,12 @@ impl ECSWorld {
         let stats: Stats = (&hero).into();
         let inventory: Inventory = (&hero.bag).into();
 
-        // Spawn player entity with converted components
+        // ========== 新增：创建新组件 ==========
+        let hunger: Hunger = (&hero).into();
+        let wealth: Wealth = (&hero).into();
+        let progress: PlayerProgress = (&hero).into();
+
+        // Spawn player entity with converted components（包含新组件）
         self.world.spawn((
             Position::new(hero.x, hero.y, save_data.metadata.dungeon_depth as i32),
             Actor {
@@ -736,6 +1043,9 @@ impl ECSWorld {
             },
             stats,
             inventory,
+            hunger,        // 新增：饱食度组件
+            wealth,        // 新增：财富组件
+            progress,      // 新增：玩家进度组件
             Viewshed {
                 range: 8,
                 visible_tiles: vec![],
