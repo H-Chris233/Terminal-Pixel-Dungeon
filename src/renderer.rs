@@ -7,9 +7,8 @@ use ratatui::{
     backend::Backend,
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color as TuiColor, Modifier, Style},
-    text::Span,
-    widgets::{Block, Borders, Clear, Paragraph, Widget},
+    style::{Color as TuiColor, Style},
+    widgets::{Block, Borders, Paragraph, Widget},
     Frame, Terminal,
 };
 use std::io::{self, Stdout};

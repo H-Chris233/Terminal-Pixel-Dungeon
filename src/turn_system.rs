@@ -1,7 +1,6 @@
 //! Turn-based system implementation for the game.
 
 use crate::ecs::*;
-use crate::systems::AISystem;
 use anyhow;
 use hecs::{Entity, World};
 
@@ -124,7 +123,7 @@ impl TurnSystem {
 
     /// Regenerate energy for all entities after a complete turn
     fn regenerate_energy(&self, world: &mut World) {
-        for (_, mut energy) in world.query_mut::<&mut Energy>() {
+        for (_, energy) in world.query_mut::<&mut Energy>() {
             energy.current = (energy.current + energy.regeneration_rate).min(energy.max);
         }
     }

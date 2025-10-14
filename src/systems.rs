@@ -3,7 +3,7 @@ use crate::ecs::{AI, Actor, Energy, Player, Position, Resources, Viewshed,
                 Faction, Stats, Inventory, ItemSlot, ECSItem, ItemType,
                 ConsumableEffect, StatType, GameStatus, Color, ECSWorld,
                 AIType};
-use crate::event_bus::{GameEvent, LogLevel};
+use crate::event_bus::LogLevel;
 use hecs::{Entity, World};
 use std::error::Error;
 

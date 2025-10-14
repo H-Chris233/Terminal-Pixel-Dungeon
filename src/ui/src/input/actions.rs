@@ -123,21 +123,21 @@ pub fn map_to_game_action(event: &Event, bindings: &KeyBindings) -> Option<GameA
         Event::Key(key) if *key == bindings.move_left => Some(GameAction::MoveLeft),
         Event::Key(key) if *key == bindings.move_right => Some(GameAction::MoveRight),
 
-        // 组合键实现斜向移动（参考像素地牢PC版）
+        // Vi-keys 斜向移动支持
         Event::Key(KeyEvent {
-            code: KeyCode::Up | KeyCode::Left,
+            code: KeyCode::Char('y'),
             ..
         }) => Some(GameAction::MoveUpLeft),
         Event::Key(KeyEvent {
-            code: KeyCode::Up | KeyCode::Right,
+            code: KeyCode::Char('u'),
             ..
         }) => Some(GameAction::MoveUpRight),
         Event::Key(KeyEvent {
-            code: KeyCode::Down | KeyCode::Left,
+            code: KeyCode::Char('b'),
             ..
         }) => Some(GameAction::MoveDownLeft),
         Event::Key(KeyEvent {
-            code: KeyCode::Down | KeyCode::Right,
+            code: KeyCode::Char('n'),
             ..
         }) => Some(GameAction::MoveDownRight),
 

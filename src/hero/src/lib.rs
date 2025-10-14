@@ -23,6 +23,7 @@ use std::fmt;
 pub use self::{
     bag::{Bag},
     core::{Hero, HeroError},
+    core::events::{HeroEvent, ActionResult},
     effects::EffectManager,
     rng::HeroRng,
 };

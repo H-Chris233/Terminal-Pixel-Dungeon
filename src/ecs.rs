@@ -11,7 +11,6 @@ use save::SaveData;
 use error::GameError;
 use hero::{Hero, Bag};
 use items as game_items;
-use dungeon::Dungeon;
 use crate::event_bus::{EventBus, GameEvent, LogLevel, EventHandler, Priority};
 use std::sync::{Arc, Mutex};
 

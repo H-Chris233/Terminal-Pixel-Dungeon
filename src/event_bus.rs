@@ -6,11 +6,9 @@
 //! - 按优先级处理事件
 //! - 使用中间件拦截和转换事件
 
-use hecs::Entity;
 use serde::{Serialize, Deserialize};
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
-use std::any::Any;
 
 /// 游戏事件定义 - 用于模块间解耦通信
 #[derive(Debug, Clone, Serialize, Deserialize)]

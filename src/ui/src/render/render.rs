@@ -8,7 +8,6 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::Style,
     text::{Span, Line},
-    widgets::{Block, Borders, Paragraph},
 };
 
 /// 主渲染系统（协调所有子渲染模块）

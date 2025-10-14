@@ -1,4 +1,3 @@
-use crate::ecs::{Position, Renderable};
 use dungeon::Dungeon;
 use hero::Hero;
 use hecs::Entity;

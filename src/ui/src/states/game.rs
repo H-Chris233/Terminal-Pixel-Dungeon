@@ -5,14 +5,11 @@
 //! - 基本战斗系统
 //! - 状态驱动渲染
 
-use super::*;
 use super::common::{GameState, GameStateID, StateContext, StateTransition};
 use dungeon::Dungeon;
-use dungeon::level::tiles::{StairDirection, TerrainType};
 use hero::Hero;
 use hero::class::Class;
-use crate::terminal::TerminalController;
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::KeyCode;
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 

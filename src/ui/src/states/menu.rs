@@ -5,11 +5,8 @@
 //! - 键盘导航系统
 //! - 状态过渡动画
 
-use super::*;
 use crossterm::event::KeyCode;
-use ratatui::widgets::Widget;
 use ratatui::{
-    buffer::Buffer,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Style, Modifier},
     text::{Span, Line},

@@ -78,9 +78,20 @@ impl Combat {
     ) -> CombatResult {
         let mut result = CombatResult::new();
 
+        // 发布战斗开始事件
+        result.add_event(CombatEvent::CombatStarted {
+            attacker: attacker_id,
+            defender: defender_id
+        });
+
         // Attacker's turn (with potential ambush bonus)
         if is_ambush {
             result.log(format!("Ambush by {}!", attacker.name()));
+            // 发布潜行攻击事件
+            result.add_event(CombatEvent::Ambush {
+                attacker: attacker_id,
+                defender: defender_id
+            });
         }
         let attack_result = Self::resolve_attack_with_ids(attacker, attacker_id, defender, defender_id, is_ambush);
         result.combine(attack_result);
@@ -152,9 +163,9 @@ impl Combat {
     /// Resolve a single attack with combat logs and explicit IDs
     fn resolve_attack_with_ids<T: Combatant, U: Combatant>(
         attacker: &mut T,
-        _attacker_id: u32,
+        attacker_id: u32,
         defender: &mut U,
-        _defender_id: u32,
+        defender_id: u32,
         is_ambush: bool,
     ) -> CombatResult {
         let mut result = CombatResult::new();
@@ -165,6 +176,14 @@ impl Combat {
 
             // Apply damage and check for death
             defender.take_damage(damage);
+
+            // 发布伤害事件
+            result.add_event(CombatEvent::DamageDealt {
+                attacker: attacker_id,
+                victim: defender_id,
+                damage,
+                is_critical: is_crit,
+            });
 
             // Build combat message
             let mut damage_msg = if is_crit {
@@ -187,6 +206,12 @@ impl Combat {
                 result.log(format!("{} defeated {}!", attacker.name(), defender.name()));
                 result.defeated = true;
                 result.experience = defender.exp_value();
+
+                // 发布实体死亡事件
+                result.add_event(CombatEvent::EntityDied {
+                    entity: defender_id,
+                    entity_name: defender.name().to_string(),
+                });
             }
         } else {
             result.log(format!("{} misses {}!", attacker.name(), defender.name()));
@@ -202,12 +227,22 @@ impl Combat {
     }
 }
 
-/// Combat result with detailed logs
+/// Combat result with detailed logs and event information
 #[derive(Debug, Clone, Default)]
 pub struct CombatResult {
-    pub logs: Vec<String>, // Combat messages for UI
-    pub defeated: bool,    // Whether target was defeated
-    pub experience: u32,   // Experience gained (if any)
+    pub logs: Vec<String>,    // Combat messages for UI
+    pub defeated: bool,       // Whether target was defeated
+    pub experience: u32,      // Experience gained (if any)
+    pub events: Vec<CombatEvent>,  // Events to be published to event bus
+}
+
+/// Combat events that can be published to the event bus
+#[derive(Debug, Clone)]
+pub enum CombatEvent {
+    CombatStarted { attacker: u32, defender: u32 },
+    DamageDealt { attacker: u32, victim: u32, damage: u32, is_critical: bool },
+    EntityDied { entity: u32, entity_name: String },
+    Ambush { attacker: u32, defender: u32 },
 }
 
 impl CombatResult {
@@ -219,10 +254,15 @@ impl CombatResult {
         self.logs.push(message);
     }
 
+    pub fn add_event(&mut self, event: CombatEvent) {
+        self.events.push(event);
+    }
+
     pub fn combine(&mut self, other: CombatResult) {
         self.logs.extend(other.logs);
         self.defeated = self.defeated || other.defeated;
         self.experience += other.experience;
+        self.events.extend(other.events);
     }
 }
 

@@ -7,20 +7,13 @@ pub mod turn_system;
 pub mod core;
 pub mod event_bus;
 
-use renderer::{Renderer, Clock};
 
-use anyhow::{Context, Result};
+use anyhow::Context;
 use crossterm::{
-    event::{self, Event, KeyCode},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use scopeguard::defer;
-use std::{
-    io, process,
-    time::{Duration, Instant, SystemTime},
-};
-use ratatui::{backend::CrosstermBackend, Terminal};
+use std::io;
 
 use crate::{
     renderer::{RatatuiRenderer, GameClock},
