@@ -153,6 +153,7 @@ impl Hero {
 }
 
 /// 效果系统trait实现
+#[allow(dead_code)]
 pub trait EffectSystem {
     fn add_effect(&mut self, effect: Effect);
     fn remove_effect(&mut self, effect_type: EffectType);
@@ -163,15 +164,16 @@ pub trait EffectSystem {
 impl EffectSystem for Hero {
     fn add_effect(&mut self, effect: Effect) {
         // 优先处理可叠加效果
-        if effect.is_stackable() && self.effects.has(effect.effect_type()) {
-            if let Some(existing) = self.effects.effects.get_mut(&effect.effect_type()) {
-                *existing = Effect::with_intensity(
-                    effect.effect_type(),
-                    existing.turns() + effect.turns(),
-                    existing.intensity().max(effect.intensity()),
-                );
-                return;
-            }
+        if effect.is_stackable()
+            && self.effects.has(effect.effect_type())
+            && let Some(existing) = self.effects.effects.get_mut(&effect.effect_type())
+        {
+            *existing = Effect::with_intensity(
+                effect.effect_type(),
+                existing.turns() + effect.turns(),
+                existing.intensity().max(effect.intensity()),
+            );
+            return;
         }
 
         self.effects.add(effect);
@@ -181,11 +183,8 @@ impl EffectSystem for Hero {
         self.effects.remove(effect_type);
 
         // 特殊效果移除处理
-        match effect_type {
-            EffectType::Invisibility => {
-                dungeon::alert_nearby_enemies(self.x, self.y);
-            }
-            _ => {}
+        if effect_type == EffectType::Invisibility {
+            dungeon::alert_nearby_enemies(self.x, self.y);
         }
     }
 
@@ -198,11 +197,8 @@ impl EffectSystem for Hero {
 
         // 处理过期效果的特殊逻辑
         for effect_type in expired {
-            match effect_type {
-                EffectType::Invisibility => {
-                    dungeon::alert_nearby_enemies(self.x, self.y);
-                }
-                _ => {}
+            if effect_type == EffectType::Invisibility {
+                dungeon::alert_nearby_enemies(self.x, self.y);
             }
         }
 

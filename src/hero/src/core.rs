@@ -135,7 +135,7 @@ impl Hero {
         self.turns += 1;
 
         // SPD标准饥饿系统
-        if self.turns % 20 == 0 {
+        if self.turns.is_multiple_of(20) {
             // 每20回合减少1饥饿度（SPD标准）
             self.satiety = self.satiety.saturating_sub(1);
 
@@ -148,7 +148,7 @@ impl Hero {
                 }
                 1..=5 => {
                     // 饥饿状态：属性降低
-                    if self.satiety % 2 == 0 {
+                    if self.satiety.is_multiple_of(2) {
                         // 每2回合掉血
                         self.take_damage(1);
                     }
@@ -169,7 +169,7 @@ impl Hero {
         self.base_attack += self.class.attack_per_level();
         self.base_defense += self.class.defense_per_level();
 
-        if self.level % 4 == 0 {
+        if self.level.is_multiple_of(4) {
             self.strength += 1;
         }
     }

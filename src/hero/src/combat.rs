@@ -27,7 +27,7 @@ impl Combatant for Hero {
             .equipment()
             .weapon
             .as_ref()
-            .map_or(0, |w| w.damage_bonus() as u32);
+            .map_or(0, |w| w.damage_bonus());
 
         (self.base_attack + weapon_bonus) * (100 + self.level) / 100
     }
@@ -38,7 +38,7 @@ impl Combatant for Hero {
             .bag
             .equipment()
             .armor()
-            .map_or(0, |a| a.defense() as u32);
+            .map_or(0, |a| a.defense());
 
         self.base_defense + armor_bonus
     }
@@ -108,7 +108,7 @@ impl Combatant for Hero {
 
     /// 攻击距离（由武器决定）
     fn attack_distance(&self) -> u32 {
-        self.weapon().map_or(1, |w| w.range() as u32)
+        self.weapon().map_or(1, |w| w.range())
     }
 
     /// 承受伤害（SPD防御公式）
@@ -123,7 +123,7 @@ impl Combatant for Hero {
         self.alive = self.hp > 0;
 
         if !self.alive {
-            self.notify("你死了...".into());
+            self.notify("你死了...");
         }
         self.is_alive()
     }

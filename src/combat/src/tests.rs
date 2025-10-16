@@ -7,6 +7,7 @@ mod combat_tests {
     use crate::enemy::{Enemy, EnemyKind};
     use crate::status_effect::{StatusEffectCombatant, StatusEffectManager};
     use crate::vision::VisionSystem;
+    use crate::AttackParams;
 
     struct TestCombatant {
         name: String,
@@ -236,19 +237,23 @@ mod combat_tests {
         let mut defender = TestCombatant::new("Defender");
 
         let is_blocked = |x: i32, y: i32| -> bool {
-            x == 1 && y == 0 // Block the path between attacker and defender
+            x == 1 && y == 0 // Block the path between attacker at (0,0) and defender at (2,0)
         };
 
-        let result = CombatManager::process_combat_round(
-            &mut attacker,
-            0,
-            0,
-            &mut defender,
-            2,
-            0,
-            &is_blocked,
-            5,
-        );
+        let mut params = AttackParams {
+            attacker: &mut attacker,
+            attacker_id: 0,
+            attacker_x: 0,
+            attacker_y: 0,
+            defender: &mut defender,
+            defender_id: 1,
+            defender_x: 2,
+            defender_y: 0,
+            is_blocked: &is_blocked,
+            attacker_fov_range: 5,
+        };
+
+        let result = CombatManager::process_combat_round(&mut params);
 
         // Should contain ambush message due to blocked path
         assert!(result.logs.iter().any(|log| log.contains("Ambush")));

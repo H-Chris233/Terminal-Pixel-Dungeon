@@ -96,7 +96,7 @@ impl Equipment {
 
     /// 卸下武器（考虑诅咒状态）
     pub fn unequip_weapon(&mut self) -> Result<Option<Weapon>, EquipError> {
-        if self.weapon.as_ref().map_or(false, |w| w.cursed) {
+        if self.weapon.as_ref().is_some_and(|w| w.cursed) {
             return Err(EquipError::CursedItem);
         }
         Ok(self.weapon.take())
@@ -104,7 +104,7 @@ impl Equipment {
 
     /// 卸下护甲（考虑诅咒状态）
     pub fn unequip_armor(&mut self) -> Result<Option<Armor>, EquipError> {
-        if self.armor.as_ref().map_or(false, |a| a.cursed) {
+        if self.armor.as_ref().is_some_and(|a| a.cursed) {
             return Err(EquipError::CursedItem);
         }
         Ok(self.armor.take())
@@ -115,7 +115,7 @@ impl Equipment {
         if slot >= 2 {
             return Err(EquipError::IncompatibleType);
         }
-        if self.rings[slot].as_ref().map_or(false, |r| r.cursed) {
+        if self.rings[slot].as_ref().is_some_and(|r| r.cursed) {
             return Err(EquipError::CursedItem);
         }
         Ok(self.rings[slot].take())
@@ -216,10 +216,8 @@ impl Equipment {
         }
 
         // 解除所有戒指诅咒
-        for ring_slot in &mut self.rings {
-            if let Some(ring) = ring_slot {
-                ring.cursed = false;
-            }
+        for ring in self.rings.iter_mut().flatten() {
+            ring.cursed = false;
         }
     }
 

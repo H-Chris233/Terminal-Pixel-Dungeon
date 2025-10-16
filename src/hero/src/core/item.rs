@@ -46,7 +46,7 @@ impl Hero {
             .map_err(|_| HeroError::ActionFailed)?;
         if let items::ItemKind::Potion(ref mut potion) = item.kind {
             if !potion.identified {
-                self.notify("你喝下了未知的药水...".into());
+                self.notify("你喝下了未知的药水...");
                 potion.identify();
                 self.notify(&format!("这是一瓶...{}!", potion.name()));
             }
@@ -91,11 +91,11 @@ impl Hero {
                 }
                 ScrollKind::RemoveCurse => {
                     self.bag.remove_curse_all();
-                    self.notify("一股净化之力扫过你的装备".into());
+                    self.notify("一股净化之力扫过你的装备");
                 }
                 ScrollKind::MagicMapping => {
                     // dungeon::reveal_current_level(self.x, self.y);
-                    self.notify("你的脑海中浮现出这一层的地图".into());
+                    self.notify("你的脑海中浮现出这一层的地图");
                 }
                 _ => {}
             }

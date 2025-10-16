@@ -121,16 +121,16 @@ impl<T: ItemTrait + Serialize + DeserializeOwned> Inventory<T> {
             if let Some(indices) = self.stack_map.get_mut(&stack_id) {
                 // 反向遍历优先检查最近添加的堆叠
                 for &i in indices.iter().rev() {
-                    if let InventorySlot::Stackable(_, count) = &mut self.slots[i] {
-                        if *count < max_stack {
-                            *count += 1;
+                    if let InventorySlot::Stackable(_, count) = &mut self.slots[i]
+                        && *count < max_stack
+                    {
+                        *count += 1;
 
-                            // 自动清理已满堆叠的索引
-                            if *count == max_stack {
-                                indices.retain(|&x| x != i);
-                            }
-                            return Ok(());
+                        // 自动清理已满堆叠的索引
+                        if *count == max_stack {
+                            indices.retain(|&x| x != i);
                         }
+                        return Ok(());
                     }
                 }
             }
@@ -195,13 +195,13 @@ impl<T: ItemTrait + Serialize + DeserializeOwned> Inventory<T> {
             }
 
             // 预计算所需空间
-            let needed_slots = (remaining + max_stack - 1) / max_stack;
+            let needed_slots = remaining.div_ceil(max_stack);
             if self.slots.len() + needed_slots as usize > self.capacity {
                 return Err(InventoryError::Full);
             }
 
             // 批量添加优化
-            let new_items = (remaining + max_stack - 1) / max_stack;
+            let new_items = remaining.div_ceil(max_stack);
             self.slots.reserve(new_items as usize);
 
             let start_index = self.slots.len();
@@ -239,7 +239,7 @@ impl<T: ItemTrait + Serialize + DeserializeOwned> Inventory<T> {
             InventorySlot::Stackable(item, _) => item.stacking_id(),
         };
 
-        let result = match &mut self.slots[index] {
+        match &mut self.slots[index] {
             InventorySlot::Single(_) => {
                 let slot = self.slots.remove(index);
                 self.update_indexes_after_removal(index);
@@ -279,9 +279,7 @@ impl<T: ItemTrait + Serialize + DeserializeOwned> Inventory<T> {
 
                 Ok(cloned_item)
             }
-        };
-
-        result
+        }
     }
 
     /// 移除整个槽位
@@ -310,11 +308,12 @@ impl<T: ItemTrait + Serialize + DeserializeOwned> Inventory<T> {
     /// 整理背包
     pub fn organize(&mut self) {
         // 使用统一的排序逻辑
-        self.sort_by(|a: &T, b: &T| match (a, b) {
-            (a, b) => a
+        self.sort_by(|a: &T, b: &T| {
+            let (a, b) = (a, b);
+            a
                 .category()
                 .cmp(&b.category())
-                .then_with(|| b.sort_value().cmp(&a.sort_value())),
+                .then_with(|| b.sort_value().cmp(&a.sort_value()))
         });
     }
 

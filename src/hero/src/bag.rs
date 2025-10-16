@@ -83,6 +83,15 @@ impl Bag {
         }
     }
 
+}
+
+impl Default for Bag {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Bag {
     /* ================== 金币管理 ================== */
     pub fn add_gold(&mut self, amount: u32) -> Result<(), BagError> {
         self.gold = self
@@ -267,9 +276,9 @@ impl Bag {
             return self
                 .weapons
                 .get(idx)
-                .and_then(|slot| match slot {
+                .map(|slot| match slot {
                     InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => {
-                        Some(Item::from(item.as_ref().clone()))
+                        Item::from(item.as_ref().clone())
                     }
                 })
                 .ok_or(BagError::InvalidIndex);
@@ -281,9 +290,9 @@ impl Bag {
             return self
                 .armors
                 .get(idx)
-                .and_then(|slot| match slot {
+                .map(|slot| match slot {
                     InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => {
-                        Some(Item::from(item.as_ref().clone()))
+                        Item::from(item.as_ref().clone())
                     }
                 })
                 .ok_or(BagError::InvalidIndex);
@@ -295,9 +304,9 @@ impl Bag {
             return self
                 .potions
                 .get(idx)
-                .and_then(|slot| match slot {
+                .map(|slot| match slot {
                     InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => {
-                        Some(Item::from(item.as_ref().clone()))
+                        Item::from(item.as_ref().clone())
                     }
                 })
                 .ok_or(BagError::InvalidIndex);
@@ -309,9 +318,9 @@ impl Bag {
             return self
                 .scrolls
                 .get(idx)
-                .and_then(|slot| match slot {
+                .map(|slot| match slot {
                     InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => {
-                        Some(Item::from(item.as_ref().clone()))
+                        Item::from(item.as_ref().clone())
                     }
                 })
                 .ok_or(BagError::InvalidIndex);
@@ -323,9 +332,9 @@ impl Bag {
             return self
                 .rings
                 .get(idx)
-                .and_then(|slot| match slot {
+                .map(|slot| match slot {
                     InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => {
-                        Some(Item::from(item.as_ref().clone()))
+                        Item::from(item.as_ref().clone())
                     }
                 })
                 .ok_or(BagError::InvalidIndex);
@@ -337,9 +346,9 @@ impl Bag {
             return self
                 .food
                 .get(idx)
-                .and_then(|slot| match slot {
+                .map(|slot| match slot {
                     InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => {
-                        Some(Item::from(item.as_ref().clone()))
+                        Item::from(item.as_ref().clone())
                     }
                 })
                 .ok_or(BagError::InvalidIndex);
@@ -351,9 +360,9 @@ impl Bag {
             return self
                 .wands
                 .get(idx)
-                .and_then(|slot| match slot {
+                .map(|slot| match slot {
                     InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => {
-                        Some(Item::from(item.as_ref().clone()))
+                        Item::from(item.as_ref().clone())
                     }
                 })
                 .ok_or(BagError::InvalidIndex);
@@ -365,9 +374,9 @@ impl Bag {
             return self
                 .seeds
                 .get(idx)
-                .and_then(|slot| match slot {
+                .map(|slot| match slot {
                     InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => {
-                        Some(Item::from(item.as_ref().clone()))
+                        Item::from(item.as_ref().clone())
                     }
                 })
                 .ok_or(BagError::InvalidIndex);
@@ -379,9 +388,9 @@ impl Bag {
             return self
                 .stones
                 .get(idx)
-                .and_then(|slot| match slot {
+                .map(|slot| match slot {
                     InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => {
-                        Some(Item::from(item.as_ref().clone()))
+                        Item::from(item.as_ref().clone())
                     }
                 })
                 .ok_or(BagError::InvalidIndex);
@@ -393,9 +402,9 @@ impl Bag {
             return self
                 .misc
                 .get(idx)
-                .and_then(|slot| match slot {
+                .map(|slot| match slot {
                     InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => {
-                        Some(Item::from(item.as_ref().clone()))
+                        Item::from(item.as_ref().clone())
                     }
                 })
                 .ok_or(BagError::InvalidIndex);
