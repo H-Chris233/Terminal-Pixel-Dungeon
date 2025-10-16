@@ -1,5 +1,5 @@
 //! Status effect management for combatants
-use crate::{Effect, EffectType, Combatant};
+use crate::{Combatant, Effect, EffectType};
 
 /// Manages active status effects for a combatant
 pub struct StatusEffectManager {
@@ -21,7 +21,10 @@ impl StatusEffectManager {
             self.effects.push(effect);
         } else {
             // Non-stackable effects replace existing ones of the same type
-            let existing_idx = self.effects.iter().position(|e| e.effect_type() == effect.effect_type());
+            let existing_idx = self
+                .effects
+                .iter()
+                .position(|e| e.effect_type() == effect.effect_type());
             match existing_idx {
                 Some(idx) => {
                     // Replace the existing effect
@@ -42,7 +45,10 @@ impl StatusEffectManager {
 
     /// Get all effects of a specific type
     pub fn get_effects_by_type(&self, effect_type: EffectType) -> Vec<&Effect> {
-        self.effects.iter().filter(|e| e.effect_type() == effect_type).collect()
+        self.effects
+            .iter()
+            .filter(|e| e.effect_type() == effect_type)
+            .collect()
     }
 
     /// Check if combatant has a specific effect
@@ -53,14 +59,20 @@ impl StatusEffectManager {
     /// Update all effects (reduce turns, apply damage, etc.)
     pub fn update_effects<T: Combatant>(&mut self, combatant: &mut T) -> Vec<String> {
         let mut messages = Vec::new();
-        
+
         // Collect effects that cause damage so we can apply it separately
-        let damage_effects: Vec<_> = self.effects
+        let damage_effects: Vec<_> = self
+            .effects
             .iter()
-            .filter(|e| matches!(e.effect_type(), EffectType::Burning | EffectType::Poison | EffectType::Bleeding))
+            .filter(|e| {
+                matches!(
+                    e.effect_type(),
+                    EffectType::Burning | EffectType::Poison | EffectType::Bleeding
+                )
+            })
             .cloned()
             .collect();
-        
+
         // Apply damage from effects
         for effect in &damage_effects {
             let damage = effect.damage();
@@ -144,48 +156,78 @@ mod tests {
     }
 
     impl Combatant for TestCombatant {
-        fn id(&self) -> u32 { 0 }  // 添加缺失的id方法
-        fn hp(&self) -> u32 { self.hp }
-        fn max_hp(&self) -> u32 { self.max_hp }
-        fn attack_power(&self) -> u32 { 10 }
-        fn defense(&self) -> u32 { 5 }
-        fn accuracy(&self) -> u32 { 80 }
-        fn evasion(&self) -> u32 { 20 }
-        fn crit_bonus(&self) -> f32 { 0.1 }
-        fn weapon(&self) -> Option<&items::Weapon> { None }
-        fn is_alive(&self) -> bool { self.hp > 0 }
-        fn name(&self) -> &str { &self.name }
-        fn attack_distance(&self) -> u32 { 1 }
-        fn take_damage(&mut self, amount: u32) -> bool { 
+        fn id(&self) -> u32 {
+            0
+        } // 添加缺失的id方法
+        fn hp(&self) -> u32 {
+            self.hp
+        }
+        fn max_hp(&self) -> u32 {
+            self.max_hp
+        }
+        fn attack_power(&self) -> u32 {
+            10
+        }
+        fn defense(&self) -> u32 {
+            5
+        }
+        fn accuracy(&self) -> u32 {
+            80
+        }
+        fn evasion(&self) -> u32 {
+            20
+        }
+        fn crit_bonus(&self) -> f32 {
+            0.1
+        }
+        fn weapon(&self) -> Option<&items::Weapon> {
+            None
+        }
+        fn is_alive(&self) -> bool {
+            self.hp > 0
+        }
+        fn name(&self) -> &str {
+            &self.name
+        }
+        fn attack_distance(&self) -> u32 {
+            1
+        }
+        fn take_damage(&mut self, amount: u32) -> bool {
             self.hp = self.hp.saturating_sub(amount);
             self.is_alive()
         }
-        fn heal(&mut self, amount: u32) { 
+        fn heal(&mut self, amount: u32) {
             self.hp = std::cmp::min(self.max_hp, self.hp + amount);
         }
-        fn strength(&self) -> u8 { 10 }
-        fn dexterity(&self) -> u8 { 10 }
-        fn intelligence(&self) -> u8 { 10 }
+        fn strength(&self) -> u8 {
+            10
+        }
+        fn dexterity(&self) -> u8 {
+            10
+        }
+        fn intelligence(&self) -> u8 {
+            10
+        }
     }
 
     impl StatusEffectCombatant for TestCombatant {
         fn add_effect(&mut self, effect: Effect) {
             self.effects.add_effect(effect);
         }
-        
+
         fn remove_effect(&mut self, effect_type: EffectType) {
             self.effects.remove_effect(effect_type);
         }
-        
+
         fn has_effect(&self, effect_type: EffectType) -> bool {
             self.effects.has_effect(effect_type)
         }
-        
+
         fn update_effects(&mut self) -> Vec<String> {
             // We'll just return the messages without applying damage in the test
             // since we can't handle the mutable borrow issue here
             let mut messages = Vec::new();
-            
+
             // Process effects that apply damage each turn
             for effect in &self.effects.effects {
                 match effect.effect_type() {
@@ -217,11 +259,11 @@ mod tests {
 
             messages
         }
-        
+
         fn get_effect_manager(&self) -> &StatusEffectManager {
             &self.effects
         }
-        
+
         fn get_effect_manager_mut(&mut self) -> &mut StatusEffectManager {
             &mut self.effects
         }
@@ -230,40 +272,40 @@ mod tests {
     #[test]
     fn test_add_and_remove_effects() {
         let mut combatant = TestCombatant::new("Test");
-        
+
         // Add a poison effect
         let poison_effect = Effect::new(EffectType::Poison, 3);
         combatant.add_effect(poison_effect);
-        
+
         assert!(combatant.has_effect(EffectType::Poison));
-        
+
         // Remove the poison effect
         combatant.remove_effect(EffectType::Poison);
-        
+
         assert!(!combatant.has_effect(EffectType::Poison));
     }
 
     #[test]
     fn test_effect_damage_application() {
         let mut combatant = TestCombatant::new("Test");
-        
+
         // Add a poison effect that causes 5 damage per turn
         let poison_effect = Effect::with_intensity(EffectType::Poison, 3, 5);
         combatant.add_effect(poison_effect);
-        
+
         let initial_hp = combatant.hp();
-        
+
         // Update effects, which should return messages about damage
         let messages = combatant.update_effects();
-        
+
         // In the test implementation, we manually apply the damage
         // since update_effects doesn't actually modify the combatant's HP
         combatant.hp = combatant.hp.saturating_sub(5);
-        
+
         // Check that the right messages were generated
         assert!(!messages.is_empty());
         assert!(messages.iter().any(|msg| msg.contains("takes")));
-        
+
         // Check that the HP was reduced by our manual application
         assert_eq!(combatant.hp(), initial_hp - 5);
     }

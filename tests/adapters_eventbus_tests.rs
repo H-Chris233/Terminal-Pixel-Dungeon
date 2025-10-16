@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use terminal_pixel_dungeon::hero_adapter::{HeroAdapter, StatsAdapter};
-    use terminal_pixel_dungeon::event_bus::EventBus;
     use hero::Hero;
+    use terminal_pixel_dungeon::event_bus::EventBus;
+    use terminal_pixel_dungeon::hero_adapter::{HeroAdapter, StatsAdapter};
 
     #[test]
     fn hero_stats_adapter_roundtrip() {

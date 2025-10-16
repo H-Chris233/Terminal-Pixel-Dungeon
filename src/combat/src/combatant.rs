@@ -161,15 +161,15 @@ impl Combatant for Enemy {
     }
 
     fn take_damage(&mut self, amount: u32) -> bool {
-        let actual_damage = amount.saturating_sub(self.defense).max(1);  // 使用saturating_sub防止下溢
-        self.hp = self.hp.saturating_sub(actual_damage);  // 同样使用saturating_sub
+        let actual_damage = amount.saturating_sub(self.defense).max(1); // 使用saturating_sub防止下溢
+        self.hp = self.hp.saturating_sub(actual_damage); // 同样使用saturating_sub
         self.is_alive()
     }
 
     fn heal(&mut self, amount: u32) {
         self.hp = (self.hp + amount).min(self.max_hp);
     }
-    
+
     fn exp_value(&self) -> u32 {
         self.exp_value
     }

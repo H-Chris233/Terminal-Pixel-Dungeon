@@ -2,8 +2,8 @@
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
-use crate::trap::Trap;
 use crate::TrapEffect;
+use crate::trap::Trap;
 
 /// 表示游戏中的一个地图格子
 /// 使用#[repr(C)]优化内存布局，字段按从大到小排列减少padding

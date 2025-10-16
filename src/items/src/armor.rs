@@ -2,15 +2,15 @@
 use bincode::serde::encode_to_vec;
 use bincode::{Decode, Encode};
 use rand::Rng;
+use ratatui::style::Color;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use ratatui::style::Color;
 
-use crate::ItemCategory;
-use crate::ItemTrait;
 use crate::BINCODE_CONFIG;
 use crate::Item;
+use crate::ItemCategory;
 use crate::ItemKind;
+use crate::ItemTrait;
 
 /// 护甲数据（精确还原游戏机制）
 #[derive(PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]

@@ -1,6 +1,7 @@
 //src/items/src/lib.rs
 
-const BINCODE_CONFIG: bincode::config::Configuration = bincode::config::legacy().with_variable_int_encoding(); // 添加变长整数编码
+const BINCODE_CONFIG: bincode::config::Configuration =
+    bincode::config::legacy().with_variable_int_encoding(); // 添加变长整数编码
 
 use bincode::{Decode, Encode};
 use serde::de::DeserializeOwned;
@@ -130,45 +131,85 @@ impl Item {
             ItemKind::Misc(m) => m.value(),
         }
     }
-    
+
     pub fn as_weapon(&self) -> Option<&Weapon> {
-        if let ItemKind::Weapon(ref w) = self.kind { Some(w) } else { None }
+        if let ItemKind::Weapon(ref w) = self.kind {
+            Some(w)
+        } else {
+            None
+        }
     }
 
     pub fn as_armor(&self) -> Option<&Armor> {
-        if let ItemKind::Armor(ref a) = self.kind { Some(a) } else { None }
+        if let ItemKind::Armor(ref a) = self.kind {
+            Some(a)
+        } else {
+            None
+        }
     }
 
     pub fn as_potion(&self) -> Option<&Potion> {
-        if let ItemKind::Potion(ref p) = self.kind { Some(p) } else { None }
+        if let ItemKind::Potion(ref p) = self.kind {
+            Some(p)
+        } else {
+            None
+        }
     }
 
     pub fn as_scroll(&self) -> Option<&Scroll> {
-        if let ItemKind::Scroll(ref s) = self.kind { Some(s) } else { None }
+        if let ItemKind::Scroll(ref s) = self.kind {
+            Some(s)
+        } else {
+            None
+        }
     }
 
     pub fn as_food(&self) -> Option<&Food> {
-        if let ItemKind::Food(ref f) = self.kind { Some(f) } else { None }
+        if let ItemKind::Food(ref f) = self.kind {
+            Some(f)
+        } else {
+            None
+        }
     }
 
     pub fn as_wand(&self) -> Option<&Wand> {
-        if let ItemKind::Wand(ref w) = self.kind { Some(w) } else { None }
+        if let ItemKind::Wand(ref w) = self.kind {
+            Some(w)
+        } else {
+            None
+        }
     }
 
     pub fn as_ring(&self) -> Option<&Ring> {
-        if let ItemKind::Ring(ref r) = self.kind { Some(r) } else { None }
+        if let ItemKind::Ring(ref r) = self.kind {
+            Some(r)
+        } else {
+            None
+        }
     }
 
     pub fn as_seed(&self) -> Option<&Seed> {
-        if let ItemKind::Seed(ref s) = self.kind { Some(s) } else { None }
+        if let ItemKind::Seed(ref s) = self.kind {
+            Some(s)
+        } else {
+            None
+        }
     }
 
     pub fn as_stone(&self) -> Option<&Stone> {
-        if let ItemKind::Stone(ref s) = self.kind { Some(s) } else { None }
+        if let ItemKind::Stone(ref s) = self.kind {
+            Some(s)
+        } else {
+            None
+        }
     }
 
     pub fn as_misc(&self) -> Option<&MiscItem> {
-        if let ItemKind::Misc(ref m) = self.kind { Some(m) } else { None }
+        if let ItemKind::Misc(ref m) = self.kind {
+            Some(m)
+        } else {
+            None
+        }
     }
 }
 

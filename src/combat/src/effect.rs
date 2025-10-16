@@ -1,15 +1,15 @@
 //src/combat/src/effect.rs
 use bincode::{Decode, Encode};
+use ratatui::style::{Color, Modifier, Style};
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumIter, EnumString};
-use ratatui::style::{Color, Style, Modifier};
 
 /// 效果实例（现在包含视觉状态）
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct Effect {
     effect_type: EffectType,
-    turns: u32,      // 剩余回合数
-    intensity: u8,   // 效果强度
+    turns: u32,             // 剩余回合数
+    intensity: u8,          // 效果强度
     source: Option<String>, // 效果来源（用于UI和追踪）
 }
 
@@ -42,7 +42,12 @@ impl Effect {
         }
     }
 
-    pub fn with_source_and_intensity(effect_type: EffectType, turns: u32, intensity: u8, source: &str) -> Self {
+    pub fn with_source_and_intensity(
+        effect_type: EffectType,
+        turns: u32,
+        intensity: u8,
+        source: &str,
+    ) -> Self {
         Self {
             effect_type,
             turns,
@@ -106,10 +111,11 @@ impl Effect {
 
     /// 效果是否会被相同类型覆盖（非叠加效果）
     pub fn is_overwritable(&self) -> bool {
-        !self.is_stackable() && !matches!(
-            self.effect_type,
-            EffectType::MindVision | EffectType::Invisibility
-        )
+        !self.is_stackable()
+            && !matches!(
+                self.effect_type,
+                EffectType::MindVision | EffectType::Invisibility
+            )
     }
 
     /// 获取效果描述（用于UI显示）
@@ -142,7 +148,6 @@ impl Effect {
         }
     }
 
-    
     /// 获取当前视觉样式（始终可见）
     pub fn current_style(&self) -> Style {
         self.effect_type.visual_style().to_style()
@@ -159,22 +164,20 @@ impl Effect {
             .fg(self.effect_type.status_color().into())
             .add_modifier(Modifier::BOLD)
     }
-    
+
     /// 获取视觉配置的方法
     pub fn visual_config(&self) -> VisualEffect {
         self.effect_type.visual_style()
     }
-    
+
     /// 更新后的视觉效果状态方法（供UI查询刷新需求）
     pub fn should_blink(&self, current_turn: u64) -> bool {
-    let config = self.visual_config();
-    if config.blink_interval() == 0 {
-        return false;
+        let config = self.visual_config();
+        if config.blink_interval() == 0 {
+            return false;
+        }
+        current_turn % config.blink_interval() == 0
     }
-    current_turn % config.blink_interval() == 0
-}
-    
-    
 }
 
 /// 效果类型（包含视觉标记信息）
@@ -248,7 +251,7 @@ impl VisualEffect {
             .fg(self.fg_color.clone().into())
             .bg(self.bg_color.clone().into())
     }
-    
+
     /// 获取闪烁间隔（供UI模块调用）
     pub fn blink_interval(&self) -> u64 {
         self.blink_interval
@@ -259,11 +262,11 @@ impl VisualEffect {
         &self.fg_color
     }
 
-    /// 获取背景色 
+    /// 获取背景色
     pub fn background(&self) -> &SerializableColor {
         &self.bg_color
     }
-    
+
     pub fn overlay_char(&self) -> Option<char> {
         self.overlay_char
     }

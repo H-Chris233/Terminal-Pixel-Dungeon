@@ -6,11 +6,11 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::hash::Hasher;
 
-use crate::ItemCategory;
-use crate::ItemTrait;
 use crate::BINCODE_CONFIG;
 use crate::Item;
+use crate::ItemCategory;
 use crate::ItemKind;
+use crate::ItemTrait;
 
 /// 戒指系统（基于破碎的像素地牢v1.0.1设计）
 #[derive(PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]

@@ -1,11 +1,11 @@
 // src/hero/src/bag/inventory.rs
 use bincode::{Decode, Encode};
+use items::ItemTrait;
 use serde::de::DeserializeOwned;
+use serde::ser::{SerializeStructVariant, Serializer};
 use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, collections::HashMap, convert::TryInto, sync::Arc};
 use thiserror::Error;
-use items::ItemTrait;
-use serde::ser::{SerializeStructVariant, Serializer};
 
 #[derive(Debug, Error, PartialEq)]
 pub enum InventoryError {
@@ -38,12 +38,8 @@ impl<T: ItemTrait + Serialize + DeserializeOwned> Serialize for InventorySlot<T>
                 serializer.serialize_newtype_variant("InventorySlot", 0, "Single", &**item)
             }
             InventorySlot::Stackable(item, count) => {
-                let mut state = serializer.serialize_struct_variant(
-                    "InventorySlot",
-                    1,
-                    "Stackable",
-                    2
-                )?;
+                let mut state =
+                    serializer.serialize_struct_variant("InventorySlot", 1, "Stackable", 2)?;
                 state.serialize_field("item", &**item)?;
                 state.serialize_field("count", count)?;
                 state.end()
@@ -86,7 +82,7 @@ impl<'de, T: ItemTrait + Serialize + DeserializeOwned> Deserialize<'de> for Inve
         D: serde::Deserializer<'de>,
     {
         #[derive(Deserialize)]
-          #[serde(bound(deserialize = "T: ItemTrait + Serialize + DeserializeOwned"))]
+        #[serde(bound(deserialize = "T: ItemTrait + Serialize + DeserializeOwned"))]
         struct Helper<T: ItemTrait + Serialize + DeserializeOwned> {
             slots: Vec<InventorySlot<T>>,
             stack_map: HashMap<u64, Vec<usize>>,
@@ -318,7 +314,7 @@ impl<T: ItemTrait + Serialize + DeserializeOwned> Inventory<T> {
             (a, b) => a
                 .category()
                 .cmp(&b.category())
-                .then_with(|| b.sort_value().cmp(&a.sort_value()))
+                .then_with(|| b.sort_value().cmp(&a.sort_value())),
         });
     }
 
@@ -375,21 +371,22 @@ impl<T: ItemTrait + Serialize + DeserializeOwned> Inventory<T> {
 
     /// 更新移除位置之后的所有索引
     fn update_indexes_after_removal(&mut self, removed_index: usize) {
-    for indices in self.stack_map.values_mut() {
-        *indices = indices.iter()
-            .filter_map(|&i| {
-                if i == removed_index {
-                    None
-                } else if i > removed_index {
-                    Some(i - 1)
-                } else {
-                    Some(i)
-                }
-            })
-            .collect();
-        indices.sort_unstable();
+        for indices in self.stack_map.values_mut() {
+            *indices = indices
+                .iter()
+                .filter_map(|&i| {
+                    if i == removed_index {
+                        None
+                    } else if i > removed_index {
+                        Some(i - 1)
+                    } else {
+                        Some(i)
+                    }
+                })
+                .collect();
+            indices.sort_unstable();
+        }
     }
-}
 
     /// 清理特定槽位的索引
     fn cleanup_stack_map(&mut self, stack_id: u64, removed_index: usize) {
@@ -426,11 +423,9 @@ impl<T: ItemTrait + Serialize + DeserializeOwned> Inventory<T> {
     pub fn get(&self, index: usize) -> Option<&InventorySlot<T>> {
         self.slots.get(index)
     }
-    
+
     /// 获取当前使用的槽位数量
     pub fn len(&self) -> usize {
         self.slots.len()
     }
-    
 }
-

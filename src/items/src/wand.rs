@@ -8,11 +8,11 @@ use bincode::serde::encode_to_vec;
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
-use crate::ItemCategory;
-use crate::ItemTrait;
 use crate::BINCODE_CONFIG;
 use crate::Item;
+use crate::ItemCategory;
 use crate::ItemKind;
+use crate::ItemTrait;
 
 /// 法杖系统（8种法杖）
 #[derive(PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]

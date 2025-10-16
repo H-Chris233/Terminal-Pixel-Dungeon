@@ -1,36 +1,39 @@
 //! Ratatui renderer implementation for the ECS architecture.
 
 use crate::ecs::*;
+use crate::render::{
+    DungeonRenderer, GameOverRenderer, HudRenderer, InventoryRenderer, MenuRenderer,
+};
 use anyhow;
 
 use ratatui::{
+    Frame, Terminal,
     backend::Backend,
-    buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color as TuiColor, Style},
-    widgets::{Block, Borders, Paragraph, Widget},
-    Frame, Terminal,
+    text::Line,
+    widgets::{Block, Borders, Paragraph},
 };
+use std::collections::HashMap;
 use std::io::{self, Stdout};
 use std::time::Duration;
-use std::collections::HashMap;
 
 /// Trait for rendering the game state
 pub trait Renderer {
     type Backend: Backend;
-    
+
     /// Initialize the renderer
     fn init(&mut self) -> anyhow::Result<()>;
-    
+
     /// Draw the current game state
     fn draw(&mut self, ecs_world: &mut ECSWorld) -> anyhow::Result<()>;
-    
+
     /// Draw UI elements
     fn draw_ui(&mut self, frame: &mut Frame<'_>, area: Rect);
-    
+
     /// Handle terminal resize
     fn resize(&mut self, resources: &mut Resources, width: u16, height: u16) -> anyhow::Result<()>;
-    
+
     /// Cleanup resources
     fn cleanup(&mut self) -> anyhow::Result<()>;
 }
@@ -39,13 +42,13 @@ pub trait Renderer {
 pub trait Clock {
     /// Get the current time
     fn now(&self) -> std::time::SystemTime;
-    
+
     /// Get elapsed time since a given point
     fn elapsed(&self, since: std::time::SystemTime) -> Duration;
-    
+
     /// Sleep for duration
     fn sleep(&self, duration: Duration);
-    
+
     /// Get fixed time step for game logic updates
     fn tick_rate(&self) -> Duration;
 }
@@ -55,6 +58,12 @@ pub struct RatatuiRenderer {
     terminal: Terminal<ratatui::backend::CrosstermBackend<Stdout>>,
     last_render_time: std::time::Instant,
     render_cache: HashMap<(i32, i32, i32), RenderCacheEntry>, // x, y, z coordinates
+    // 模块化渲染器
+    dungeon_renderer: DungeonRenderer,
+    hud_renderer: HudRenderer,
+    inventory_renderer: InventoryRenderer,
+    menu_renderer: MenuRenderer,
+    game_over_renderer: GameOverRenderer,
 }
 
 /// Cached rendering data for optimization
@@ -73,216 +82,137 @@ impl RatatuiRenderer {
             terminal,
             last_render_time: std::time::Instant::now(),
             render_cache: HashMap::new(),
+            dungeon_renderer: DungeonRenderer::new(),
+            hud_renderer: HudRenderer::new(),
+            inventory_renderer: InventoryRenderer::new(),
+            menu_renderer: MenuRenderer::new(),
+            game_over_renderer: GameOverRenderer::new(),
         })
     }
-    
+
     /// Render the ECS world to the terminal
     fn render_ecs_world(&mut self, ecs_world: &mut ECSWorld) -> anyhow::Result<()> {
         self.terminal.draw(|f| {
-            // Create a temporary renderer to handle the frame rendering
-            let game_area = GameWidget {
-                ecs_world,
-                player_pos: find_player_position(ecs_world),
-            };
-            
-            // Create main layout
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Length(1),  // Status bar
-                    Constraint::Min(10),     // Main game area
-                    Constraint::Length(3),   // Message log
-                ])
-                .split(f.area());
-            
-            // Draw status bar
-            let status_bar = Paragraph::new("Pixel Dungeon - Status")
-                .style(Style::default().fg(TuiColor::Yellow))
-                .block(Block::default().borders(Borders::NONE));
-            f.render_widget(status_bar, chunks[0]);
-            
-            // Draw main game area
-            f.render_widget(game_area, chunks[1]);
-            
-            // Draw message log
-            let messages = Paragraph::new(format_messages(&ecs_world.resources.game_state.message_log))
-                .style(Style::default().fg(TuiColor::Gray))
-                .block(Block::default().borders(Borders::TOP));
-            f.render_widget(messages, chunks[2]);
+            // 根据游戏状态决定渲染内容
+            match ecs_world.resources.game_state.game_state {
+                // === 菜单状态 ===
+                GameStatus::MainMenu => {
+                    self.menu_renderer
+                        .render_main_menu(f, f.area(), &ecs_world.resources);
+                }
+
+                GameStatus::Paused => {
+                    self.menu_renderer
+                        .render_pause_menu(f, f.area(), &ecs_world.resources);
+                }
+
+                GameStatus::Options { .. } => {
+                    self.menu_renderer
+                        .render_options_menu(f, f.area(), &ecs_world.resources);
+                }
+
+                GameStatus::Help => {
+                    self.menu_renderer
+                        .render_help_menu(f, f.area(), &ecs_world.resources);
+                }
+
+                GameStatus::CharacterInfo => {
+                    // TODO: 实现角色信息界面
+                    Self::render_character_info_static(f, f.area(), &ecs_world.resources);
+                }
+
+                GameStatus::Inventory { .. } => {
+                    self.inventory_renderer
+                        .render(f, f.area(), &ecs_world.world);
+                }
+
+                // === 游戏结束状态 ===
+                GameStatus::GameOver { .. } => {
+                    self.game_over_renderer
+                        .render_game_over(f, f.area(), &ecs_world.resources);
+                }
+
+                GameStatus::Victory => {
+                    self.game_over_renderer
+                        .render_victory(f, f.area(), &ecs_world.resources);
+                }
+
+                // === 正常游戏状态 ===
+                GameStatus::Running => {
+                    // Create main layout
+                    let chunks = Layout::default()
+                        .direction(Direction::Vertical)
+                        .constraints([
+                            Constraint::Length(3), // HUD (状态栏)
+                            Constraint::Min(10),   // Main game area (地牢)
+                            Constraint::Length(3), // Message log (消息栏)
+                        ])
+                        .split(f.area());
+
+                    // 渲染 HUD
+                    self.hud_renderer.render(f, chunks[0], &ecs_world.world);
+
+                    // 渲染地牢
+                    self.dungeon_renderer.render(f, chunks[1], &ecs_world.world);
+
+                    // 渲染消息日志
+                    let messages = Paragraph::new(format_messages(
+                        &ecs_world.resources.game_state.message_log,
+                    ))
+                    .style(Style::default().fg(TuiColor::Gray))
+                    .block(Block::default().borders(Borders::TOP));
+                    f.render_widget(messages, chunks[2]);
+                }
+            }
         })?;
         Ok(())
     }
-    
 
+    /// 渲染角色信息界面（临时实现）
+    fn render_character_info_static(frame: &mut Frame<'_>, area: Rect, resources: &Resources) {
+        let text = vec![
+            Line::from("👤 角色信息"),
+            Line::from(""),
+            Line::from("这里将显示详细的角色属性和成长数据"),
+            Line::from("按 Esc 返回游戏"),
+        ];
+
+        let paragraph = Paragraph::new(text)
+            .style(Style::default().fg(TuiColor::White))
+            .block(Block::default().title("角色信息").borders(Borders::ALL))
+            .wrap(ratatui::widgets::Wrap { trim: true });
+
+        frame.render_widget(paragraph, area);
+    }
 }
 
 impl Renderer for RatatuiRenderer {
     type Backend = ratatui::backend::CrosstermBackend<Stdout>;
-    
+
     fn init(&mut self) -> anyhow::Result<()> {
         Ok(())
     }
-    
+
     fn draw(&mut self, ecs_world: &mut ECSWorld) -> anyhow::Result<()> {
         self.render_ecs_world(ecs_world)
     }
-    
+
     fn draw_ui(&mut self, frame: &mut Frame<'_>, area: Rect) {
         // Draw UI elements in the provided area
-        let block = Block::default()
-            .title("UI Panel")
-            .borders(Borders::ALL);
+        let block = Block::default().title("UI Panel").borders(Borders::ALL);
         frame.render_widget(block, area);
     }
-    
+
     fn resize(&mut self, resources: &mut Resources, width: u16, height: u16) -> anyhow::Result<()> {
         // Update game state with new dimensions
         resources.game_state.terminal_width = width;
         resources.game_state.terminal_height = height;
         Ok(())
     }
-    
+
     fn cleanup(&mut self) -> anyhow::Result<()> {
         Ok(())
     }
-}
-
-/// Widget to render the game world from ECS
-struct GameWidget<'a> {
-    ecs_world: &'a ECSWorld,
-    player_pos: Option<Position>,
-}
-
-impl<'a> Widget for GameWidget<'a> {
-    fn render(self, area: Rect, buf: &mut Buffer) {
-        // Fill the area with background
-        for x in area.left()..area.right() {
-            for y in area.top()..area.bottom() {
-                buf[(x, y)]
-                    .set_char(' ')
-                    .set_fg(TuiColor::Black)
-                    .set_bg(TuiColor::Black);
-            }
-        }
-
-        // Get player's viewshed to determine what to render
-        let visible_positions = get_visible_positions(self.ecs_world);
-        
-        // Render tiles on the same level as player
-        let current_level = self.player_pos.as_ref().map_or(0, |pos| pos.z);
-        
-        // Render tiles
-        for (entity, (pos, tile, _renderable)) in self.ecs_world.world.query::<(&Position, &Tile, &Renderable)>().iter() {
-            if pos.z != current_level {
-                continue; // Only render tiles on the same level as player
-            }
-
-            // Only render visible tiles
-            if !visible_positions.contains(&(pos.x, pos.y)) {
-                // Render as dark if not visible but remembered
-                continue; // For now, only show visible tiles
-            }
-
-            let x = area.left() + pos.x as u16;
-            let y = area.top() + pos.y as u16;
-
-            // Check bounds
-            if x < area.right() && y < area.bottom() {
-                let cell = &mut buf[(x, y)];
-                
-                // Set the tile's appearance
-                cell.set_char(tile.terrain_type.to_char());
-                
-                // Convert game color to ratatui color
-                match &tile.terrain_type {
-                    TerrainType::Wall => {
-                        cell.set_fg(TuiColor::Gray).set_bg(TuiColor::DarkGray);
-                    }
-                    TerrainType::Floor => {
-                        cell.set_fg(TuiColor::White).set_bg(TuiColor::Black);
-                    }
-                    TerrainType::Door => {
-                        cell.set_fg(TuiColor::Yellow).set_bg(TuiColor::Black);
-                    }
-                    TerrainType::StairsDown => {
-                        cell.set_fg(TuiColor::Cyan).set_bg(TuiColor::Black);
-                    }
-                    TerrainType::StairsUp => {
-                        cell.set_fg(TuiColor::Blue).set_bg(TuiColor::Black);
-                    }
-                    TerrainType::Water => {
-                        cell.set_fg(TuiColor::Blue).set_bg(TuiColor::Blue);
-                    }
-                    TerrainType::Trap => {
-                        cell.set_fg(TuiColor::Red).set_bg(TuiColor::Black);
-                    }
-                    TerrainType::Barrel => {
-                        cell.set_fg(TuiColor::Yellow).set_bg(TuiColor::Black);
-                    }
-                    TerrainType::Empty => {
-                        cell.set_fg(TuiColor::Black).set_bg(TuiColor::Black);
-                    }
-                }
-            }
-        }
-
-        // Render entities (actors, items, etc.)
-        for (entity, (pos, renderable, _actor)) in self.ecs_world.world.query::<(&Position, &Renderable, &Actor)>().iter() {
-            if pos.z != current_level {
-                continue; // Only render entities on the same level as player
-            }
-
-            // Only render visible entities
-            if !visible_positions.contains(&(pos.x, pos.y)) {
-                continue;
-            }
-
-            let x = area.left() + pos.x as u16;
-            let y = area.top() + pos.y as u16;
-
-            // Check bounds
-            if x < area.right() && y < area.bottom() {
-                let cell = &mut buf[(x, y)];
-                
-                cell.set_char(renderable.symbol);
-                
-                // Convert game color to ratatui color
-                cell.set_fg(renderable.fg_color.clone().into());
-                
-                if let Some(bg_color) = &renderable.bg_color {
-                    cell.set_bg(bg_color.clone().into());
-                }
-            }
-        }
-    }
-}
-
-/// Helper function to get player's position
-fn find_player_position(ecs_world: &ECSWorld) -> Option<Position> {
-    for (entity, (pos, _actor)) in ecs_world.world.query::<(&Position, &Actor)>().iter() {
-        // In a real implementation, we'd check if this is the player specifically
-        // For now, we'll just return the first actor as the player
-        if ecs_world.world.contains(entity) && ecs_world.world.get::<&Player>(entity).is_ok() {
-            return Some(pos.clone());
-        }
-    }
-    None
-}
-
-/// Helper function to get visible positions from player's viewshed
-fn get_visible_positions(ecs_world: &ECSWorld) -> std::collections::HashSet<(i32, i32)> {
-    let mut visible_positions = std::collections::HashSet::new();
-    
-    for (entity, (viewshed, _pos, _actor)) in ecs_world.world.query::<(&Viewshed, &Position, &Actor)>().iter() {
-        if ecs_world.world.contains(entity) && ecs_world.world.get::<&Player>(entity).is_ok() { // Only player's viewshed
-            for pos in &viewshed.visible_tiles {
-                visible_positions.insert((pos.x, pos.y));
-            }
-            break;
-        }
-    }
-    
-    visible_positions
 }
 
 /// Helper function to format messages for display
@@ -290,28 +220,15 @@ fn format_messages(messages: &[String]) -> String {
     if messages.is_empty() {
         "Welcome to Pixel Dungeon!".to_string()
     } else {
-        messages.join("\n")
-    }
-}
-
-/// Extension trait to convert terrain type to character representation
-trait ToChar {
-    fn to_char(&self) -> char;
-}
-
-impl ToChar for TerrainType {
-    fn to_char(&self) -> char {
-        match self {
-            TerrainType::Wall => '#',
-            TerrainType::Floor => '.',
-            TerrainType::Door => '+',
-            TerrainType::StairsDown => '>',
-            TerrainType::StairsUp => '<',
-            TerrainType::Water => '~',
-            TerrainType::Trap => '^',
-            TerrainType::Barrel => 'O',
-            TerrainType::Empty => ' ',
-        }
+        // 显示最近的 3 条消息
+        messages
+            .iter()
+            .rev()
+            .take(3)
+            .rev()
+            .map(|s| s.as_str())
+            .collect::<Vec<_>>()
+            .join(" | ")
     }
 }
 
@@ -334,15 +251,17 @@ impl Clock for GameClock {
     fn now(&self) -> std::time::SystemTime {
         std::time::SystemTime::now()
     }
-    
+
     fn elapsed(&self, since: std::time::SystemTime) -> Duration {
-        self.now().duration_since(since).unwrap_or(Duration::from_millis(0))
+        self.now()
+            .duration_since(since)
+            .unwrap_or(Duration::from_millis(0))
     }
-    
+
     fn sleep(&self, duration: Duration) {
         std::thread::sleep(duration);
     }
-    
+
     fn tick_rate(&self) -> Duration {
         self.tick_rate
     }

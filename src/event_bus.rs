@@ -6,26 +6,41 @@
 //! - 按优先级处理事件
 //! - 使用中间件拦截和转换事件
 
-use serde::{Serialize, Deserialize};
-use std::sync::{Arc, Mutex};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 /// 游戏事件定义 - 用于模块间解耦通信
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GameEvent {
     // ===== 移动事件 =====
     /// 实体移动
-    EntityMoved { entity: u32, from_x: i32, from_y: i32, to_x: i32, to_y: i32 },
+    EntityMoved {
+        entity: u32,
+        from_x: i32,
+        from_y: i32,
+        to_x: i32,
+        to_y: i32,
+    },
 
     // ===== 战斗事件 =====
     /// 战斗开始
     CombatStarted { attacker: u32, defender: u32 },
     /// 造成伤害
-    DamageDealt { attacker: u32, victim: u32, damage: u32, is_critical: bool },
+    DamageDealt {
+        attacker: u32,
+        victim: u32,
+        damage: u32,
+        is_critical: bool,
+    },
     /// 实体死亡
     EntityDied { entity: u32, entity_name: String },
     /// 状态效果应用
-    StatusApplied { entity: u32, status: String, duration: u32 },
+    StatusApplied {
+        entity: u32,
+        status: String,
+        duration: u32,
+    },
     /// 状态效果移除
     StatusRemoved { entity: u32, status: String },
 
@@ -33,7 +48,11 @@ pub enum GameEvent {
     /// AI 做出决策
     AIDecisionMade { entity: u32, decision: String },
     /// AI 目标改变
-    AITargetChanged { entity: u32, old_target: Option<u32>, new_target: Option<u32> },
+    AITargetChanged {
+        entity: u32,
+        old_target: Option<u32>,
+        new_target: Option<u32>,
+    },
 
     // ===== 物品事件 =====
     /// 拾取物品
@@ -41,15 +60,31 @@ pub enum GameEvent {
     /// 丢弃物品
     ItemDropped { entity: u32, item_name: String },
     /// 使用物品
-    ItemUsed { entity: u32, item_name: String, effect: String },
+    ItemUsed {
+        entity: u32,
+        item_name: String,
+        effect: String,
+    },
     /// 装备物品
-    ItemEquipped { entity: u32, item_name: String, slot: String },
+    ItemEquipped {
+        entity: u32,
+        item_name: String,
+        slot: String,
+    },
     /// 卸下物品
-    ItemUnequipped { entity: u32, item_name: String, slot: String },
+    ItemUnequipped {
+        entity: u32,
+        item_name: String,
+        slot: String,
+    },
 
     // ===== 玩家状态事件 =====
     /// 饥饿度变化
-    HungerChanged { entity: u32, old_satiety: u8, new_satiety: u8 },
+    HungerChanged {
+        entity: u32,
+        old_satiety: u8,
+        new_satiety: u8,
+    },
     /// 玩家感到饥饿
     PlayerHungry { entity: u32, satiety: u8 },
     /// 玩家正在挨饿
@@ -275,7 +310,10 @@ impl EventBus {
     /// 注册事件中间件
     pub fn register_middleware(&mut self, middleware: Box<dyn EventMiddleware>) {
         let priority = middleware.priority();
-        let entry = MiddlewareEntry { middleware, priority };
+        let entry = MiddlewareEntry {
+            middleware,
+            priority,
+        };
 
         self.middlewares.push(entry);
 
@@ -305,7 +343,8 @@ impl EventBus {
         self.global_handlers.push(entry);
 
         // 按优先级排序
-        self.global_handlers.sort_by(|a, b| a.priority.cmp(&b.priority));
+        self.global_handlers
+            .sort_by(|a, b| a.priority.cmp(&b.priority));
     }
 
     /// 分发事件给所有订阅者
@@ -384,9 +423,9 @@ impl EventBus {
 
     /// 获取订阅者数量（用于调试）
     pub fn subscriber_count(&self) -> usize {
-        self.global_handlers.len() +
-        self.handlers.values().map(|v| v.len()).sum::<usize>() +
-        self.middlewares.len()
+        self.global_handlers.len()
+            + self.handlers.values().map(|v| v.len()).sum::<usize>()
+            + self.middlewares.len()
     }
 
     /// 获取中间件数量（用于调试）
@@ -600,7 +639,10 @@ impl RateLimitMiddleware {
             event_counts: HashMap::new(),
             max_per_interval,
             interval,
-            name: format!("RateLimitMiddleware({} per {:?})", max_per_interval, interval),
+            name: format!(
+                "RateLimitMiddleware({} per {:?})",
+                max_per_interval, interval
+            ),
         }
     }
 }
@@ -609,9 +651,9 @@ impl EventMiddleware for RateLimitMiddleware {
     fn before_handle(&mut self, event: &GameEvent) -> bool {
         let event_type = event.event_type();
         let now = std::time::Instant::now();
-        
+
         let (count, last_check) = self.event_counts.entry(event_type).or_insert((0, now));
-        
+
         // 如果时间间隔已过，重置计数
         if now.duration_since(*last_check) >= self.interval {
             *count = 0;
@@ -718,7 +760,9 @@ pub struct DebuggingMiddleware {
 
 impl DebuggingMiddleware {
     pub fn new(event_types: Vec<&'static str>) -> Self {
-        Self { debug_events: event_types }
+        Self {
+            debug_events: event_types,
+        }
     }
 }
 
@@ -755,7 +799,11 @@ impl LoggingHandler {
 impl EventHandler for LoggingHandler {
     fn handle(&mut self, event: &GameEvent) {
         let message = match event {
-            GameEvent::DamageDealt { damage, is_critical, .. } => {
+            GameEvent::DamageDealt {
+                damage,
+                is_critical,
+                ..
+            } => {
                 if *is_critical {
                     format!("暴击！造成 {} 点伤害", damage)
                 } else {
@@ -768,19 +816,24 @@ impl EventHandler for LoggingHandler {
             GameEvent::ItemPickedUp { item_name, .. } => {
                 format!("拾取了 {}", item_name)
             }
-            GameEvent::ItemUsed { item_name, effect, .. } => {
+            GameEvent::ItemUsed {
+                item_name, effect, ..
+            } => {
                 format!("使用了 {}，{}", item_name, effect)
             }
-            GameEvent::LevelChanged { old_level, new_level } => {
+            GameEvent::LevelChanged {
+                old_level,
+                new_level,
+            } => {
                 format!("从第 {} 层进入第 {} 层", old_level, new_level)
             }
-            GameEvent::LogMessage { message, .. } => {
-                message.clone()
-            }
+            GameEvent::LogMessage { message, .. } => message.clone(),
             GameEvent::TrapTriggered { trap_type, .. } => {
                 format!("触发了{}陷阱！", trap_type)
             }
-            GameEvent::StatusApplied { status, duration, .. } => {
+            GameEvent::StatusApplied {
+                status, duration, ..
+            } => {
                 format!("受到{}效果影响，持续{}回合", status, duration)
             }
             GameEvent::StatusRemoved { status, .. } => {
@@ -850,7 +903,12 @@ impl CombatStatsHandler {
 impl EventHandler for CombatStatsHandler {
     fn handle(&mut self, event: &GameEvent) {
         match event {
-            GameEvent::DamageDealt { attacker, victim, damage, is_critical } => {
+            GameEvent::DamageDealt {
+                attacker,
+                victim,
+                damage,
+                is_critical,
+            } => {
                 if let Some(player_id) = self.player_entity_id {
                     if *attacker == player_id {
                         self.total_damage_dealt += damage;
@@ -930,9 +988,7 @@ impl EventHandler for MessageAggregator {
             GameEvent::DamageDealt { damage, .. } => {
                 format!("造成 {} 点伤害", damage)
             }
-            GameEvent::LogMessage { message, .. } => {
-                message.clone()
-            }
+            GameEvent::LogMessage { message, .. } => message.clone(),
             _ => return, // 只处理特定类型的消息
         };
 
@@ -1279,18 +1335,27 @@ mod tests {
         let execution_order = Arc::new(Mutex::new(Vec::new()));
 
         // 以乱序添加不同优先级的处理器
-        event_bus.subscribe("DamageDealt", Box::new(PriorityTestHandler {
-            priority: Priority::Low,
-            execution_order: execution_order.clone(),
-        }));
-        event_bus.subscribe("DamageDealt", Box::new(PriorityTestHandler {
-            priority: Priority::Critical,
-            execution_order: execution_order.clone(),
-        }));
-        event_bus.subscribe("DamageDealt", Box::new(PriorityTestHandler {
-            priority: Priority::Normal,
-            execution_order: execution_order.clone(),
-        }));
+        event_bus.subscribe(
+            "DamageDealt",
+            Box::new(PriorityTestHandler {
+                priority: Priority::Low,
+                execution_order: execution_order.clone(),
+            }),
+        );
+        event_bus.subscribe(
+            "DamageDealt",
+            Box::new(PriorityTestHandler {
+                priority: Priority::Critical,
+                execution_order: execution_order.clone(),
+            }),
+        );
+        event_bus.subscribe(
+            "DamageDealt",
+            Box::new(PriorityTestHandler {
+                priority: Priority::Normal,
+                execution_order: execution_order.clone(),
+            }),
+        );
 
         // 发布事件
         event_bus.publish(GameEvent::DamageDealt {
@@ -1396,12 +1461,9 @@ mod tests {
         let call_count = Arc::new(Mutex::new(0));
         let call_count_clone = call_count.clone();
 
-        let mut handler = FilteredHandler::new(
-            vec!["DamageDealt", "EntityDied"],
-            move |_event| {
-                *call_count_clone.lock().unwrap() += 1;
-            },
-        );
+        let mut handler = FilteredHandler::new(vec!["DamageDealt", "EntityDied"], move |_event| {
+            *call_count_clone.lock().unwrap() += 1;
+        });
 
         // 应该处理的事件
         handler.handle(&GameEvent::DamageDealt {
@@ -1530,7 +1592,7 @@ mod tests {
                 GameEvent::DamageDealt { damage, .. } => *damage > 5,
                 _ => true, // 其他事件不过滤
             },
-            "HighDamageFilter"
+            "HighDamageFilter",
         );
 
         event_bus.register_middleware(Box::new(filter));
@@ -1593,20 +1655,20 @@ mod tests {
 
         // 发布一些战斗事件
         event_bus.publish(GameEvent::DamageDealt {
-            attacker: 1,  // 玩家
-            victim: 2,    // 敌人
+            attacker: 1, // 玩家
+            victim: 2,   // 敌人
             damage: 15,
             is_critical: true,
         });
         event_bus.publish(GameEvent::DamageDealt {
-            attacker: 2,  // 敌人
-            victim: 1,    // 玩家
+            attacker: 2, // 敌人
+            victim: 1,   // 玩家
             damage: 8,
             is_critical: false,
         });
         event_bus.publish(GameEvent::DamageDealt {
-            attacker: 1,  // 玩家
-            victim: 2,    // 敌人
+            attacker: 1, // 玩家
+            victim: 2,   // 敌人
             damage: 12,
             is_critical: false,
         });
@@ -1688,24 +1750,24 @@ mod tests {
 
         // 处理玩家造成的伤害
         handler.handle(&GameEvent::DamageDealt {
-            attacker: 1,  // 玩家
-            victim: 2,    // 敌人
+            attacker: 1, // 玩家
+            victim: 2,   // 敌人
             damage: 15,
             is_critical: true,
         });
 
         // 处理玩家受到的伤害
         handler.handle(&GameEvent::DamageDealt {
-            attacker: 2,  // 敌人
-            victim: 1,    // 玩家
+            attacker: 2, // 敌人
+            victim: 1,   // 玩家
             damage: 8,
             is_critical: false,
         });
 
         // 处理更多玩家造成的伤害
         handler.handle(&GameEvent::DamageDealt {
-            attacker: 1,  // 玩家
-            victim: 3,    // 另一个敌人
+            attacker: 1, // 玩家
+            victim: 3,   // 另一个敌人
             damage: 12,
             is_critical: false,
         });

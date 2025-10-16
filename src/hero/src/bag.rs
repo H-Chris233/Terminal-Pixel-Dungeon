@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use items::{
+    Item, ItemKind,
     armor::Armor,
     food::Food,
     misc::{MiscItem, MiscKind},
@@ -14,9 +15,7 @@ use items::{
     stone::Stone,
     wand::Wand,
     weapon::Weapon,
-    Item, ItemKind,
 };
-
 
 // 子模块定义
 pub mod equipment; // 装备管理
@@ -269,8 +268,9 @@ impl Bag {
                 .weapons
                 .get(idx)
                 .and_then(|slot| match slot {
-                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => 
+                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => {
                         Some(Item::from(item.as_ref().clone()))
+                    }
                 })
                 .ok_or(BagError::InvalidIndex);
         }
@@ -282,8 +282,9 @@ impl Bag {
                 .armors
                 .get(idx)
                 .and_then(|slot| match slot {
-                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => 
+                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => {
                         Some(Item::from(item.as_ref().clone()))
+                    }
                 })
                 .ok_or(BagError::InvalidIndex);
         }
@@ -295,8 +296,9 @@ impl Bag {
                 .potions
                 .get(idx)
                 .and_then(|slot| match slot {
-                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => 
+                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => {
                         Some(Item::from(item.as_ref().clone()))
+                    }
                 })
                 .ok_or(BagError::InvalidIndex);
         }
@@ -308,8 +310,9 @@ impl Bag {
                 .scrolls
                 .get(idx)
                 .and_then(|slot| match slot {
-                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => 
+                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => {
                         Some(Item::from(item.as_ref().clone()))
+                    }
                 })
                 .ok_or(BagError::InvalidIndex);
         }
@@ -321,8 +324,9 @@ impl Bag {
                 .rings
                 .get(idx)
                 .and_then(|slot| match slot {
-                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => 
+                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => {
                         Some(Item::from(item.as_ref().clone()))
+                    }
                 })
                 .ok_or(BagError::InvalidIndex);
         }
@@ -334,8 +338,9 @@ impl Bag {
                 .food
                 .get(idx)
                 .and_then(|slot| match slot {
-                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => 
+                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => {
                         Some(Item::from(item.as_ref().clone()))
+                    }
                 })
                 .ok_or(BagError::InvalidIndex);
         }
@@ -347,8 +352,9 @@ impl Bag {
                 .wands
                 .get(idx)
                 .and_then(|slot| match slot {
-                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => 
+                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => {
                         Some(Item::from(item.as_ref().clone()))
+                    }
                 })
                 .ok_or(BagError::InvalidIndex);
         }
@@ -360,8 +366,9 @@ impl Bag {
                 .seeds
                 .get(idx)
                 .and_then(|slot| match slot {
-                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => 
+                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => {
                         Some(Item::from(item.as_ref().clone()))
+                    }
                 })
                 .ok_or(BagError::InvalidIndex);
         }
@@ -373,8 +380,9 @@ impl Bag {
                 .stones
                 .get(idx)
                 .and_then(|slot| match slot {
-                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => 
+                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => {
                         Some(Item::from(item.as_ref().clone()))
+                    }
                 })
                 .ok_or(BagError::InvalidIndex);
         }
@@ -386,8 +394,9 @@ impl Bag {
                 .misc
                 .get(idx)
                 .and_then(|slot| match slot {
-                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => 
+                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => {
                         Some(Item::from(item.as_ref().clone()))
+                    }
                 })
                 .ok_or(BagError::InvalidIndex);
         }

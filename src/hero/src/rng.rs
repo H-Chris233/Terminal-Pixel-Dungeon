@@ -1,14 +1,14 @@
 //src/hero/src/rng.rs
 use bincode::{
+    BorrowDecode, Decode, Encode,
     de::{BorrowDecoder, Decoder},
     enc::Encoder,
     error::{DecodeError, EncodeError},
-    BorrowDecode, Decode, Encode
 };
 use rand::{
     distr::uniform,
-    {Rng, SeedableRng},
     prelude::SliceRandom,
+    {Rng, SeedableRng},
 };
 use rand_pcg::Pcg32;
 use serde::{Deserialize, Serialize};
@@ -89,7 +89,7 @@ impl HeroRng {
     {
         self.rng.random_range(range)
     }
-    
+
     #[cfg(test)]
     pub fn current_state(&self) -> Pcg32 {
         self.rng.clone()
@@ -118,9 +118,7 @@ impl Encode for HeroRng {
 }
 
 impl<Context> Decode<Context> for HeroRng {
-    fn decode<D: Decoder<Context = Context>>(
-        decoder: &mut D,
-    ) -> Result<Self, DecodeError> {
+    fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let seed = u64::decode(decoder)?;
         Ok(Self::new(seed))
     }
@@ -128,7 +126,7 @@ impl<Context> Decode<Context> for HeroRng {
 
 impl<'de, Context> BorrowDecode<'de, Context> for HeroRng {
     fn borrow_decode<D: BorrowDecoder<'de, Context = Context>>(
-        decoder: &mut D
+        decoder: &mut D,
     ) -> Result<Self, DecodeError> {
         let seed = u64::borrow_decode(decoder)?;
         Ok(Self::new(seed))
@@ -138,8 +136,8 @@ impl<'de, Context> BorrowDecode<'de, Context> for HeroRng {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bincode::{config, Decode, Encode};
-    
+    use bincode::{Decode, Encode, config};
+
     #[test]
     fn test_deterministic_rng() {
         let mut rng1 = HeroRng::new(123);
@@ -165,14 +163,14 @@ mod tests {
         assert!(roll >= 7);
         assert!(roll <= 13);
     }
-    
+
     #[test]
     fn test_bincode_roundtrip() {
         let mut rng = HeroRng::new(123456);
-        
-        // 使用标准配置函数 
+
+        // 使用标准配置函数
         let config = config::standard();
-        
+
         let encoded = bincode::encode_to_vec(&rng, config).unwrap();
         let decoded: HeroRng = bincode::decode_from_slice(&encoded, config).unwrap().0;
 

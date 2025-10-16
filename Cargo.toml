@@ -1,12 +1,11 @@
 [workspace]
 members = [
-    "src/combat",
-    "src/dungeon",
-    "src/hero",
-    "src/items",
-    "src/save",
-    "src/error",
-    "src/ui",
+	"src/combat",
+	"src/dungeon",
+	"src/hero",
+	"src/items",
+	"src/save",
+	"src/error",
 ]
 resolver = "2"
 
@@ -36,4 +35,3 @@ hero = { path = "src/hero", version = "0.1.0" }
 items = { path = "src/items", version = "0.1.0" }
 save = { path = "src/save", version = "0.1.0" }
 error = { path = "src/error", version = "0.1.0" }
-ui = { path = "src/ui", version = "0.1.0" }

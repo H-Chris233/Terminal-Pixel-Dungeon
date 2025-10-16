@@ -1,12 +1,12 @@
 // src/combat/src/enemy/enemy.rs
 
 use bincode::{Decode, Encode};
-use rand::prelude::IndexedRandom;
 use rand::Rng;
+use rand::prelude::IndexedRandom;
 use serde::{Deserialize, Serialize};
 
-use items::Weapon;
 use crate::effect::Effect;
+use items::Weapon;
 
 /// 敌人实体，包含战斗属性和位置信息
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
@@ -273,7 +273,7 @@ impl Enemy {
     pub fn defense(&self) -> u32 {
         self.defense
     }
-    
+
     /// 获取命中率（考虑武器加成）
     pub fn accuracy(&self) -> i32 {
         let base = match self.kind {
@@ -376,4 +376,3 @@ impl Enemy {
         self.attack_distance() > 1
     }
 }
-

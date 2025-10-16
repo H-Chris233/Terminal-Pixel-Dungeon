@@ -10,12 +10,12 @@ pub fn affect_adjacent_enemies(_x: i32, _y: i32, _f: impl Fn(&mut Enemy)) {}
 pub fn reveal_current_level(_x: i32, _y: i32) {}
 pub fn alert_nearby_enemies(_x: i32, _y: i32) {}
 
-pub use crate::level::tiles::{TerrainType, TileInfo};
 use crate::level::Level;
+pub use crate::level::tiles::{TerrainType, TileInfo};
 use crate::trap::TrapEffect;
 
-use items::Item;
 use combat::enemy::Enemy;
+use items::Item;
 
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct Dungeon {
@@ -123,7 +123,7 @@ impl Dungeon {
     pub fn on_hero_enter(&mut self, x: i32, y: i32) -> Vec<InteractionEvent> {
         self.on_hero_enter_with_events(x, y)
     }
-    
+
     /// 统一处理英雄进入新格子的所有交互
     pub fn on_hero_enter_with_events(&mut self, x: i32, y: i32) -> Vec<InteractionEvent> {
         let mut events = Vec::new();

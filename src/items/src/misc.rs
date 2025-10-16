@@ -5,11 +5,11 @@ use seahash::SeaHasher;
 use serde::{Deserialize, Serialize};
 use std::hash::Hasher;
 
-use crate::ItemCategory;
-use crate::ItemTrait;
 use crate::BINCODE_CONFIG;
 use crate::Item;
+use crate::ItemCategory;
 use crate::ItemKind;
+use crate::ItemTrait;
 
 /// 杂项物品类型，参考破碎的像素地牢游戏逻辑
 #[derive(Copy, Debug, Clone, PartialEq, Serialize, Deserialize, Encode, Decode)]

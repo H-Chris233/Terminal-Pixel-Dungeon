@@ -10,11 +10,11 @@ use seahash::SeaHasher;
 use serde::{Deserialize, Serialize};
 use std::hash::Hasher;
 
-use crate::ItemCategory;
-use crate::ItemTrait;
 use crate::BINCODE_CONFIG;
 use crate::Item;
+use crate::ItemCategory;
 use crate::ItemKind;
+use crate::ItemTrait;
 
 /// 魔法石系统（10种对应卷轴）
 #[derive(Eq, Hash, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]

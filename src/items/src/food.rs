@@ -1,17 +1,17 @@
 //src/items/src/food.rs
 use bincode::serde::encode_to_vec;
 use bincode::{Decode, Encode};
+use ratatui::style::Color;
 use seahash::SeaHasher;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::hash::Hasher;
-use ratatui::style::Color;
 
-use crate::ItemCategory;
-use crate::ItemTrait;
 use crate::BINCODE_CONFIG;
 use crate::Item;
+use crate::ItemCategory;
 use crate::ItemKind;
+use crate::ItemTrait;
 
 /// 食物系统（精确还原游戏机制）
 #[derive(Eq, Hash, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]

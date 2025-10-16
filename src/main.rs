@@ -1,24 +1,24 @@
+pub mod core;
 pub mod ecs;
-pub mod systems;
+pub mod event_bus;
 pub mod game_loop;
 pub mod input;
+pub mod render; // 新增：模块化渲染组件
 pub mod renderer;
+pub mod systems;
 pub mod turn_system;
-pub mod core;
-pub mod event_bus;
-
 
 use anyhow::Context;
 use crossterm::{
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use std::io;
 
 use crate::{
-    renderer::{RatatuiRenderer, GameClock},
-    input::ConsoleInput,
     game_loop::GameLoop,
+    input::ConsoleInput,
+    renderer::{GameClock, RatatuiRenderer},
 };
 
 struct TerminalGuard;
@@ -39,7 +39,7 @@ fn main() -> anyhow::Result<()> {
     let renderer = RatatuiRenderer::new()?;
     let input_source = ConsoleInput::new();
     let clock = GameClock::new(16); // ~60 FPS
-    
+
     // Initialize and run the game loop
     let mut game_loop = GameLoop::new(renderer, input_source, clock);
     game_loop.initialize()?;

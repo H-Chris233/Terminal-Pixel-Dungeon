@@ -1,14 +1,14 @@
 //! Game loop implementation that orchestrates ECS systems.
 
+use crate::core::GameEngine;
 use crate::ecs::*;
+use crate::input::*;
 use crate::renderer::*;
 use crate::systems::*;
-use crate::input::*;
 use crate::turn_system::TurnSystem;
-use save::{SaveSystem, AutoSave};
 use anyhow;
+use save::{AutoSave, SaveSystem};
 use std::time::Duration;
-use crate::core::GameEngine;
 
 /// Main game loop that runs the ECS systems in order
 pub struct GameLoop<R: Renderer, I: InputSource, C: Clock> {
@@ -24,13 +24,10 @@ pub struct GameLoop<R: Renderer, I: InputSource, C: Clock> {
 }
 
 impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> GameLoop<R, I, C> {
-    pub fn new(
-        renderer: R,
-        input_source: I,
-        clock: C,
-    ) -> Self {
+    pub fn new(renderer: R, input_source: I, clock: C) -> Self {
         let systems: Vec<Box<dyn System>> = vec![
             Box::new(InputSystem),
+            Box::new(MenuSystem), // 菜单系统（需要优先处理菜单动作）
             Box::new(TimeSystem),
             Box::new(MovementSystem),
             Box::new(AISystem),
@@ -39,16 +36,14 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
             Box::new(EffectSystem),
             Box::new(EnergySystem),
             Box::new(InventorySystem),
-            Box::new(HungerSystem),    // 新增：饥饿系统
+            Box::new(HungerSystem), // 新增：饥饿系统
             Box::new(DungeonSystem),
             Box::new(RenderingSystem),
         ];
 
-
-
         let ecs_world = ECSWorld::new();
         let game_engine = GameEngine::new();
-        
+
         let save_system = match SaveSystem::new("saves", 10) {
             Ok(save_sys) => Some(AutoSave::new(save_sys, std::time::Duration::from_secs(300))),
             Err(e) => {
@@ -69,26 +64,30 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
             save_system,
         }
     }
-    
+
     /// Initialize the game state
     pub fn initialize(&mut self) -> anyhow::Result<()> {
         self.renderer.init()?;
-        
-        // Add initial entities to the world
-        self.initialize_entities();
-        
+
+        // 设置初始状态为主菜单
+        self.ecs_world.resources.game_state.game_state = GameStatus::MainMenu;
+
+        // Add initial entities to the world (但不立即生成，等玩家选择开始游戏)
+        // self.initialize_entities();
+
         Ok(())
     }
-    
+
     /// Initialize starting entities
     fn initialize_entities(&mut self) {
         // Determine player start position from dungeon if available
-        let (start_x, start_y, start_z) = if let Some(dungeon) = crate::ecs::get_dungeon_clone(&self.ecs_world.world) {
-            let lvl = dungeon.current_level();
-            (lvl.stair_up.0, lvl.stair_up.1, dungeon.depth as i32 - 1)
-        } else {
-            (10, 10, 0)
-        };
+        let (start_x, start_y, start_z) =
+            if let Some(dungeon) = crate::ecs::get_dungeon_clone(&self.ecs_world.world) {
+                let lvl = dungeon.current_level();
+                (lvl.stair_up.0, lvl.stair_up.1, dungeon.depth as i32 - 1)
+            } else {
+                (10, 10, 0)
+            };
 
         // Add player entity
         let player_entity = self.ecs_world.world.spawn((
@@ -118,14 +117,15 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                 max_slots: 10,
             },
             // ========== 新增：玩家专属组件 ==========
-            crate::ecs::Hunger::new(5),  // 初始饱食度为5（半饱）
-            crate::ecs::Wealth::new(0),  // 初始金币为0
-            crate::ecs::PlayerProgress::new(10, "Warrior".to_string()),  // 初始力量10，战士职业
+            crate::ecs::Hunger::new(5), // 初始饱食度为5（半饱）
+            crate::ecs::Wealth::new(0), // 初始金币为0
+            crate::ecs::PlayerProgress::new(10, "Warrior".to_string()), // 初始力量10，战士职业
             Viewshed {
                 range: 8,
                 visible_tiles: vec![],
                 memory: vec![],
                 dirty: true,
+                algorithm: crate::ecs::FovAlgorithm::default(),
             },
             Energy {
                 current: 100,
@@ -134,7 +134,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
             },
             crate::ecs::Player, // Player marker component
         ));
-        
+
         // Add some test enemies
         self.ecs_world.world.spawn((
             Position::new(15, 10, 0),
@@ -169,7 +169,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                 regeneration_rate: 1,
             },
         ));
-        
+
         // Add some items
         self.ecs_world.world.spawn((
             Position::new(12, 12, 0),
@@ -200,7 +200,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                 has_monster: false,
             },
         ));
-        
+
         // Add some basic dungeon tiles (simplified)
         for x in 5..25 {
             for y in 5..25 {
@@ -218,8 +218,16 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                         has_monster: false,
                     },
                     Renderable {
-                        symbol: if x == 5 || x == 24 || y == 5 || y == 24 { '#' } else { '.' },
-                        fg_color: if x == 5 || x == 24 || y == 5 || y == 24 { Color::Gray } else { Color::White },
+                        symbol: if x == 5 || x == 24 || y == 5 || y == 24 {
+                            '#'
+                        } else {
+                            '.'
+                        },
+                        fg_color: if x == 5 || x == 24 || y == 5 || y == 24 {
+                            Color::Gray
+                        } else {
+                            Color::White
+                        },
                         bg_color: Some(Color::Black),
                         order: 0,
                     },
@@ -227,13 +235,13 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
             }
         }
     }
-    
+
     /// Main game loop
     pub fn run(&mut self) -> anyhow::Result<()> {
         while self.is_running {
             // Check game state before processing
             match self.ecs_world.resources.game_state.game_state {
-                crate::ecs::GameStatus::GameOver => {
+                crate::ecs::GameStatus::GameOver { reason: _ } => {
                     self.is_running = false;
                     break;
                 }
@@ -243,16 +251,16 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                 }
                 _ => {} // Continue normal game processing
             }
-            
+
             // Handle input
             self.handle_input()?;
-            
+
             // Update game state based on turns
             self.update_turn()?;
-            
+
             // Check game state again after update
             match self.ecs_world.resources.game_state.game_state {
-                crate::ecs::GameStatus::GameOver => {
+                crate::ecs::GameStatus::GameOver { reason: _ } => {
                     self.is_running = false;
                     break;
                 }
@@ -262,18 +270,18 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                 }
                 _ => {} // Continue normal game processing
             }
-            
+
             // Render the game
             self.render()?;
-            
+
             // Small delay to prevent busy looping
             self.clock.sleep(Duration::from_millis(1));
         }
-        
+
         self.cleanup()?;
         Ok(())
     }
-    
+
     /// Handle user input
     fn handle_input(&mut self) -> anyhow::Result<()> {
         // Poll for input with a small timeout
@@ -282,20 +290,25 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                 InputEvent::Key(key_event) => {
                     // Convert key event to player action
                     if let Some(action) = key_event_to_player_action_from_internal(key_event) {
-                        self.ecs_world.resources.input_buffer.pending_actions.push(action);
+                        self.ecs_world
+                            .resources
+                            .input_buffer
+                            .pending_actions
+                            .push(action);
                     }
-                },
+                }
                 InputEvent::Resize(width, height) => {
                     // Handle terminal resize
-                    self.renderer.resize(&mut self.ecs_world.resources, width, height)?;
-                },
+                    self.renderer
+                        .resize(&mut self.ecs_world.resources, width, height)?;
+                }
                 _ => {} // Other events currently ignored
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Update game state by running all systems for a turn
     fn update_turn(&mut self) -> anyhow::Result<()> {
         // Run systems based on turn state
@@ -320,7 +333,6 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                             return Err(anyhow::anyhow!(msg));
                         }
                     }
-                    continue;
                 }
 
                 // 特殊处理 HungerSystem，使用事件版本
@@ -336,7 +348,6 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                             return Err(anyhow::anyhow!(msg));
                         }
                     }
-                    continue;
                 }
 
                 match system.run(&mut self.ecs_world.world, &mut self.ecs_world.resources) {
@@ -356,7 +367,8 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
             self.ecs_world.process_events();
 
             // Process the player's turn
-            self.turn_system.process_turn_cycle(&mut self.ecs_world.world, &mut self.ecs_world.resources)?;
+            self.turn_system
+                .process_turn_cycle(&mut self.ecs_world.world, &mut self.ecs_world.resources)?;
         } else {
             // Process AI turns without player input
             // Run non-input systems
@@ -379,7 +391,6 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                             return Err(anyhow::anyhow!(msg));
                         }
                     }
-                    continue;
                 }
 
                 // 特殊处理 HungerSystem，使用事件版本
@@ -395,7 +406,6 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                             return Err(anyhow::anyhow!(msg));
                         }
                     }
-                    continue;
                 }
 
                 match system.run(&mut self.ecs_world.world, &mut self.ecs_world.resources) {
@@ -415,7 +425,8 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
             self.ecs_world.process_events();
 
             // Process AI turns
-            self.turn_system.process_turn_cycle(&mut self.ecs_world.world, &mut self.ecs_world.resources)?;
+            self.turn_system
+                .process_turn_cycle(&mut self.ecs_world.world, &mut self.ecs_world.resources)?;
         }
 
         // 准备处理下一帧事件
@@ -432,7 +443,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
 
         Ok(())
     }
-    
+
     /// Update game state by running all systems
     fn update(&mut self) -> anyhow::Result<()> {
         for system in &mut self.systems {
@@ -448,7 +459,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                 }
             }
         }
-        
+
         // Check for auto-save
         if let Some(auto_save) = &mut self.save_system {
             if let Ok(save_data) = self.ecs_world.to_save_data() {
@@ -457,22 +468,22 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                 }
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Render the current game state
     fn render(&mut self) -> anyhow::Result<()> {
         self.renderer.draw(&mut self.ecs_world)?;
         Ok(())
     }
-    
+
     /// Clean up resources
     fn cleanup(&mut self) -> anyhow::Result<()> {
         self.renderer.cleanup()?;
         Ok(())
     }
-    
+
     /// Save the current game state
     pub fn save_game(&mut self, slot: usize) -> anyhow::Result<()> {
         if let Some(auto_save) = &mut self.save_system {
@@ -481,7 +492,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
         }
         Ok(())
     }
-    
+
     /// Load a saved game state
     pub fn load_game(&mut self, slot: usize) -> anyhow::Result<()> {
         if let Some(auto_save) = &mut self.save_system {
@@ -505,6 +516,7 @@ impl HeadlessGameLoop {
     pub fn new() -> Self {
         let systems: Vec<Box<dyn System>> = vec![
             Box::new(InputSystem),
+            Box::new(MenuSystem), // 菜单系统（需要优先处理菜单动作）
             Box::new(TimeSystem),
             Box::new(MovementSystem),
             Box::new(AISystem),
@@ -513,14 +525,14 @@ impl HeadlessGameLoop {
             Box::new(EffectSystem),
             Box::new(EnergySystem),
             Box::new(InventorySystem),
-            Box::new(HungerSystem),    // 新增：饥饿系统
+            Box::new(HungerSystem), // 新增：饥饿系统
             Box::new(DungeonSystem),
             Box::new(RenderingSystem),
         ];
 
         let ecs_world = ECSWorld::new();
         let game_engine = GameEngine::new();
-        
+
         let save_system = match SaveSystem::new("saves", 10) {
             Ok(save_sys) => Some(AutoSave::new(save_sys, std::time::Duration::from_secs(300))), // 5 min auto-save
             Err(e) => {
@@ -528,7 +540,7 @@ impl HeadlessGameLoop {
                 None
             }
         };
-        
+
         Self {
             game_engine,
             ecs_world,
@@ -537,20 +549,20 @@ impl HeadlessGameLoop {
             save_system,
         }
     }
-    
+
     /// Run the game loop without rendering (for testing)
     pub fn run_for_ticks(&mut self, ticks: u32) -> anyhow::Result<()> {
         for _ in 0..ticks {
             if !self.is_running {
                 break;
             }
-            
+
             self.update()?;
         }
-        
+
         Ok(())
     }
-    
+
     /// Save the current game state
     pub fn save_game(&mut self, slot: usize) -> anyhow::Result<()> {
         if let Some(auto_save) = &mut self.save_system {
@@ -559,7 +571,7 @@ impl HeadlessGameLoop {
         }
         Ok(())
     }
-    
+
     /// Load a saved game state
     pub fn load_game(&mut self, slot: usize) -> anyhow::Result<()> {
         if let Some(auto_save) = &mut self.save_system {
@@ -568,7 +580,7 @@ impl HeadlessGameLoop {
         }
         Ok(())
     }
-    
+
     /// Update game state by running all systems
     fn update(&mut self) -> anyhow::Result<()> {
         for system in &mut self.systems {
@@ -584,7 +596,7 @@ impl HeadlessGameLoop {
                 }
             }
         }
-        
+
         // Check for auto-save
         if let Some(auto_save) = &mut self.save_system {
             if let Ok(save_data) = self.ecs_world.to_save_data() {
@@ -593,7 +605,7 @@ impl HeadlessGameLoop {
                 }
             }
         }
-        
+
         Ok(())
     }
 }
@@ -602,22 +614,30 @@ impl HeadlessGameLoop {
 fn key_event_to_player_action_from_internal(key_event: KeyEvent) -> Option<PlayerAction> {
     match (key_event.code, key_event.modifiers.shift) {
         // Movement keys
-        (KeyCode::Char('k'), false) | (KeyCode::Up, false) => Some(PlayerAction::Move(Direction::North)),
-        (KeyCode::Char('j'), false) | (KeyCode::Down, false) => Some(PlayerAction::Move(Direction::South)),
-        (KeyCode::Char('h'), false) | (KeyCode::Left, false) => Some(PlayerAction::Move(Direction::West)),
-        (KeyCode::Char('l'), false) | (KeyCode::Right, false) => Some(PlayerAction::Move(Direction::East)),
+        (KeyCode::Char('k'), false) | (KeyCode::Up, false) => {
+            Some(PlayerAction::Move(Direction::North))
+        }
+        (KeyCode::Char('j'), false) | (KeyCode::Down, false) => {
+            Some(PlayerAction::Move(Direction::South))
+        }
+        (KeyCode::Char('h'), false) | (KeyCode::Left, false) => {
+            Some(PlayerAction::Move(Direction::West))
+        }
+        (KeyCode::Char('l'), false) | (KeyCode::Right, false) => {
+            Some(PlayerAction::Move(Direction::East))
+        }
         (KeyCode::Char('y'), false) => Some(PlayerAction::Move(Direction::NorthWest)),
         (KeyCode::Char('u'), false) => Some(PlayerAction::Move(Direction::NorthEast)),
         (KeyCode::Char('b'), false) => Some(PlayerAction::Move(Direction::SouthWest)),
         (KeyCode::Char('n'), false) => Some(PlayerAction::Move(Direction::SouthEast)),
-        
+
         // Wait/skip turn
         (KeyCode::Char('.'), false) => Some(PlayerAction::Wait),
-        
+
         // Stairs
         (KeyCode::Char('>'), false) => Some(PlayerAction::Descend),
         (KeyCode::Char('<'), false) => Some(PlayerAction::Ascend),
-        
+
         // Attack via direction
         (KeyCode::Char('K'), true) => Some(PlayerAction::Attack(Position { x: 0, y: -1, z: 0 })),
         (KeyCode::Char('J'), true) => Some(PlayerAction::Attack(Position { x: 0, y: 1, z: 0 })),
@@ -627,10 +647,10 @@ fn key_event_to_player_action_from_internal(key_event: KeyEvent) -> Option<Playe
         (KeyCode::Char('U'), true) => Some(PlayerAction::Attack(Position { x: 1, y: -1, z: 0 })),
         (KeyCode::Char('B'), true) => Some(PlayerAction::Attack(Position { x: -1, y: 1, z: 0 })),
         (KeyCode::Char('N'), true) => Some(PlayerAction::Attack(Position { x: 1, y: 1, z: 0 })),
-        
+
         // Game control
         (KeyCode::Char('q'), false) => Some(PlayerAction::Quit),
-        
+
         // Number keys for items/spells
         (KeyCode::Char('1'), false) => Some(PlayerAction::UseItem(0)),
         (KeyCode::Char('2'), false) => Some(PlayerAction::UseItem(1)),
@@ -641,10 +661,10 @@ fn key_event_to_player_action_from_internal(key_event: KeyEvent) -> Option<Playe
         (KeyCode::Char('7'), false) => Some(PlayerAction::UseItem(6)),
         (KeyCode::Char('8'), false) => Some(PlayerAction::UseItem(7)),
         (KeyCode::Char('9'), false) => Some(PlayerAction::UseItem(8)),
-        
+
         // Drop item
         (KeyCode::Char('d'), false) => Some(PlayerAction::DropItem(0)),
-        
+
         _ => None,
     }
 }
@@ -652,24 +672,24 @@ fn key_event_to_player_action_from_internal(key_event: KeyEvent) -> Option<Playe
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::renderer::RatatuiRenderer;
     use crate::input::ConsoleInput;
     use crate::renderer::GameClock;
-    
+    use crate::renderer::RatatuiRenderer;
+
     #[test]
     fn test_game_loop_creation() -> anyhow::Result<()> {
         let renderer = RatatuiRenderer::new()?;
         let input_source = ConsoleInput::new();
         let clock = GameClock::new(16); // ~60 FPS
-        
+
         let mut game_loop = GameLoop::new(renderer, input_source, clock);
-        
+
         // Initialize the game loop
         game_loop.initialize()?;
-        
+
         // Check that entities were initialized
         assert!(game_loop.ecs_world.world.iter().count() > 0);
-        
+
         Ok(())
     }
 }

@@ -3,7 +3,7 @@ use crate::{
     bag::BagError,
     effects::{Effect, EffectType},
 };
-use items::{potion::PotionKind, scroll::ScrollKind, Item, ItemCategory};
+use items::{Item, ItemCategory, potion::PotionKind, scroll::ScrollKind};
 
 use crate::Hero;
 
@@ -40,7 +40,10 @@ impl Hero {
 
     /// 药水使用逻辑
     fn use_potion(&mut self, index: usize) -> Result<(), HeroError> {
-        let mut item = self.bag.use_item(index).map_err(|_| HeroError::ActionFailed)?;
+        let mut item = self
+            .bag
+            .use_item(index)
+            .map_err(|_| HeroError::ActionFailed)?;
         if let items::ItemKind::Potion(ref mut potion) = item.kind {
             if !potion.identified {
                 self.notify("你喝下了未知的药水...".into());
@@ -49,24 +52,23 @@ impl Hero {
             }
 
             match potion.kind {
-            PotionKind::Healing => self.heal(self.max_hp / 3),
-            PotionKind::Strength => self.strength += 1,
-            PotionKind::MindVision => {
-                self.effects.add(Effect::new(EffectType::MindVision, 20));
+                PotionKind::Healing => self.heal(self.max_hp / 3),
+                PotionKind::Strength => self.strength += 1,
+                PotionKind::MindVision => {
+                    self.effects.add(Effect::new(EffectType::MindVision, 20));
+                }
+                PotionKind::ToxicGas => {
+                    // dungeon::affect_adjacent_enemies(self.x, self.y, |e| {
+                    //     e.add_effect(Effect::new(EffectType::Poison, 10));
+                    // });
+                }
+                PotionKind::Frost => {
+                    // dungeon::affect_adjacent_enemies(self.x, self.y, |e| {
+                    //     e.add_effect(Effect::new(EffectType::Frost, 5));
+                    // });
+                }
+                _ => {}
             }
-            PotionKind::ToxicGas => {
-                // dungeon::affect_adjacent_enemies(self.x, self.y, |e| {
-                //     e.add_effect(Effect::new(EffectType::Poison, 10));
-                // });
-            }
-            PotionKind::Frost => {
-                // dungeon::affect_adjacent_enemies(self.x, self.y, |e| {
-                //     e.add_effect(Effect::new(EffectType::Frost, 5));
-                // });
-            }
-            _ => {}
-        }
-
         }
         Ok(())
     }
@@ -83,7 +85,9 @@ impl Hero {
 
             match scroll.kind {
                 ScrollKind::Upgrade => {
-                    self.bag.upgrade_weapon().map_err(|_| HeroError::ActionFailed)?;
+                    self.bag
+                        .upgrade_weapon()
+                        .map_err(|_| HeroError::ActionFailed)?;
                 }
                 ScrollKind::RemoveCurse => {
                     self.bag.remove_curse_all();
@@ -106,7 +110,7 @@ impl InventorySystem for Hero {
     }
 
     fn remove_item(&mut self, index: usize) -> Result<(), HeroError> {
-        self.bag.remove_item(index).map_err(|e| e.into()) 
+        self.bag.remove_item(index).map_err(|e| e.into())
     }
 
     fn equip_item(&mut self, index: usize) -> Result<Option<Item>, HeroError> {

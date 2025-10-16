@@ -9,12 +9,12 @@ pub mod rogue;
 pub mod warrior;
 
 use items::{
+    Item, ItemKind,
     armor::Armor,
     potion::PotionKind,
     scroll::ScrollKind,
     seed::Seed,
     weapon::{Weapon, WeaponKind},
-    Item, ItemKind,
 };
 
 /// 英雄职业枚举（SPD核心四职业）
@@ -171,11 +171,7 @@ mod warrior_impl {
     /// 战士特有逻辑
     impl Class {
         pub fn warrior_rage_bonus(&self) -> f32 {
-            if *self == Class::Warrior {
-                1.1
-            } else {
-                1.0
-            }
+            if *self == Class::Warrior { 1.1 } else { 1.0 }
         }
     }
 }

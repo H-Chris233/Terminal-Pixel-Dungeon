@@ -2,14 +2,14 @@
 
 use rand::Rng; // 添加这个导入以修复 random_bool 和 random_range 错误
 
+pub mod combat_manager;
 pub mod combatant;
 pub mod effect;
 pub mod enemy;
-pub mod vision;
-pub mod combat_manager;
 pub mod status_effect;
 #[cfg(test)]
 mod tests;
+pub mod vision;
 
 pub use crate::combatant::Combatant;
 pub use crate::effect::*;
@@ -81,7 +81,7 @@ impl Combat {
         // 发布战斗开始事件
         result.add_event(CombatEvent::CombatStarted {
             attacker: attacker_id,
-            defender: defender_id
+            defender: defender_id,
         });
 
         // Attacker's turn (with potential ambush bonus)
@@ -90,15 +90,17 @@ impl Combat {
             // 发布潜行攻击事件
             result.add_event(CombatEvent::Ambush {
                 attacker: attacker_id,
-                defender: defender_id
+                defender: defender_id,
             });
         }
-        let attack_result = Self::resolve_attack_with_ids(attacker, attacker_id, defender, defender_id, is_ambush);
+        let attack_result =
+            Self::resolve_attack_with_ids(attacker, attacker_id, defender, defender_id, is_ambush);
         result.combine(attack_result);
 
         // Defender's counterattack if alive (no ambush bonus since they know attacker is there)
         if defender.is_alive() {
-            let counter_result = Self::resolve_attack_with_ids(defender, defender_id, attacker, attacker_id, false);
+            let counter_result =
+                Self::resolve_attack_with_ids(defender, defender_id, attacker, attacker_id, false);
             result.combine(counter_result);
         }
 
@@ -230,19 +232,33 @@ impl Combat {
 /// Combat result with detailed logs and event information
 #[derive(Debug, Clone, Default)]
 pub struct CombatResult {
-    pub logs: Vec<String>,    // Combat messages for UI
-    pub defeated: bool,       // Whether target was defeated
-    pub experience: u32,      // Experience gained (if any)
-    pub events: Vec<CombatEvent>,  // Events to be published to event bus
+    pub logs: Vec<String>,        // Combat messages for UI
+    pub defeated: bool,           // Whether target was defeated
+    pub experience: u32,          // Experience gained (if any)
+    pub events: Vec<CombatEvent>, // Events to be published to event bus
 }
 
 /// Combat events that can be published to the event bus
 #[derive(Debug, Clone)]
 pub enum CombatEvent {
-    CombatStarted { attacker: u32, defender: u32 },
-    DamageDealt { attacker: u32, victim: u32, damage: u32, is_critical: bool },
-    EntityDied { entity: u32, entity_name: String },
-    Ambush { attacker: u32, defender: u32 },
+    CombatStarted {
+        attacker: u32,
+        defender: u32,
+    },
+    DamageDealt {
+        attacker: u32,
+        victim: u32,
+        damage: u32,
+        is_critical: bool,
+    },
+    EntityDied {
+        entity: u32,
+        entity_name: String,
+    },
+    Ambush {
+        attacker: u32,
+        defender: u32,
+    },
 }
 
 impl CombatResult {
@@ -265,5 +281,3 @@ impl CombatResult {
         self.events.extend(other.events);
     }
 }
-
-

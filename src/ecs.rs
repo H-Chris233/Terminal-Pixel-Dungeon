@@ -3,15 +3,15 @@
 use hecs::{Entity, World};
 use std::time::Duration;
 
-use serde::{Deserialize, Serialize};
-use rand::rngs::StdRng;
 use rand::SeedableRng;
+use rand::rngs::StdRng;
+use serde::{Deserialize, Serialize};
 
-use save::SaveData;
+use crate::event_bus::{EventBus, EventHandler, GameEvent, LogLevel, Priority};
 use error::GameError;
-use hero::{Hero, Bag};
+use hero::{Bag, Hero};
 use items as game_items;
-use crate::event_bus::{EventBus, GameEvent, LogLevel, EventHandler, Priority};
+use save::SaveData;
 use std::sync::{Arc, Mutex};
 
 // 说明：在完全解耦的系统中，这些模块间的通信应该通过事件总线完成
@@ -87,7 +87,11 @@ impl ECSWorld {
     /// 处理核心游戏状态事件（更新 Resources）
     fn handle_core_event(&mut self, event: &GameEvent) {
         match event {
-            GameEvent::DamageDealt { damage, is_critical, .. } => {
+            GameEvent::DamageDealt {
+                damage,
+                is_critical,
+                ..
+            } => {
                 let msg = if *is_critical {
                     format!("暴击！造成 {} 点伤害", damage)
                 } else {
@@ -97,42 +101,55 @@ impl ECSWorld {
             }
 
             GameEvent::EntityDied { entity_name, .. } => {
-                self.resources.game_state.message_log.push(
-                    format!("{} 已死亡", entity_name)
-                );
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("{} 已死亡", entity_name));
             }
 
             GameEvent::ItemPickedUp { item_name, .. } => {
-                self.resources.game_state.message_log.push(
-                    format!("拾取了 {}", item_name)
-                );
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("拾取了 {}", item_name));
             }
 
-            GameEvent::ItemUsed { item_name, effect, .. } => {
-                self.resources.game_state.message_log.push(
-                    format!("使用了 {}，{}", item_name, effect)
-                );
+            GameEvent::ItemUsed {
+                item_name, effect, ..
+            } => {
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("使用了 {}，{}", item_name, effect));
             }
 
-            GameEvent::LevelChanged { old_level, new_level } => {
+            GameEvent::LevelChanged {
+                old_level,
+                new_level,
+            } => {
                 self.resources.game_state.depth = *new_level;
-                self.resources.game_state.message_log.push(
-                    format!("从第 {} 层进入第 {} 层", old_level, new_level)
-                );
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("从第 {} 层进入第 {} 层", old_level, new_level));
             }
 
             GameEvent::GameOver { reason } => {
-                self.resources.game_state.game_state = GameStatus::GameOver;
-                self.resources.game_state.message_log.push(
-                    format!("游戏结束：{}", reason)
-                );
+                self.resources.game_state.game_state = GameStatus::GameOver {
+                    reason: GameOverReason::Died("游戏结束"),
+                };
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("游戏结束：{}", reason));
             }
 
             GameEvent::Victory => {
                 self.resources.game_state.game_state = GameStatus::Victory;
-                self.resources.game_state.message_log.push(
-                    "恭喜！你获得了胜利！".to_string()
-                );
+                self.resources
+                    .game_state
+                    .message_log
+                    .push("恭喜！你获得了胜利！".to_string());
             }
 
             GameEvent::LogMessage { message, level } => {
@@ -142,46 +159,55 @@ impl ECSWorld {
                     LogLevel::Warning => "[警告] ",
                     LogLevel::Error => "[错误] ",
                 };
-                self.resources.game_state.message_log.push(
-                    format!("{}{}", prefix, message)
-                );
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("{}{}", prefix, message));
             }
 
             GameEvent::TrapTriggered { trap_type, .. } => {
-                self.resources.game_state.message_log.push(
-                    format!("触发了{}陷阱！", trap_type)
-                );
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("触发了{}陷阱！", trap_type));
             }
 
-            GameEvent::StatusApplied { status, duration, .. } => {
-                self.resources.game_state.message_log.push(
-                    format!("受到{}效果影响，持续{}回合", status, duration)
-                );
+            GameEvent::StatusApplied {
+                status, duration, ..
+            } => {
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("受到{}效果影响，持续{}回合", status, duration));
             }
 
             GameEvent::StatusRemoved { status, .. } => {
-                self.resources.game_state.message_log.push(
-                    format!("{}效果已消失", status)
-                );
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("{}效果已消失", status));
             }
 
             // 饥饿事件处理
             GameEvent::PlayerHungry { satiety, .. } => {
-                self.resources.game_state.message_log.push(
-                    format!("你感到饥饿...（饱食度：{}）", satiety)
-                );
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("你感到饥饿...（饱食度：{}）", satiety));
             }
 
             GameEvent::PlayerStarving { .. } => {
-                self.resources.game_state.message_log.push(
-                    "你正在饿死！".to_string()
-                );
+                self.resources
+                    .game_state
+                    .message_log
+                    .push("你正在饿死！".to_string());
             }
 
             GameEvent::StarvationDamage { damage, .. } => {
-                self.resources.game_state.message_log.push(
-                    format!("饥饿造成了 {} 点伤害", damage)
-                );
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("饥饿造成了 {} 点伤害", damage));
             }
 
             _ => {}
@@ -214,37 +240,32 @@ pub struct GameStateHandler {
 impl EventHandler for GameStateHandler {
     fn handle(&mut self, event: &GameEvent) {
         let message = match event {
-            GameEvent::DamageDealt { damage, is_critical, .. } => {
-                Some(if *is_critical {
-                    format!("暴击！造成 {} 点伤害", damage)
-                } else {
-                    format!("造成 {} 点伤害", damage)
-                })
-            }
+            GameEvent::DamageDealt {
+                damage,
+                is_critical,
+                ..
+            } => Some(if *is_critical {
+                format!("暴击！造成 {} 点伤害", damage)
+            } else {
+                format!("造成 {} 点伤害", damage)
+            }),
 
-            GameEvent::EntityDied { entity_name, .. } => {
-                Some(format!("{} 已死亡", entity_name))
-            }
+            GameEvent::EntityDied { entity_name, .. } => Some(format!("{} 已死亡", entity_name)),
 
-            GameEvent::ItemPickedUp { item_name, .. } => {
-                Some(format!("拾取了 {}", item_name))
-            }
+            GameEvent::ItemPickedUp { item_name, .. } => Some(format!("拾取了 {}", item_name)),
 
-            GameEvent::ItemUsed { item_name, effect, .. } => {
-                Some(format!("使用了 {}，{}", item_name, effect))
-            }
+            GameEvent::ItemUsed {
+                item_name, effect, ..
+            } => Some(format!("使用了 {}，{}", item_name, effect)),
 
-            GameEvent::LevelChanged { old_level, new_level } => {
-                Some(format!("从第 {} 层进入第 {} 层", old_level, new_level))
-            }
+            GameEvent::LevelChanged {
+                old_level,
+                new_level,
+            } => Some(format!("从第 {} 层进入第 {} 层", old_level, new_level)),
 
-            GameEvent::GameOver { reason } => {
-                Some(format!("游戏结束：{}", reason))
-            }
+            GameEvent::GameOver { reason } => Some(format!("游戏结束：{}", reason)),
 
-            GameEvent::Victory => {
-                Some("恭喜！你获得了胜利！".to_string())
-            }
+            GameEvent::Victory => Some("恭喜！你获得了胜利！".to_string()),
 
             GameEvent::LogMessage { message, level } => {
                 let prefix = match level {
@@ -260,13 +281,11 @@ impl EventHandler for GameStateHandler {
                 Some(format!("触发了{}陷阱！", trap_type))
             }
 
-            GameEvent::StatusApplied { status, duration, .. } => {
-                Some(format!("受到{}效果影响，持续{}回合", status, duration))
-            }
+            GameEvent::StatusApplied {
+                status, duration, ..
+            } => Some(format!("受到{}效果影响，持续{}回合", status, duration)),
 
-            GameEvent::StatusRemoved { status, .. } => {
-                Some(format!("{}效果已消失", status))
-            }
+            GameEvent::StatusRemoved { status, .. } => Some(format!("{}效果已消失", status)),
 
             _ => None,
         };
@@ -365,6 +384,7 @@ pub struct GameState {
     pub message_log: Vec<String>,
     pub terminal_width: u16,
     pub terminal_height: u16,
+    pub frame_count: u64, // 渲染帧计数器，用于动画和缓存管理
 }
 
 #[derive(Default, Clone, Copy, PartialEq, Debug)]
@@ -372,8 +392,34 @@ pub enum GameStatus {
     #[default]
     Running,
     Paused,
-    GameOver,
+    GameOver {
+        reason: GameOverReason,
+    },
     Victory,
+    MainMenu,
+    Inventory {
+        selected_item: usize,
+    },
+    Options {
+        selected_option: usize,
+    },
+    Help,
+    CharacterInfo,
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum GameOverReason {
+    Died(&'static str),     // 死亡原因 - 使用静态字符串避免Copy问题
+    Defeated(&'static str), // 被敌人击败
+    Starved,                // 饿死
+    Trapped(&'static str),  // 陷阱
+    Quit,                   // 主动退出
+}
+
+impl Default for GameOverReason {
+    fn default() -> Self {
+        GameOverReason::Died("未知原因")
+    }
 }
 
 #[derive(Default)]
@@ -393,6 +439,28 @@ pub enum PlayerAction {
     Ascend,
     Wait,
     Quit,
+
+    // 菜单相关动作
+    OpenInventory,
+    OpenOptions,
+    OpenHelp,
+    OpenCharacterInfo,
+    CloseMenu,
+
+    // 菜单导航
+    MenuNavigate(NavigateDirection),
+    MenuSelect,
+    MenuBack,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum NavigateDirection {
+    Up,
+    Down,
+    Left,
+    Right,
+    PageUp,
+    PageDown,
 }
 
 #[derive(Clone, Copy)]
@@ -429,20 +497,18 @@ impl GameConfig {
 pub struct Player;
 
 // Basic Components
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Position {
     pub x: i32,
     pub y: i32,
     pub z: i32, // dungeon level
 }
 
-
-
 impl Position {
     pub fn new(x: i32, y: i32, z: i32) -> Self {
         Self { x, y, z }
     }
-    
+
     pub fn distance_to(&self, other: &Position) -> f32 {
         let dx = (self.x - other.x) as f32;
         let dy = (self.y - other.y) as f32;
@@ -458,7 +524,6 @@ pub struct Tile {
     pub has_items: bool,
     pub has_monster: bool,
 }
-
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum TerrainType {
@@ -480,7 +545,6 @@ pub struct Renderable {
     pub bg_color: Option<Color>,
     pub order: u8, // rendering order
 }
-
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Color {
@@ -504,7 +568,6 @@ pub struct Actor {
     pub faction: Faction,
 }
 
-
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum Faction {
     Player,
@@ -524,13 +587,11 @@ pub struct Stats {
     pub experience: u32,
 }
 
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Inventory {
     pub items: Vec<ItemSlot>,
     pub max_slots: usize,
 }
-
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ItemSlot {
@@ -568,9 +629,17 @@ pub enum ItemType {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ConsumableEffect {
-    Healing { amount: u32 },
-    Damage { amount: u32 },
-    Buff { stat: StatType, value: i32, duration: u32 },
+    Healing {
+        amount: u32,
+    },
+    Damage {
+        amount: u32,
+    },
+    Buff {
+        stat: StatType,
+        value: i32,
+        duration: u32,
+    },
     Teleport,
     Identify,
 }
@@ -605,9 +674,9 @@ impl ECSItem {
             value: item.value(),
             identified: !item.needs_identify(),
             quantity: item.quantity,
-            level: 0,  // items::Item 没有直接的 level 字段
-            cursed: false,  // 需要根据具体物品类型判断
-            charges: None,  // 需要根据具体物品类型提取
+            level: 0,      // items::Item 没有直接的 level 字段
+            cursed: false, // 需要根据具体物品类型判断
+            charges: None, // 需要根据具体物品类型提取
             detailed_data: Some(detailed_data),
         })
     }
@@ -616,13 +685,13 @@ impl ECSItem {
     fn map_item_kind_to_type(kind: &items::ItemKind) -> ItemType {
         match kind {
             items::ItemKind::Weapon(w) => ItemType::Weapon {
-                damage: w.damage.0,  // 使用 damage 元组的第一个值（最小伤害）
+                damage: w.damage.0, // 使用 damage 元组的第一个值（最小伤害）
             },
             items::ItemKind::Armor(a) => ItemType::Armor {
                 defense: a.defense as u32,
             },
             items::ItemKind::Potion(_) => ItemType::Consumable {
-                effect: ConsumableEffect::Healing { amount: 10 },  // 简化处理
+                effect: ConsumableEffect::Healing { amount: 10 }, // 简化处理
             },
             items::ItemKind::Food(_) => ItemType::Consumable {
                 effect: ConsumableEffect::Healing { amount: 5 },
@@ -630,14 +699,15 @@ impl ECSItem {
             items::ItemKind::Scroll(_) => ItemType::Consumable {
                 effect: ConsumableEffect::Identify,
             },
-            _ => ItemType::Quest,  // 其他类型映射为任务物品
+            _ => ItemType::Quest, // 其他类型映射为任务物品
         }
     }
 
     /// 转换回 items::Item（如果有详细数据）
     pub fn to_items_item(&self) -> Result<items::Item, Box<dyn std::error::Error>> {
         if let Some(ref data) = self.detailed_data {
-            let (item, _): (items::Item, _) = bincode::decode_from_slice(data, bincode::config::standard())?;
+            let (item, _): (items::Item, _) =
+                bincode::decode_from_slice(data, bincode::config::standard())?;
             Ok(item)
         } else {
             Err("No detailed data available".into())
@@ -646,18 +716,12 @@ impl ECSItem {
 
     /// 是否为可堆叠物品
     pub fn is_stackable(&self) -> bool {
-        matches!(
-            self.item_type,
-            ItemType::Consumable { .. }
-        )
+        matches!(self.item_type, ItemType::Consumable { .. })
     }
 
     /// 是否可用
     pub fn is_usable(&self) -> bool {
-        matches!(
-            self.item_type,
-            ItemType::Consumable { .. }
-        )
+        matches!(self.item_type, ItemType::Consumable { .. })
     }
 
     /// 是否可装备
@@ -678,14 +742,36 @@ pub enum StatType {
     Evasion,
 }
 
+/// FOV（视野）算法类型
+///
+/// 支持三种经典 Roguelike 视野算法：
+/// - ShadowCasting: 阴影投射（最真实，性能中等）
+/// - DiamondWalls: 菱形墙算法（适合正交移动）
+/// - RayCasting: 光线投射/Bresenham（性能最优）
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum FovAlgorithm {
+    /// 阴影投射算法（默认，最真实）
+    ShadowCasting,
+    /// 菱形墙算法（适合正交地图）
+    DiamondWalls,
+    /// 光线投射/Bresenham算法（性能最佳）
+    RayCasting,
+}
+
+impl Default for FovAlgorithm {
+    fn default() -> Self {
+        FovAlgorithm::ShadowCasting
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Viewshed {
     pub range: u8,
     pub visible_tiles: Vec<Position>,
     pub memory: Vec<Position>, // previously seen tiles
     pub dirty: bool,
+    pub algorithm: FovAlgorithm, // 使用的 FOV 算法
 }
-
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Energy {
@@ -693,7 +779,6 @@ pub struct Energy {
     pub max: u32,
     pub regeneration_rate: u32,
 }
-
 
 #[derive(Clone, Debug)]
 pub struct AI {
@@ -714,7 +799,6 @@ impl AI {
 }
 
 // AI cannot be serialized due to Entity type
-
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum AIType {
@@ -750,7 +834,7 @@ pub struct Hunger {
 impl Default for Hunger {
     fn default() -> Self {
         Self {
-            satiety: 5,  // 默认半饱状态
+            satiety: 5, // 默认半饱状态
             last_hunger_turn: 0,
         }
     }
@@ -826,9 +910,9 @@ impl Wealth {
 /// 玩家进度组件（回合、力量、职业等）
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PlayerProgress {
-    pub turns: u32,       // 游戏总回合数
-    pub strength: u8,     // 力量值（影响装备需求）
-    pub class: String,    // 职业类型（存储为字符串以避免循环依赖）
+    pub turns: u32,    // 游戏总回合数
+    pub strength: u8,  // 力量值（影响装备需求）
+    pub class: String, // 职业类型（存储为字符串以避免循环依赖）
 }
 
 impl Default for PlayerProgress {
@@ -858,7 +942,6 @@ impl PlayerProgress {
         self.strength = self.strength.saturating_add(amount);
     }
 }
-
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ActiveEffect {
@@ -921,9 +1004,7 @@ impl From<&Hero> for Hunger {
 
 impl From<&Hero> for Wealth {
     fn from(hero: &Hero) -> Self {
-        Self {
-            gold: hero.gold,
-        }
+        Self { gold: hero.gold }
     }
 }
 
@@ -988,16 +1069,19 @@ impl ECSWorld {
         }
 
         // Extract dungeon data
-        let dungeon = get_dungeon_clone(&self.world)
-            .ok_or_else(|| GameError::InvalidLevelData)?;
+        let dungeon = get_dungeon_clone(&self.world).ok_or_else(|| GameError::InvalidLevelData)?;
 
         // Create save data
         let save_data = SaveData {
             metadata: save::SaveMetadata {
                 timestamp: std::time::SystemTime::now(),
                 dungeon_depth: self.resources.game_state.depth,
-                hero_name: hero.as_ref().map_or("Unknown".to_string(), |h| h.name.clone()),
-                hero_class: hero.as_ref().map_or("Unknown".to_string(), |h| format!("{:?}", h.class)),
+                hero_name: hero
+                    .as_ref()
+                    .map_or("Unknown".to_string(), |h| h.name.clone()),
+                hero_class: hero
+                    .as_ref()
+                    .map_or("Unknown".to_string(), |h| format!("{:?}", h.class)),
                 play_time: self.resources.clock.elapsed_time.as_secs_f64(),
             },
             hero: hero.ok_or_else(|| GameError::InvalidHeroData)?,
@@ -1043,14 +1127,15 @@ impl ECSWorld {
             },
             stats,
             inventory,
-            hunger,        // 新增：饱食度组件
-            wealth,        // 新增：财富组件
-            progress,      // 新增：玩家进度组件
+            hunger,   // 新增：饱食度组件
+            wealth,   // 新增：财富组件
+            progress, // 新增：玩家进度组件
             Viewshed {
                 range: 8,
                 visible_tiles: vec![],
                 memory: vec![],
                 dirty: true,
+                algorithm: FovAlgorithm::default(), // 使用默认算法（ShadowCasting）
             },
             Energy {
                 current: 100,
@@ -1080,7 +1165,11 @@ pub fn get_dungeon_clone(world: &World) -> Option<dungeon::Dungeon> {
 /// Set or replace the dungeon instance in the world. If no dungeon entity exists, one is created.
 pub fn set_dungeon_instance(world: &mut World, dungeon: dungeon::Dungeon) {
     // Collect entity ids into a temporary vector to avoid holding a QueryBorrow while mutating
-    let existing_entities: Vec<_> = world.query::<&DungeonComponent>().iter().map(|(e, _)| e).collect();
+    let existing_entities: Vec<_> = world
+        .query::<&DungeonComponent>()
+        .iter()
+        .map(|(e, _)| e)
+        .collect();
     if let Some(&entity) = existing_entities.first() {
         let _ = world.remove_one::<DungeonComponent>(entity);
         let _ = world.insert_one(entity, DungeonComponent(dungeon));
@@ -1097,21 +1186,21 @@ impl From<&Inventory> for Bag {
 
         fn map_item(item: &ECSItem) -> game_items::ItemKind {
             match &item.item_type {
-                ItemType::Weapon { damage: _ } => {
-                    game_items::ItemKind::Weapon(game_items::Weapon::new(1, game_items::weapon::WeaponKind::Dagger))
-                }
+                ItemType::Weapon { damage: _ } => game_items::ItemKind::Weapon(
+                    game_items::Weapon::new(1, game_items::weapon::WeaponKind::Dagger),
+                ),
                 ItemType::Armor { defense: _ } => {
                     game_items::ItemKind::Armor(game_items::Armor::new(1))
                 }
-                ItemType::Consumable { effect: _ } => {
-                    game_items::ItemKind::Potion(game_items::Potion::new_alchemy(game_items::potion::PotionKind::Healing))
-                }
-                ItemType::Key => {
-                    game_items::ItemKind::Misc(game_items::MiscItem::new(game_items::misc::MiscKind::Torch))
-                }
-                ItemType::Quest => {
-                    game_items::ItemKind::Misc(game_items::MiscItem::new(game_items::misc::MiscKind::Gold(10)))
-                }
+                ItemType::Consumable { effect: _ } => game_items::ItemKind::Potion(
+                    game_items::Potion::new_alchemy(game_items::potion::PotionKind::Healing),
+                ),
+                ItemType::Key => game_items::ItemKind::Misc(game_items::MiscItem::new(
+                    game_items::misc::MiscKind::Torch,
+                )),
+                ItemType::Quest => game_items::ItemKind::Misc(game_items::MiscItem::new(
+                    game_items::misc::MiscKind::Gold(10),
+                )),
             }
         }
 
@@ -1133,14 +1222,17 @@ where
     F: FnOnce(&mut dungeon::Dungeon),
 {
     // Collect entity ids to avoid holding the query borrow while mutating
-    let ids: Vec<_> = world.query::<&DungeonComponent>().iter().map(|(e, _)| e).collect();
+    let ids: Vec<_> = world
+        .query::<&DungeonComponent>()
+        .iter()
+        .map(|(e, _)| e)
+        .collect();
     if let Some(&entity) = ids.first() {
         if let Ok(mut comp) = world.get::<&mut DungeonComponent>(entity) {
             f(&mut comp.0);
         }
     }
 }
-
 
 impl From<&Bag> for Inventory {
     fn from(bag: &Bag) -> Self {
@@ -1287,7 +1379,14 @@ mod tests {
 
         // 检查游戏状态
         assert_eq!(world.resources.game_state.game_state, GameStatus::GameOver);
-        assert!(world.resources.game_state.message_log.iter().any(|msg| msg.contains("游戏结束")));
+        assert!(
+            world
+                .resources
+                .game_state
+                .message_log
+                .iter()
+                .any(|msg| msg.contains("游戏结束"))
+        );
     }
 
     #[test]
@@ -1308,6 +1407,13 @@ mod tests {
 
         // 检查深度是否更新
         assert_eq!(world.resources.game_state.depth, 2);
-        assert!(world.resources.game_state.message_log.iter().any(|msg| msg.contains("从第 1 层进入第 2 层")));
+        assert!(
+            world
+                .resources
+                .game_state
+                .message_log
+                .iter()
+                .any(|msg| msg.contains("从第 1 层进入第 2 层"))
+        );
     }
 }

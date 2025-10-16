@@ -6,11 +6,11 @@ use seahash::SeaHasher;
 use serde::{Deserialize, Serialize};
 use std::hash::Hasher;
 
-use crate::ItemCategory;
-use crate::ItemTrait;
 use crate::BINCODE_CONFIG;
 use crate::Item;
+use crate::ItemCategory;
 use crate::ItemKind;
+use crate::ItemTrait;
 
 /// 种子系统（8种植物种子）
 #[derive(Eq, Hash, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]

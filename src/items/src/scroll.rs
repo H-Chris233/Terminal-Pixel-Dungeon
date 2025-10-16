@@ -12,11 +12,11 @@ use std::hash::Hasher;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
-use crate::ItemCategory;
-use crate::ItemTrait;
 use crate::BINCODE_CONFIG;
 use crate::Item;
+use crate::ItemCategory;
 use crate::ItemKind;
+use crate::ItemTrait;
 
 /// 卷轴系统（完整10种）
 #[derive(Eq, Hash, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]

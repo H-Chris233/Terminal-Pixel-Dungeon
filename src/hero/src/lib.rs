@@ -13,17 +13,13 @@ pub mod class;
 // 标准库导入
 use std::fmt;
 
-
-
 // 外部crate导入
-
-
 
 // 重新导出主要类型
 pub use self::{
-    bag::{Bag},
+    bag::Bag,
+    core::events::{ActionResult, HeroEvent},
     core::{Hero, HeroError},
-    core::events::{HeroEvent, ActionResult},
     effects::EffectManager,
     rng::HeroRng,
 };
@@ -32,12 +28,10 @@ use crate::class::Class;
 use crate::effects::Effect;
 use crate::effects::EffectType;
 
-use items::{Item};
+use items::Item;
 
 // 游戏系统导入
 use dungeon::{Dungeon, InteractionEvent};
-
-
 
 /// 英雄系统主接口
 pub trait HeroBehavior: ::combat::Combatant + fmt::Debug {

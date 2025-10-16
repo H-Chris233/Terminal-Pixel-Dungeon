@@ -11,9 +11,9 @@ use std::collections::HashSet;
 pub mod rooms;
 pub mod tiles;
 
+use crate::TrapEffect;
 use crate::level::tiles::{DoorState, StairDirection, TerrainType, Tile, TileInfo};
 use crate::trap::{Trap, TrapKind};
-use crate::TrapEffect;
 use combat::enemy::{Enemy, EnemyKind};
 use items::{
     Armor, Food, Item, ItemKind, MiscItem, Potion, Ring, Scroll, Seed, Stone, Wand, Weapon,
@@ -419,9 +419,8 @@ impl Level {
 
     /// 检查位置是否是楼梯
     pub fn is_stair(&self, x: i32, y: i32) -> bool {
-        self.get_tile(x, y).is_some_and(|t| {
-            matches!(t.info.terrain_type, TerrainType::Stair(_))
-        })
+        self.get_tile(x, y)
+            .is_some_and(|t| matches!(t.info.terrain_type, TerrainType::Stair(_)))
     }
 
     /// 检查位置是否已被探索

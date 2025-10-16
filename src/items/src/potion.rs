@@ -2,19 +2,19 @@
 use bincode::serde::encode_to_vec;
 use bincode::{Decode, Encode};
 use rand::prelude::IndexedRandom;
+use ratatui::style::Color;
 use seahash::SeaHasher;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::hash::Hasher;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
-use ratatui::style::Color;
 
-use crate::ItemCategory;
-use crate::ItemTrait;
 use crate::BINCODE_CONFIG;
 use crate::Item;
+use crate::ItemCategory;
 use crate::ItemKind;
+use crate::ItemTrait;
 
 /// 药水系统（完整12种药水）
 #[derive(Eq, Hash, PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]

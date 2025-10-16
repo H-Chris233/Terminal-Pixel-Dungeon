@@ -1,6 +1,6 @@
 //! Combat manager for handling turn-based combat mechanics
-use crate::{Combat, CombatResult, Combatant};
 use crate::vision::VisionSystem;
+use crate::{Combat, CombatResult, Combatant};
 
 /// Manages combat rounds and turns
 pub struct CombatManager;
@@ -47,7 +47,7 @@ impl CombatManager {
 
         // Determine initiative (simplified as attacker always goes first)
         // In a full implementation, this would be based on agility, weapon speed, etc.
-        
+
         // Attacker's turn
         let attack_result = Combat::perform_attack_with_ambush(
             attacker,
@@ -61,7 +61,7 @@ impl CombatManager {
             is_blocked,
             attacker_fov_range,
         );
-        
+
         result.combine(attack_result);
 
         // Defender knows about the attacker now, so no ambush possible
@@ -85,17 +85,22 @@ impl CombatManager {
         attacker_fov_range: u32,
     ) -> CombatResult {
         let distance = calculate_distance(attacker_x, attacker_y, defender_x, defender_y);
-        
+
         // Check if target is within attack range
         if distance > attacker.attack_distance() as f32 {
             let mut result = CombatResult::new();
-            result.log(format!("{} is out of range for {}", defender.name(), attacker.name()));
+            result.log(format!(
+                "{} is out of range for {}",
+                defender.name(),
+                attacker.name()
+            ));
             return result;
         }
 
         // Check if there's a clear line of sight
-        let has_los = VisionSystem::is_visible(attacker_x, attacker_y, defender_x, defender_y, is_blocked);
-        
+        let has_los =
+            VisionSystem::is_visible(attacker_x, attacker_y, defender_x, defender_y, is_blocked);
+
         if !has_los {
             let mut result = CombatResult::new();
             result.log(format!("No line of sight to {}", defender.name()));
@@ -160,23 +165,47 @@ mod tests {
     }
 
     impl Combatant for TestCombatant {
-        fn id(&self) -> u32 { 0 }  // 添加缺失的id方法
-        fn hp(&self) -> u32 { self.hp }
-        fn max_hp(&self) -> u32 { self.max_hp }
-        fn attack_power(&self) -> u32 { self.attack }
-        fn defense(&self) -> u32 { self.defense }
-        fn accuracy(&self) -> u32 { self.accuracy }
-        fn evasion(&self) -> u32 { self.evasion }
-        fn crit_bonus(&self) -> f32 { self.crit_bonus }
-        fn weapon(&self) -> Option<&items::Weapon> { None }
-        fn is_alive(&self) -> bool { self.hp > 0 }
-        fn name(&self) -> &str { &self.name }
-        fn attack_distance(&self) -> u32 { self.attack_dist }
-        fn take_damage(&mut self, amount: u32) -> bool { 
+        fn id(&self) -> u32 {
+            0
+        } // 添加缺失的id方法
+        fn hp(&self) -> u32 {
+            self.hp
+        }
+        fn max_hp(&self) -> u32 {
+            self.max_hp
+        }
+        fn attack_power(&self) -> u32 {
+            self.attack
+        }
+        fn defense(&self) -> u32 {
+            self.defense
+        }
+        fn accuracy(&self) -> u32 {
+            self.accuracy
+        }
+        fn evasion(&self) -> u32 {
+            self.evasion
+        }
+        fn crit_bonus(&self) -> f32 {
+            self.crit_bonus
+        }
+        fn weapon(&self) -> Option<&items::Weapon> {
+            None
+        }
+        fn is_alive(&self) -> bool {
+            self.hp > 0
+        }
+        fn name(&self) -> &str {
+            &self.name
+        }
+        fn attack_distance(&self) -> u32 {
+            self.attack_dist
+        }
+        fn take_damage(&mut self, amount: u32) -> bool {
             self.hp = self.hp.saturating_sub(amount);
             self.is_alive()
         }
-        fn heal(&mut self, amount: u32) { 
+        fn heal(&mut self, amount: u32) {
             self.hp = std::cmp::min(self.max_hp, self.hp + amount);
         }
     }
@@ -185,18 +214,20 @@ mod tests {
     fn test_combat_round() {
         let mut attacker = TestCombatant::new("Attacker");
         let mut defender = TestCombatant::new("Defender");
-        
+
         let is_blocked = |_x: i32, _y: i32| -> bool { false };
-        
+
         let result = CombatManager::process_combat_round(
             &mut attacker,
-            0, 0,
+            0,
+            0,
             &mut defender,
-            1, 1,
+            1,
+            1,
             &is_blocked,
             5,
         );
-        
+
         assert!(!result.logs.is_empty());
         assert!(result.logs[0].contains("hits") || result.logs[0].contains("misses"));
     }
@@ -205,21 +236,23 @@ mod tests {
     fn test_ambush_combat() {
         let mut attacker = TestCombatant::new("Attacker");
         let mut defender = TestCombatant::new("Defender");
-        
+
         // Wall blocking line of sight to enable ambush
-        let is_blocked = |x: i32, y: i32| -> bool { 
-            x == 0 && y == 1  // Wall between attacker at (0,0) and defender at (0,2)
+        let is_blocked = |x: i32, y: i32| -> bool {
+            x == 0 && y == 1 // Wall between attacker at (0,0) and defender at (0,2)
         };
-        
+
         let result = CombatManager::process_combat_round(
             &mut attacker,
-            0, 0,
+            0,
+            0,
             &mut defender,
-            0, 2,  // Across the wall
+            0,
+            2, // Across the wall
             &is_blocked,
             5,
         );
-        
+
         assert!(!result.logs.is_empty());
         // Should contain ambush message if ambush worked
         let is_ambush = result.logs.iter().any(|log| log.contains("Ambush"));

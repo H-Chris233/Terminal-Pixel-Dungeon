@@ -3,16 +3,10 @@
 #[derive(Debug, Clone)]
 pub enum HeroEvent {
     /// 物品拾取事件
-    ItemPickedUp {
-        entity: u32,
-        item_name: String,
-    },
+    ItemPickedUp { entity: u32, item_name: String },
 
     /// 物品丢弃事件
-    ItemDropped {
-        entity: u32,
-        item_name: String,
-    },
+    ItemDropped { entity: u32, item_name: String },
 
     /// 物品使用事件
     ItemUsed {
@@ -45,16 +39,10 @@ pub enum HeroEvent {
     },
 
     /// 等级提升事件
-    LevelUp {
-        entity: u32,
-        new_level: u32,
-    },
+    LevelUp { entity: u32, new_level: u32 },
 
     /// 陷阱触发事件
-    TrapTriggered {
-        entity: u32,
-        trap_type: String,
-    },
+    TrapTriggered { entity: u32, trap_type: String },
 
     /// 状态效果应用事件
     StatusApplied {
@@ -64,10 +52,7 @@ pub enum HeroEvent {
     },
 
     /// 状态效果移除事件
-    StatusRemoved {
-        entity: u32,
-        status: String,
-    },
+    StatusRemoved { entity: u32, status: String },
 }
 
 /// 操作结果，包含事件信息

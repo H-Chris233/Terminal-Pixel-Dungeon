@@ -95,12 +95,8 @@ impl VisionSystem {
         attacker_fov_range: u32,
     ) -> bool {
         // Calculate the attacker's field of view
-        let attacker_fov = Self::calculate_fov(
-            attacker_x,
-            attacker_y,
-            attacker_fov_range,
-            is_blocked,
-        );
+        let attacker_fov =
+            Self::calculate_fov(attacker_x, attacker_y, attacker_fov_range, is_blocked);
 
         // Check if the defender is within the attacker's field of view
         let defender_in_view = attacker_fov.contains(&(defender_x, defender_y));
@@ -122,12 +118,8 @@ impl VisionSystem {
         defender_fov_range: u32,
     ) -> bool {
         // Calculate the defender's field of view
-        let defender_fov = Self::calculate_fov(
-            defender_x,
-            defender_y,
-            defender_fov_range,
-            is_blocked,
-        );
+        let defender_fov =
+            Self::calculate_fov(defender_x, defender_y, defender_fov_range, is_blocked);
 
         // Check if the attacker is within the defender's field of view
         let attacker_in_view = defender_fov.contains(&(attacker_x, attacker_y));
@@ -157,19 +149,45 @@ mod tests {
     }
 
     impl Combatant for MockCombatant {
-        fn id(&self) -> u32 { 0 }  // 添加缺失的id方法
-        fn hp(&self) -> u32 { 100 }
-        fn max_hp(&self) -> u32 { 100 }
-        fn attack_power(&self) -> u32 { 10 }
-        fn defense(&self) -> u32 { 5 }
-        fn accuracy(&self) -> u32 { 80 }
-        fn evasion(&self) -> u32 { 30 }
-        fn crit_bonus(&self) -> f32 { 0.1 }
-        fn weapon(&self) -> Option<&items::Weapon> { None }
-        fn is_alive(&self) -> bool { true }
-        fn name(&self) -> &str { &self.name }
-        fn attack_distance(&self) -> u32 { 1 }
-        fn take_damage(&mut self, _amount: u32) -> bool { true }
+        fn id(&self) -> u32 {
+            0
+        } // 添加缺失的id方法
+        fn hp(&self) -> u32 {
+            100
+        }
+        fn max_hp(&self) -> u32 {
+            100
+        }
+        fn attack_power(&self) -> u32 {
+            10
+        }
+        fn defense(&self) -> u32 {
+            5
+        }
+        fn accuracy(&self) -> u32 {
+            80
+        }
+        fn evasion(&self) -> u32 {
+            30
+        }
+        fn crit_bonus(&self) -> f32 {
+            0.1
+        }
+        fn weapon(&self) -> Option<&items::Weapon> {
+            None
+        }
+        fn is_alive(&self) -> bool {
+            true
+        }
+        fn name(&self) -> &str {
+            &self.name
+        }
+        fn attack_distance(&self) -> u32 {
+            1
+        }
+        fn take_damage(&mut self, _amount: u32) -> bool {
+            true
+        }
         fn heal(&mut self, _amount: u32) {}
     }
 
@@ -186,16 +204,8 @@ mod tests {
 
         // Attacker is at (0,0), defender is at (10,10)
         // With a wall at (5,5) blocking the line of sight
-        let can_ambush = VisionSystem::can_ambush(
-            &attacker,
-            0,
-            0,
-            &defender,
-            10,
-            10,
-            &is_blocked,
-            5,
-        );
+        let can_ambush =
+            VisionSystem::can_ambush(&attacker, 0, 0, &defender, 10, 10, &is_blocked, 5);
 
         // Should be true because the defender is not in view of the attacker
         assert!(can_ambush);
@@ -207,21 +217,10 @@ mod tests {
         let defender = MockCombatant::new("Defender", 4);
 
         // Create an open map (no walls)
-        let is_blocked = |_x: i32, _y: i32| -> bool {
-            false
-        };
+        let is_blocked = |_x: i32, _y: i32| -> bool { false };
 
         // Attacker is at (0,0), defender is at (2,2)
-        let can_ambush = VisionSystem::can_ambush(
-            &attacker,
-            0,
-            0,
-            &defender,
-            2,
-            2,
-            &is_blocked,
-            5,
-        );
+        let can_ambush = VisionSystem::can_ambush(&attacker, 0, 0, &defender, 2, 2, &is_blocked, 5);
 
         // Should be false because the defender is visible to the attacker
         assert!(!can_ambush);

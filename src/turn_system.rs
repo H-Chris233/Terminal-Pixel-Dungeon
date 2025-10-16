@@ -49,16 +49,30 @@ impl TurnSystem {
     }
 
     /// Deduct energy for a completed player action
-    pub fn consume_player_energy(&mut self, world: &mut World, action: &PlayerAction) -> Result<(), anyhow::Error> {
+    pub fn consume_player_energy(
+        &mut self,
+        world: &mut World,
+        action: &PlayerAction,
+    ) -> Result<(), anyhow::Error> {
         let energy_cost = match action {
-            PlayerAction::Move(_) |
-            PlayerAction::Attack(_) |
-            PlayerAction::UseItem(_) |
-            PlayerAction::DropItem(_) |
-            PlayerAction::Descend |
-            PlayerAction::Ascend => energy_costs::FULL_ACTION, // Full action cost
-            PlayerAction::Wait => energy_costs::WAIT,          // Wait costs half
-            PlayerAction::Quit => energy_costs::FREE,          // No energy cost for quitting
+            PlayerAction::Move(_)
+            | PlayerAction::Attack(_)
+            | PlayerAction::UseItem(_)
+            | PlayerAction::DropItem(_)
+            | PlayerAction::Descend
+            | PlayerAction::Ascend => energy_costs::FULL_ACTION, // Full action cost
+            PlayerAction::Wait => energy_costs::WAIT, // Wait costs half
+            PlayerAction::Quit => energy_costs::FREE, // No energy cost for quitting
+
+            // 菜单相关动作 - 免消耗（仅状态切换）
+            PlayerAction::OpenInventory
+            | PlayerAction::OpenOptions
+            | PlayerAction::OpenHelp
+            | PlayerAction::OpenCharacterInfo
+            | PlayerAction::CloseMenu
+            | PlayerAction::MenuNavigate(_)
+            | PlayerAction::MenuSelect
+            | PlayerAction::MenuBack => energy_costs::FREE,
         };
 
         if energy_cost > 0 {
@@ -82,7 +96,11 @@ impl TurnSystem {
     }
 
     /// Process AI turns until the player's energy is full again
-    pub fn process_ai_turns(&mut self, world: &mut World, _resources: &mut Resources) -> Result<(), anyhow::Error> {
+    pub fn process_ai_turns(
+        &mut self,
+        world: &mut World,
+        _resources: &mut Resources,
+    ) -> Result<(), anyhow::Error> {
         // Continue processing AI actions until player energy is refilled or no AI can act
         loop {
             // If player has full energy, stop AI processing
@@ -129,16 +147,23 @@ impl TurnSystem {
     }
 
     /// Process a complete turn cycle (player action + AI actions until player energy is full)
-    pub fn process_turn_cycle(&mut self, world: &mut World, resources: &mut Resources) -> Result<(), anyhow::Error> {
+    pub fn process_turn_cycle(
+        &mut self,
+        world: &mut World,
+        resources: &mut Resources,
+    ) -> Result<(), anyhow::Error> {
         match self.state {
             TurnState::PlayerTurn => {
                 // Process completed actions and deduct energy
-                let completed_actions = std::mem::take(&mut resources.input_buffer.completed_actions);
+                let completed_actions =
+                    std::mem::take(&mut resources.input_buffer.completed_actions);
 
                 for action in completed_actions {
                     // Handle Quit action specially
                     if matches!(action, PlayerAction::Quit) {
-                        resources.game_state.game_state = GameStatus::GameOver;
+                        resources.game_state.game_state = GameStatus::GameOver {
+                            reason: GameOverReason::Quit,
+                        };
                         return Ok(());
                     }
 
@@ -170,12 +195,12 @@ impl TurnSystem {
 
         Ok(())
     }
-    
+
     /// Check if it's currently the player's turn
     pub fn is_player_turn(&self) -> bool {
         matches!(self.state, TurnState::PlayerTurn)
     }
-    
+
     /// Check if it's currently an AI turn
     pub fn is_ai_turn(&self) -> bool {
         matches!(self.state, TurnState::AITurn)

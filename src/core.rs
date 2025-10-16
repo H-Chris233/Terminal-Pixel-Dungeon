@@ -1,16 +1,16 @@
 //! 核心游戏系统，用于整合 ECS 和模块化架构
-//! 
+//!
 //! 这个模块提供了一个统一的接口来管理 ECS 实体、组件和系统，
 //! 同时与各个功能模块（战斗、地牢、英雄等）进行交互。
 
 use hecs::World;
 use std::sync::{Arc, Mutex};
 
-pub mod game_state;
 pub mod entity_factory;
+pub mod game_state;
 
-pub use game_state::GameState;
 pub use entity_factory::EntityFactory;
+pub use game_state::GameState;
 
 /// 核心游戏引擎结构
 pub struct GameEngine {

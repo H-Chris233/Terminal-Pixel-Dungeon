@@ -1,6 +1,6 @@
 use dungeon::Dungeon;
-use hero::Hero;
 use hecs::Entity;
+use hero::Hero;
 
 /// 游戏状态管理器
 pub struct GameState {

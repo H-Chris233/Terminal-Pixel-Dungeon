@@ -1,8 +1,8 @@
 // src/save.rs
 
-use error::GameError;
 use anyhow::{Context, Result};
-use bincode::{config, Decode, Encode};
+use bincode::{Decode, Encode, config};
+use error::GameError;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use std::{

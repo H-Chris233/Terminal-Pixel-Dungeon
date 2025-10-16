@@ -1,7 +1,10 @@
-use crate::ecs::{Position, Renderable, Actor, Stats, Energy, Viewshed, AI, Inventory, Faction, TerrainType as EcsTerrainType};
+use crate::ecs::{
+    AI, Actor, Energy, Faction, Inventory, Position, Renderable, Stats,
+    TerrainType as EcsTerrainType, Viewshed,
+};
 use dungeon::level::tiles::TerrainType as DungeonTerrainType;
-use hero::class::Class;
 use hecs::{Entity, World};
+use hero::class::Class;
 use items::Item;
 
 /// 实体工厂，用于创建各种游戏实体
@@ -46,6 +49,7 @@ impl EntityFactory {
                 visible_tiles: vec![],
                 memory: vec![],
                 dirty: true,
+                algorithm: crate::ecs::FovAlgorithm::default(),
             },
             Inventory {
                 items: vec![],
@@ -95,6 +99,7 @@ impl EntityFactory {
                 visible_tiles: vec![],
                 memory: vec![],
                 dirty: true,
+                algorithm: crate::ecs::FovAlgorithm::default(),
             },
             AI {
                 ai_type: crate::ecs::AIType::Aggressive,
@@ -121,13 +126,23 @@ impl EntityFactory {
     }
 
     /// 创建地形实体
-    pub fn create_terrain(&self, world: &mut World, x: i32, y: i32, terrain_type: DungeonTerrainType) -> Entity {
+    pub fn create_terrain(
+        &self,
+        world: &mut World,
+        x: i32,
+        y: i32,
+        terrain_type: DungeonTerrainType,
+    ) -> Entity {
         let (symbol, is_passable, blocks_sight) = match terrain_type {
             DungeonTerrainType::Floor => ('.', true, false),
             DungeonTerrainType::Wall => ('#', false, true),
             DungeonTerrainType::Door(_) => ('+', true, true), // 门是可通行的但阻挡视线
-            DungeonTerrainType::Stair(dungeon::level::tiles::StairDirection::Down) => ('>', true, false),
-            DungeonTerrainType::Stair(dungeon::level::tiles::StairDirection::Up) => ('<', true, false),
+            DungeonTerrainType::Stair(dungeon::level::tiles::StairDirection::Down) => {
+                ('>', true, false)
+            }
+            DungeonTerrainType::Stair(dungeon::level::tiles::StairDirection::Up) => {
+                ('<', true, false)
+            }
             _ => ('.', true, false), // 默认为地板
         };
 
@@ -147,8 +162,12 @@ impl EntityFactory {
                     DungeonTerrainType::Floor => EcsTerrainType::Floor,
                     DungeonTerrainType::Wall => EcsTerrainType::Wall,
                     DungeonTerrainType::Door(_) => EcsTerrainType::Door,
-                    DungeonTerrainType::Stair(dungeon::level::tiles::StairDirection::Down) => EcsTerrainType::StairsDown,
-                    DungeonTerrainType::Stair(dungeon::level::tiles::StairDirection::Up) => EcsTerrainType::StairsUp,
+                    DungeonTerrainType::Stair(dungeon::level::tiles::StairDirection::Down) => {
+                        EcsTerrainType::StairsDown
+                    }
+                    DungeonTerrainType::Stair(dungeon::level::tiles::StairDirection::Up) => {
+                        EcsTerrainType::StairsUp
+                    }
                     _ => EcsTerrainType::Floor, // 默认
                 },
                 is_passable,

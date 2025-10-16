@@ -1,5 +1,5 @@
-use crate::ecs::{Stats, Inventory};
-use hero::{Hero, Bag};
+use crate::ecs::{Inventory, Stats};
+use hero::{Bag, Hero};
 
 pub trait HeroAdapter {
     fn to_stats(&self) -> Stats;

@@ -1,17 +1,21 @@
 //! Input handling abstractions for the ECS architecture.
 
 use crate::ecs::*;
+use crate::ecs::{NavigateDirection, PlayerAction};
 use anyhow;
+use crossterm::event::{
+    self, Event as CEvent, KeyCode as CrosstermKeyCode, KeyEvent as CrosstermKeyEvent,
+    KeyModifiers as CrosstermKeyModifiers,
+};
 use std::time::Duration;
-use crossterm::event::{self, Event as CEvent, KeyCode as CrosstermKeyCode, KeyEvent as CrosstermKeyEvent, KeyModifiers as CrosstermKeyModifiers};
 
 /// Trait for input sources
 pub trait InputSource {
     type Event;
-    
+
     /// Poll for input events with a timeout
     fn poll(&mut self, timeout: Duration) -> anyhow::Result<Option<Self::Event>>;
-    
+
     /// Check if input is available without blocking
     fn is_input_available(&self) -> anyhow::Result<bool>;
 }
@@ -25,25 +29,27 @@ impl ConsoleInput {
     pub fn new() -> Self {
         Self {}
     }
-    
+
     /// Process input events and convert them to PlayerActions for the ECS
     pub fn process_events(&mut self, resources: &mut Resources) -> anyhow::Result<()> {
         // Process crossterm events if available
         if event::poll(Duration::from_millis(50))? {
             if let Ok(CEvent::Key(key_event)) = event::read() {
-                if let Some(action) = key_event_to_player_action(key_event) {
+                if let Some(action) =
+                    key_event_to_player_action(key_event, &resources.game_state.game_state)
+                {
                     resources.input_buffer.pending_actions.push(action);
                 }
             }
         }
-        
+
         Ok(())
     }
 }
 
 impl InputSource for ConsoleInput {
     type Event = InputEvent;
-    
+
     fn poll(&mut self, timeout: Duration) -> anyhow::Result<Option<Self::Event>> {
         // In a real implementation, we would use crossterm or similar to poll for events
         // For now, we'll just return None to indicate no input
@@ -54,7 +60,7 @@ impl InputSource for ConsoleInput {
         }
         Ok(None)
     }
-    
+
     fn is_input_available(&self) -> anyhow::Result<bool> {
         // In a real implementation, we would check if input is ready
         Ok(event::poll(Duration::from_millis(0))?)
@@ -126,15 +132,11 @@ pub enum MouseButton {
 impl From<crossterm::event::Event> for InputEvent {
     fn from(event: crossterm::event::Event) -> Self {
         match event {
-            crossterm::event::Event::Key(key_event) => {
-                InputEvent::Key(KeyEvent::from(key_event))
-            }
+            crossterm::event::Event::Key(key_event) => InputEvent::Key(KeyEvent::from(key_event)),
             crossterm::event::Event::Mouse(mouse_event) => {
                 InputEvent::Mouse(MouseEvent::from(mouse_event))
             }
-            crossterm::event::Event::Resize(width, height) => {
-                InputEvent::Resize(width, height)
-            }
+            crossterm::event::Event::Resize(width, height) => InputEvent::Resize(width, height),
             _ => InputEvent::Resize(0, 0), // fallback
         }
     }
@@ -189,12 +191,8 @@ impl From<crossterm::event::MouseEvent> for MouseEvent {
             crossterm::event::MouseEventKind::Down(button) => {
                 MouseEvent::Press(MouseButton::from(button), event.column, event.row)
             }
-            crossterm::event::MouseEventKind::Up(_) => {
-                MouseEvent::Release(event.column, event.row)
-            }
-            crossterm::event::MouseEventKind::Drag(_) => {
-                MouseEvent::Hold(event.column, event.row)
-            }
+            crossterm::event::MouseEventKind::Up(_) => MouseEvent::Release(event.column, event.row),
+            crossterm::event::MouseEventKind::Drag(_) => MouseEvent::Hold(event.column, event.row),
             _ => MouseEvent::Hold(event.column, event.row), // fallback
         }
     }
@@ -211,55 +209,120 @@ impl From<crossterm::event::MouseButton> for MouseButton {
 }
 
 /// Convert crossterm key events to player actions for the ECS
-pub fn key_event_to_player_action(key: CrosstermKeyEvent) -> Option<PlayerAction> {
+pub fn key_event_to_player_action(
+    key: CrosstermKeyEvent,
+    game_state: &crate::ecs::GameStatus,
+) -> Option<PlayerAction> {
+    // 根据游戏状态决定如何解释按键
+    match game_state {
+        crate::ecs::GameStatus::MainMenu { .. }
+        | crate::ecs::GameStatus::Paused
+        | crate::ecs::GameStatus::Options { .. }
+        | crate::ecs::GameStatus::Inventory { .. }
+        | crate::ecs::GameStatus::Help
+        | crate::ecs::GameStatus::CharacterInfo => {
+            // 在菜单状态下，按键被解释为菜单导航
+            match_key_for_menu_context(key)
+        }
+        _ => {
+            // 在游戏状态下，按键被解释为游戏控制
+            match_key_for_game_context(key)
+        }
+    }
+}
+
+/// 处理菜单上下文中的按键
+fn match_key_for_menu_context(key: CrosstermKeyEvent) -> Option<PlayerAction> {
+    match key.code {
+        // 菜单导航
+        CrosstermKeyCode::Up | CrosstermKeyCode::Char('k') => {
+            Some(PlayerAction::MenuNavigate(NavigateDirection::Up))
+        }
+        CrosstermKeyCode::Down | CrosstermKeyCode::Char('j') => {
+            Some(PlayerAction::MenuNavigate(NavigateDirection::Down))
+        }
+        CrosstermKeyCode::Left | CrosstermKeyCode::Char('h') => {
+            Some(PlayerAction::MenuNavigate(NavigateDirection::Left))
+        }
+        CrosstermKeyCode::Right | CrosstermKeyCode::Char('l') => {
+            Some(PlayerAction::MenuNavigate(NavigateDirection::Right))
+        }
+        CrosstermKeyCode::PageUp => Some(PlayerAction::MenuNavigate(NavigateDirection::PageUp)),
+        CrosstermKeyCode::PageDown => Some(PlayerAction::MenuNavigate(NavigateDirection::PageDown)),
+
+        // 菜单确认和返回
+        CrosstermKeyCode::Enter => Some(PlayerAction::MenuSelect),
+        CrosstermKeyCode::Esc | CrosstermKeyCode::Backspace => Some(PlayerAction::CloseMenu),
+
+        // 在菜单中也支持一些快捷键
+        CrosstermKeyCode::Char('i') => Some(PlayerAction::OpenInventory),
+        CrosstermKeyCode::Char('o') => Some(PlayerAction::OpenOptions),
+        CrosstermKeyCode::Char('?') => Some(PlayerAction::OpenHelp),
+        CrosstermKeyCode::Char('c') => Some(PlayerAction::OpenCharacterInfo),
+        CrosstermKeyCode::Char('q') => Some(PlayerAction::Quit),
+
+        _ => None,
+    }
+}
+
+/// 处理游戏上下文中的按键
+fn match_key_for_game_context(key: CrosstermKeyEvent) -> Option<PlayerAction> {
     match (key.code, key.modifiers) {
         // Movement keys
-        (CrosstermKeyCode::Char('k'), _) | (CrosstermKeyCode::Up, _) => Some(PlayerAction::Move(Direction::North)),
-        (CrosstermKeyCode::Char('j'), _) | (CrosstermKeyCode::Down, _) => Some(PlayerAction::Move(Direction::South)),
-        (CrosstermKeyCode::Char('h'), _) | (CrosstermKeyCode::Left, _) => Some(PlayerAction::Move(Direction::West)),
-        (CrosstermKeyCode::Char('l'), _) | (CrosstermKeyCode::Right, _) => Some(PlayerAction::Move(Direction::East)),
+        (CrosstermKeyCode::Char('k'), _) | (CrosstermKeyCode::Up, _) => {
+            Some(PlayerAction::Move(Direction::North))
+        }
+        (CrosstermKeyCode::Char('j'), _) | (CrosstermKeyCode::Down, _) => {
+            Some(PlayerAction::Move(Direction::South))
+        }
+        (CrosstermKeyCode::Char('h'), _) | (CrosstermKeyCode::Left, _) => {
+            Some(PlayerAction::Move(Direction::West))
+        }
+        (CrosstermKeyCode::Char('l'), _) | (CrosstermKeyCode::Right, _) => {
+            Some(PlayerAction::Move(Direction::East))
+        }
         (CrosstermKeyCode::Char('y'), _) => Some(PlayerAction::Move(Direction::NorthWest)),
         (CrosstermKeyCode::Char('u'), _) => Some(PlayerAction::Move(Direction::NorthEast)),
         (CrosstermKeyCode::Char('b'), _) => Some(PlayerAction::Move(Direction::SouthWest)),
         (CrosstermKeyCode::Char('n'), _) => Some(PlayerAction::Move(Direction::SouthEast)),
-        
+
         // Wait/skip turn
         (CrosstermKeyCode::Char('.'), _) => Some(PlayerAction::Wait),
-        
+
         // Stairs
         (CrosstermKeyCode::Char('>'), _) => Some(PlayerAction::Descend),
         (CrosstermKeyCode::Char('<'), _) => Some(PlayerAction::Ascend),
-        
+
         // Attack via direction
         (CrosstermKeyCode::Char('K'), CrosstermKeyModifiers::SHIFT) => {
             // Attack North - in reality, we'd calculate the position
             Some(PlayerAction::Attack(Position { x: 0, y: -1, z: 0 }))
-        },
+        }
         (CrosstermKeyCode::Char('J'), CrosstermKeyModifiers::SHIFT) => {
             Some(PlayerAction::Attack(Position { x: 0, y: 1, z: 0 }))
-        },
+        }
         (CrosstermKeyCode::Char('H'), CrosstermKeyModifiers::SHIFT) => {
             Some(PlayerAction::Attack(Position { x: -1, y: 0, z: 0 }))
-        },
+        }
         (CrosstermKeyCode::Char('L'), CrosstermKeyModifiers::SHIFT) => {
             Some(PlayerAction::Attack(Position { x: 1, y: 0, z: 0 }))
-        },
+        }
         (CrosstermKeyCode::Char('Y'), CrosstermKeyModifiers::SHIFT) => {
             Some(PlayerAction::Attack(Position { x: -1, y: -1, z: 0 }))
-        },
+        }
         (CrosstermKeyCode::Char('U'), CrosstermKeyModifiers::SHIFT) => {
             Some(PlayerAction::Attack(Position { x: 1, y: -1, z: 0 }))
-        },
+        }
         (CrosstermKeyCode::Char('B'), CrosstermKeyModifiers::SHIFT) => {
             Some(PlayerAction::Attack(Position { x: -1, y: 1, z: 0 }))
-        },
+        }
         (CrosstermKeyCode::Char('N'), CrosstermKeyModifiers::SHIFT) => {
             Some(PlayerAction::Attack(Position { x: 1, y: 1, z: 0 }))
-        },
-        
+        }
+
         // Game control
         (CrosstermKeyCode::Char('q'), _) => Some(PlayerAction::Quit),
-        
+
         // Number keys for items/spells (for later implementation)
         (CrosstermKeyCode::Char('1'), _) => Some(PlayerAction::UseItem(0)),
         (CrosstermKeyCode::Char('2'), _) => Some(PlayerAction::UseItem(1)),
@@ -270,10 +333,17 @@ pub fn key_event_to_player_action(key: CrosstermKeyEvent) -> Option<PlayerAction
         (CrosstermKeyCode::Char('7'), _) => Some(PlayerAction::UseItem(6)),
         (CrosstermKeyCode::Char('8'), _) => Some(PlayerAction::UseItem(7)),
         (CrosstermKeyCode::Char('9'), _) => Some(PlayerAction::UseItem(8)),
-        
+
         // Drop item
         (CrosstermKeyCode::Char('d'), _) => Some(PlayerAction::DropItem(0)), // Default to first item
-        
+
+        // 游戏中的快捷键
+        (CrosstermKeyCode::Char('i'), _) => Some(PlayerAction::OpenInventory),
+        (CrosstermKeyCode::Char('o'), _) => Some(PlayerAction::OpenOptions),
+        (CrosstermKeyCode::Char('?'), _) => Some(PlayerAction::OpenHelp),
+        (CrosstermKeyCode::Char('c'), _) => Some(PlayerAction::OpenCharacterInfo),
+        (CrosstermKeyCode::Esc, _) => Some(PlayerAction::CloseMenu), // 暂停游戏
+
         _ => None,
     }
 }
@@ -283,14 +353,22 @@ pub fn process_input(ecs_world: &mut ECSWorld) -> anyhow::Result<bool> {
     // Process crossterm events and add to input buffer
     if event::poll(Duration::from_millis(50))? {
         if let Ok(CEvent::Key(key_event)) = event::read() {
-            if let Some(action) = key_event_to_player_action(key_event) {
-                ecs_world.resources.input_buffer.pending_actions.push(action);
+            let current_game_state = &ecs_world.resources.game_state.game_state;
+            if let Some(action) = key_event_to_player_action(key_event, current_game_state) {
+                ecs_world
+                    .resources
+                    .input_buffer
+                    .pending_actions
+                    .push(action);
             }
         }
     }
-    
+
     // Return true if we received a quit command
-    Ok(ecs_world.resources.input_buffer.pending_actions
+    Ok(ecs_world
+        .resources
+        .input_buffer
+        .pending_actions
         .iter()
         .any(|action| matches!(action, PlayerAction::Quit)))
 }
