@@ -173,10 +173,7 @@ impl Effect {
     /// 更新后的视觉效果状态方法（供UI查询刷新需求）
     pub fn should_blink(&self, current_turn: u64) -> bool {
         let config = self.visual_config();
-        if config.blink_interval() == 0 {
-            return false;
-        }
-        current_turn % config.blink_interval() == 0
+        current_turn.is_multiple_of(config.blink_interval())
     }
 }
 

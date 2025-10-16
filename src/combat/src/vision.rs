@@ -8,6 +8,7 @@ pub struct VisionSystem;
 impl VisionSystem {
     /// Calculate the field of view for a combatant
     /// Returns a set of coordinates that the combatant can see
+    #[allow(clippy::too_many_arguments)]
     pub fn calculate_fov(
         x: i32,
         y: i32,
@@ -84,6 +85,7 @@ impl VisionSystem {
     }
 
     /// Determine if an attacker can ambush a defender based on visibility
+    #[allow(clippy::too_many_arguments)]
     pub fn can_ambush<T: Combatant, U: Combatant>(
         _attacker: &T,
         attacker_x: i32,
@@ -107,6 +109,7 @@ impl VisionSystem {
     }
 
     /// Determine if an attacker is vulnerable to a counter-ambush from defender
+    #[allow(clippy::too_many_arguments)]
     pub fn is_vulnerable_to_ambush<T: Combatant, U: Combatant>(
         _attacker: &T,
         attacker_x: i32,

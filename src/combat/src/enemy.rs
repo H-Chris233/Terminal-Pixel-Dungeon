@@ -114,8 +114,8 @@ impl Enemy {
 
     /// 受到伤害
     pub fn take_damage(&mut self, amount: u32) -> bool {
-        let actual_damage = (amount - self.defense).max(0);
-        self.hp = (self.hp - actual_damage).max(0);
+        let actual_damage = amount.saturating_sub(self.defense);
+        self.hp = self.hp.saturating_sub(actual_damage);
         self.is_alive()
     }
 

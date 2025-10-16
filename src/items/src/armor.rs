@@ -382,7 +382,9 @@ impl fmt::Display for Armor {
         }
 
         // 添加刻印描述（如果已鉴定且有刻印）
-        if self.identified && let Some(glyph) = &self.glyph {
+        if self.identified
+            && let Some(glyph) = &self.glyph
+        {
             info.push_str(&format!("\n刻印效果: {}", glyph_description(glyph)));
         }
 

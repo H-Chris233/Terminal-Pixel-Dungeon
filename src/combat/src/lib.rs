@@ -15,6 +15,20 @@ pub use crate::combatant::Combatant;
 pub use crate::effect::*;
 pub use crate::enemy::Enemy;
 
+/// 打包一次攻击所需的参数，减少长参数列表
+pub struct AttackParams<'a, T: Combatant, U: Combatant> {
+    pub attacker: &'a mut T,
+    pub attacker_id: u32,
+    pub attacker_x: i32,
+    pub attacker_y: i32,
+    pub defender: &'a mut U,
+    pub defender_id: u32,
+    pub defender_x: i32,
+    pub defender_y: i32,
+    pub is_blocked: &'a dyn Fn(i32, i32) -> bool,
+    pub attacker_fov_range: u32,
+}
+
 /// Handles combat interactions between entities
 pub struct Combat;
 
@@ -40,32 +54,29 @@ impl Combat {
         Self::engage_with_ids(attacker, attacker.id(), defender, defender.id(), is_ambush)
     }
 
-    /// Perform an attack with consideration for ambush mechanics
+    /// 使用参数包执行一次考虑潜行的攻击，减少长参数列表
     pub fn perform_attack_with_ambush<T: Combatant, U: Combatant>(
-        attacker: &mut T,
-        attacker_id: u32,
-        attacker_x: i32,
-        attacker_y: i32,
-        defender: &mut U,
-        defender_id: u32,
-        defender_x: i32,
-        defender_y: i32,
-        is_blocked: &dyn Fn(i32, i32) -> bool,
-        attacker_fov_range: u32,
+        params: &mut AttackParams<T, U>,
     ) -> CombatResult {
         // Check if attacker can ambush defender
         let is_ambush = vision::VisionSystem::can_ambush(
-            attacker,
-            attacker_x,
-            attacker_y,
-            defender,
-            defender_x,
-            defender_y,
-            is_blocked,
-            attacker_fov_range,
+            params.attacker,
+            params.attacker_x,
+            params.attacker_y,
+            params.defender,
+            params.defender_x,
+            params.defender_y,
+            params.is_blocked,
+            params.attacker_fov_range,
         );
 
-        Self::engage_with_ids(attacker, attacker_id, defender, defender_id, is_ambush)
+        Self::engage_with_ids(
+            params.attacker,
+            params.attacker_id,
+            params.defender,
+            params.defender_id,
+            is_ambush,
+        )
     }
 
     /// Engage in combat between two combatants with explicit IDs (for event bus purposes)

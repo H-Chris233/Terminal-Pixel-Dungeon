@@ -78,7 +78,9 @@ impl Food {
         let mut food = Food::new(kind);
 
         // 如果是神秘肉，有30%概率已烹饪
-        if let FoodKind::MysteryMeat = kind && rng.random_bool(0.3) {
+        if let FoodKind::MysteryMeat = kind
+            && rng.random_bool(0.3)
+        {
             food.cook();
         }
 

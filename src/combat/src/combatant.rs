@@ -89,7 +89,7 @@ impl Combatant for Enemy {
     }
 
     fn attack_power(&self) -> u32 {
-        self.attack + self.weapon.as_ref().map_or(0, |w| w.damage_bonus() as u32)
+        self.attack + self.weapon.as_ref().map_or(0, |w| w.damage_bonus())
     }
 
     fn defense(&self) -> u32 {
@@ -157,7 +157,7 @@ impl Combatant for Enemy {
     fn attack_distance(&self) -> u32 {
         self.weapon
             .as_ref()
-            .map_or(self.attack_range, |w| w.range() as u32)
+            .map_or(self.attack_range, |w| w.range())
     }
 
     fn take_damage(&mut self, amount: u32) -> bool {
