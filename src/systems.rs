@@ -1976,15 +1976,34 @@ impl System for MenuSystem {
 
                 PlayerAction::CloseMenu => {
                     match resources.game_state.game_state {
+                        GameStatus::ConfirmQuit { return_to, .. } => {
+                            // 在确认退出对话框中按 Esc/Backspace 返回到原状态
+                            resources.game_state.game_state = match return_to {
+                                crate::ecs::ReturnTo::Running => GameStatus::Running,
+                                crate::ecs::ReturnTo::MainMenu => GameStatus::MainMenu,
+                            };
+                        }
                         GameStatus::MainMenu => {
-                            // 在主菜单按下Esc，退出游戏
-                            return SystemResult::Stop;
+                            // 在主菜单按下 Esc 不再退出，避免误触直接退出
+                            // 保持在主菜单，等待明确的退出动作（如 'q'）
                         }
                         _ => {
                             // 在其他菜单状态，返回游戏或上一级菜单
                             resources.game_state.game_state = GameStatus::Running;
                         }
                     }
+                }
+
+                PlayerAction::Quit => {
+                    // 触发确认退出对话框
+                    let return_to = match resources.game_state.game_state {
+                        GameStatus::MainMenu => crate::ecs::ReturnTo::MainMenu,
+                        _ => crate::ecs::ReturnTo::Running,
+                    };
+                    resources.game_state.game_state = GameStatus::ConfirmQuit {
+                        return_to,
+                        selected_option: 1, // 默认选中“否”
+                    };
                 }
 
                 PlayerAction::MenuNavigate(direction) => {
@@ -2055,6 +2074,19 @@ impl MenuSystem {
                 }
             }
 
+            GameStatus::ConfirmQuit { ref mut selected_option, .. } => {
+                // 确认退出对话框的导航：在 0(是)/1(否) 之间切换
+                match direction {
+                    NavigateDirection::Left | NavigateDirection::Up => {
+                        *selected_option = 0;
+                    }
+                    NavigateDirection::Right | NavigateDirection::Down => {
+                        *selected_option = 1;
+                    }
+                    _ => {}
+                }
+            }
+
             _ => {}
         }
     }
@@ -2115,6 +2147,22 @@ impl MenuSystem {
                     "选择了物品 #{} (使用功能暂未实现)",
                     selected_item + 1
                 ));
+            }
+
+            GameStatus::ConfirmQuit { return_to, selected_option } => {
+                // 确认退出：0=是，1=否
+                if selected_option == 0 {
+                    // 退出到 GameOver
+                    resources.game_state.game_state = GameStatus::GameOver {
+                        reason: GameOverReason::Quit,
+                    };
+                } else {
+                    // 返回原状态
+                    resources.game_state.game_state = match return_to {
+                        crate::ecs::ReturnTo::Running => GameStatus::Running,
+                        crate::ecs::ReturnTo::MainMenu => GameStatus::MainMenu,
+                    };
+                }
             }
 
             _ => {}

@@ -234,19 +234,19 @@ pub fn key_event_to_player_action(
 /// 处理菜单上下文中的按键
 fn match_key_for_menu_context(key: CrosstermKeyEvent) -> Option<PlayerAction> {
     match key.code {
-        // 菜单导航
-        CrosstermKeyCode::Up | CrosstermKeyCode::Char('k') => {
-            Some(PlayerAction::MenuNavigate(NavigateDirection::Up))
-        }
-        CrosstermKeyCode::Down | CrosstermKeyCode::Char('j') => {
-            Some(PlayerAction::MenuNavigate(NavigateDirection::Down))
-        }
-        CrosstermKeyCode::Left | CrosstermKeyCode::Char('h') => {
-            Some(PlayerAction::MenuNavigate(NavigateDirection::Left))
-        }
-        CrosstermKeyCode::Right | CrosstermKeyCode::Char('l') => {
-            Some(PlayerAction::MenuNavigate(NavigateDirection::Right))
-        }
+        // 菜单导航（支持方向键、vi-keys、WASD）
+        CrosstermKeyCode::Up
+        | CrosstermKeyCode::Char('k')
+        | CrosstermKeyCode::Char('w') => Some(PlayerAction::MenuNavigate(NavigateDirection::Up)),
+        CrosstermKeyCode::Down
+        | CrosstermKeyCode::Char('j')
+        | CrosstermKeyCode::Char('s') => Some(PlayerAction::MenuNavigate(NavigateDirection::Down)),
+        CrosstermKeyCode::Left
+        | CrosstermKeyCode::Char('h')
+        | CrosstermKeyCode::Char('a') => Some(PlayerAction::MenuNavigate(NavigateDirection::Left)),
+        CrosstermKeyCode::Right
+        | CrosstermKeyCode::Char('l')
+        | CrosstermKeyCode::Char('d') => Some(PlayerAction::MenuNavigate(NavigateDirection::Right)),
         CrosstermKeyCode::PageUp => Some(PlayerAction::MenuNavigate(NavigateDirection::PageUp)),
         CrosstermKeyCode::PageDown => Some(PlayerAction::MenuNavigate(NavigateDirection::PageDown)),
 
@@ -268,19 +268,18 @@ fn match_key_for_menu_context(key: CrosstermKeyEvent) -> Option<PlayerAction> {
 /// 处理游戏上下文中的按键
 fn match_key_for_game_context(key: CrosstermKeyEvent) -> Option<PlayerAction> {
     match (key.code, key.modifiers) {
-        // Movement keys
-        (CrosstermKeyCode::Char('k'), _) | (CrosstermKeyCode::Up, _) => {
-            Some(PlayerAction::Move(Direction::North))
-        }
-        (CrosstermKeyCode::Char('j'), _) | (CrosstermKeyCode::Down, _) => {
-            Some(PlayerAction::Move(Direction::South))
-        }
-        (CrosstermKeyCode::Char('h'), _) | (CrosstermKeyCode::Left, _) => {
-            Some(PlayerAction::Move(Direction::West))
-        }
-        (CrosstermKeyCode::Char('l'), _) | (CrosstermKeyCode::Right, _) => {
-            Some(PlayerAction::Move(Direction::East))
-        }
+        // Movement keys（支持方向键、vi-keys，部分 WASD：w/a/s；d 保留给丢弃）
+        (CrosstermKeyCode::Char('k'), _)
+        | (CrosstermKeyCode::Up, _)
+        | (CrosstermKeyCode::Char('w'), _) => Some(PlayerAction::Move(Direction::North)),
+        (CrosstermKeyCode::Char('j'), _)
+        | (CrosstermKeyCode::Down, _)
+        | (CrosstermKeyCode::Char('s'), _) => Some(PlayerAction::Move(Direction::South)),
+        (CrosstermKeyCode::Char('h'), _)
+        | (CrosstermKeyCode::Left, _)
+        | (CrosstermKeyCode::Char('a'), _) => Some(PlayerAction::Move(Direction::West)),
+        (CrosstermKeyCode::Char('l'), _)
+        | (CrosstermKeyCode::Right, _) => Some(PlayerAction::Move(Direction::East)),
         (CrosstermKeyCode::Char('y'), _) => Some(PlayerAction::Move(Direction::NorthWest)),
         (CrosstermKeyCode::Char('u'), _) => Some(PlayerAction::Move(Direction::NorthEast)),
         (CrosstermKeyCode::Char('b'), _) => Some(PlayerAction::Move(Direction::SouthWest)),
@@ -293,32 +292,23 @@ fn match_key_for_game_context(key: CrosstermKeyEvent) -> Option<PlayerAction> {
         (CrosstermKeyCode::Char('>'), _) => Some(PlayerAction::Descend),
         (CrosstermKeyCode::Char('<'), _) => Some(PlayerAction::Ascend),
 
-        // Attack via direction
-        (CrosstermKeyCode::Char('K'), CrosstermKeyModifiers::SHIFT) => {
-            // Attack North - in reality, we'd calculate the position
-            Some(PlayerAction::Attack(Position { x: 0, y: -1, z: 0 }))
-        }
-        (CrosstermKeyCode::Char('J'), CrosstermKeyModifiers::SHIFT) => {
-            Some(PlayerAction::Attack(Position { x: 0, y: 1, z: 0 }))
-        }
-        (CrosstermKeyCode::Char('H'), CrosstermKeyModifiers::SHIFT) => {
-            Some(PlayerAction::Attack(Position { x: -1, y: 0, z: 0 }))
-        }
-        (CrosstermKeyCode::Char('L'), CrosstermKeyModifiers::SHIFT) => {
-            Some(PlayerAction::Attack(Position { x: 1, y: 0, z: 0 }))
-        }
-        (CrosstermKeyCode::Char('Y'), CrosstermKeyModifiers::SHIFT) => {
-            Some(PlayerAction::Attack(Position { x: -1, y: -1, z: 0 }))
-        }
-        (CrosstermKeyCode::Char('U'), CrosstermKeyModifiers::SHIFT) => {
-            Some(PlayerAction::Attack(Position { x: 1, y: -1, z: 0 }))
-        }
-        (CrosstermKeyCode::Char('B'), CrosstermKeyModifiers::SHIFT) => {
-            Some(PlayerAction::Attack(Position { x: -1, y: 1, z: 0 }))
-        }
-        (CrosstermKeyCode::Char('N'), CrosstermKeyModifiers::SHIFT) => {
-            Some(PlayerAction::Attack(Position { x: 1, y: 1, z: 0 }))
-        }
+        // Attack via direction（放宽 SHIFT 要求，直接识别大写字符）
+        (CrosstermKeyCode::Char('K'), _)
+            => Some(PlayerAction::Attack(Position { x: 0, y: -1, z: 0 })),
+        (CrosstermKeyCode::Char('J'), _)
+            => Some(PlayerAction::Attack(Position { x: 0, y: 1, z: 0 })),
+        (CrosstermKeyCode::Char('H'), _)
+            => Some(PlayerAction::Attack(Position { x: -1, y: 0, z: 0 })),
+        (CrosstermKeyCode::Char('L'), _)
+            => Some(PlayerAction::Attack(Position { x: 1, y: 0, z: 0 })),
+        (CrosstermKeyCode::Char('Y'), _)
+            => Some(PlayerAction::Attack(Position { x: -1, y: -1, z: 0 })),
+        (CrosstermKeyCode::Char('U'), _)
+            => Some(PlayerAction::Attack(Position { x: 1, y: -1, z: 0 })),
+        (CrosstermKeyCode::Char('B'), _)
+            => Some(PlayerAction::Attack(Position { x: -1, y: 1, z: 0 })),
+        (CrosstermKeyCode::Char('N'), _)
+            => Some(PlayerAction::Attack(Position { x: 1, y: 1, z: 0 })),
 
         // Game control
         (CrosstermKeyCode::Char('q'), _) => Some(PlayerAction::Quit),

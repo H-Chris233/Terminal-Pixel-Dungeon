@@ -137,6 +137,11 @@ impl RatatuiRenderer {
                         .render_victory(f, f.area(), &ecs_world.resources);
                 }
 
+                GameStatus::ConfirmQuit { .. } => {
+                    self.menu_renderer
+                        .render_confirm_quit(f, f.area(), &ecs_world.resources);
+                }
+
                 // === 正常游戏状态 ===
                 GameStatus::Running => {
                     // Create main layout

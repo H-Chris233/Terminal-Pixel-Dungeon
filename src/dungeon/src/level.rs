@@ -388,10 +388,12 @@ impl Level {
 
         loop {
             // 检查当前点是否阻挡视线
-            if let Some(tile) = self.get_tile(x, y) {
-                if tile.blocks_sight() && (x != x1 || y != y1) && (x != x2 || y != y2) {
-                    return false;
-                }
+            if let Some(tile) = self.get_tile(x, y)
+                && tile.blocks_sight()
+                && (x != x1 || y != y1)
+                && (x != x2 || y != y2)
+            {
+                return false;
             }
 
             if x == x2 && y == y2 {

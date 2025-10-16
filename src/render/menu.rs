@@ -4,6 +4,7 @@
 //! 支持中文界面和键盘导航。
 
 use crate::ecs::{GameStatus, Resources};
+use ratatui::text::Text;
 use hecs::World;
 use ratatui::{
     Frame,
@@ -301,7 +302,7 @@ impl MenuRenderer {
             "",
             "游戏控制:",
             "  Esc         - 暂停/返回",
-            "  q           - 退出游戏",
+            "  q           - 退出游戏（现已增加确认对话框）",
             "",
             "",
             "🏃 快速提示:",
@@ -353,6 +354,74 @@ impl MenuRenderer {
             .alignment(Alignment::Center);
 
         frame.render_widget(hints, layout[2]);
+    }
+
+    /// 渲染确认退出对话框
+    pub fn render_confirm_quit(&self, frame: &mut Frame, area: Rect, resources: &Resources) {
+        let selected = match resources.game_state.game_state {
+            GameStatus::ConfirmQuit { selected_option, .. } => selected_option,
+            _ => 1,
+        };
+
+        let popup_area = self.centered_rect(area, 40, 30);
+
+        // 背景遮罩
+        frame.render_widget(Clear, popup_area);
+
+        let layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Length(3),
+                Constraint::Length(3),
+            ])
+            .split(popup_area);
+
+        // 标题
+        let title = Paragraph::new("确认退出？")
+            .style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
+            .block(Block::default().borders(Borders::ALL))
+            .alignment(Alignment::Center);
+        frame.render_widget(title, layout[0]);
+
+        // 提示文本
+        let info = Paragraph::new("是否退出到主菜单/桌面？")
+            .style(Style::default().fg(Color::White))
+            .alignment(Alignment::Center);
+        frame.render_widget(info, layout[1]);
+
+        // 选项按钮
+        let yes_style = if selected == 0 {
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Yellow)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::White)
+        };
+        let no_style = if selected == 1 {
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Yellow)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::White)
+        };
+
+        let yes = Paragraph::new(Text::styled("  是  ", yes_style))
+            .block(Block::default().borders(Borders::ALL).title("确认"))
+            .alignment(Alignment::Center);
+        let no = Paragraph::new(Text::styled("  否  ", no_style))
+            .block(Block::default().borders(Borders::ALL).title("取消"))
+            .alignment(Alignment::Center);
+
+        let buttons = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(layout[2]);
+
+        frame.render_widget(yes, buttons[0]);
+        frame.render_widget(no, buttons[1]);
     }
 
     /// 创建居中的矩形区域

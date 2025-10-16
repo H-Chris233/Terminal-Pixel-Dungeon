@@ -159,12 +159,17 @@ impl TurnSystem {
                     std::mem::take(&mut resources.input_buffer.completed_actions);
 
                 for action in completed_actions {
-                    // Handle Quit action specially
+                    // Handle Quit action specially（现在改为弹出确认对话框，不直接退出）
                     if matches!(action, PlayerAction::Quit) {
-                        resources.game_state.game_state = GameStatus::GameOver {
-                            reason: GameOverReason::Quit,
+                        let return_to = match resources.game_state.game_state {
+                            GameStatus::MainMenu => ReturnTo::MainMenu,
+                            _ => ReturnTo::Running,
                         };
-                        return Ok(());
+                        resources.game_state.game_state = GameStatus::ConfirmQuit {
+                            return_to,
+                            selected_option: 1, // 默认选中“否”
+                        };
+                        continue; // 不结束循环，允许后续处理
                     }
 
                     // Consume energy for the completed action

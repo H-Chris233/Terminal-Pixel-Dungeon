@@ -288,13 +288,36 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
         if let Ok(Some(event)) = self.input_source.poll(Duration::from_millis(50)) {
             match event {
                 InputEvent::Key(key_event) => {
-                    // Convert key event to player action
-                    if let Some(action) = key_event_to_player_action_from_internal(key_event) {
-                        self.ecs_world
-                            .resources
-                            .input_buffer
-                            .pending_actions
-                            .push(action);
+                    // Convert key event to player action (state-aware, internal KeyEvent)
+                    if let Some(action) = key_event_to_player_action_from_internal(
+                        key_event,
+                        &self.ecs_world.resources.game_state.game_state,
+                    ) {
+                        // 菜单相关动作直接标记为已完成，交由 MenuSystem 处理；其余进入待处理队列
+                        match action {
+                            PlayerAction::OpenInventory
+                            | PlayerAction::OpenOptions
+                            | PlayerAction::OpenHelp
+                            | PlayerAction::OpenCharacterInfo
+                            | PlayerAction::CloseMenu
+                            | PlayerAction::MenuNavigate(_)
+                            | PlayerAction::MenuSelect
+                            | PlayerAction::MenuBack
+                            | PlayerAction::Quit => {
+                                self.ecs_world
+                                    .resources
+                                    .input_buffer
+                                    .completed_actions
+                                    .push(action);
+                            }
+                            _ => {
+                                self.ecs_world
+                                    .resources
+                                    .input_buffer
+                                    .pending_actions
+                                    .push(action);
+                            }
+                        }
                     }
                 }
                 InputEvent::Resize(width, height) => {
@@ -311,6 +334,9 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
 
     /// Update game state by running all systems for a turn
     fn update_turn(&mut self) -> anyhow::Result<()> {
+        // 记录状态以便桥接事件（UIAction → GameEvent）
+        let prev_status = self.ecs_world.resources.game_state.game_state;
+
         // Run systems based on turn state
         if self.turn_system.is_player_turn() {
             // Run non-input systems
@@ -429,6 +455,12 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                 .process_turn_cycle(&mut self.ecs_world.world, &mut self.ecs_world.resources)?;
         }
 
+        // 桥接：根据 GameStatus 变化发布事件
+        self.bridge_status_events(prev_status);
+
+        // 事件入队后立刻处理当前帧事件（避免 UI 状态不同步）
+        self.ecs_world.process_events();
+
         // 准备处理下一帧事件
         self.ecs_world.next_frame();
 
@@ -442,6 +474,60 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
         }
 
         Ok(())
+    }
+
+    /// 将状态机变化桥接到事件总线
+    fn bridge_status_events(&mut self, prev: GameStatus) {
+        use crate::event_bus::GameEvent;
+        let curr = self.ecs_world.resources.game_state.game_state;
+        if prev == curr {
+            return;
+        }
+        // Running ↔ 菜单/特殊状态
+        let was_menu = matches!(
+            prev,
+            GameStatus::MainMenu
+                | GameStatus::Paused
+                | GameStatus::Options { .. }
+                | GameStatus::Inventory { .. }
+                | GameStatus::Help
+                | GameStatus::CharacterInfo
+                | GameStatus::ConfirmQuit { .. }
+        );
+        let is_menu = matches!(
+            curr,
+            GameStatus::MainMenu
+                | GameStatus::Paused
+                | GameStatus::Options { .. }
+                | GameStatus::Inventory { .. }
+                | GameStatus::Help
+                | GameStatus::CharacterInfo
+                | GameStatus::ConfirmQuit { .. }
+        );
+
+        if !was_menu && is_menu {
+            self.ecs_world.publish_event(GameEvent::GamePaused);
+        } else if was_menu && !is_menu {
+            self.ecs_world.publish_event(GameEvent::GameResumed);
+        }
+
+        // 终局事件
+        match curr {
+            GameStatus::GameOver { reason } => {
+                let msg = match reason {
+                    GameOverReason::Died(s) => format!("死亡：{}", s),
+                    GameOverReason::Defeated(s) => format!("被击败：{}", s),
+                    GameOverReason::Starved => "死于饥饿".to_string(),
+                    GameOverReason::Trapped(s) => format!("死于陷阱：{}", s),
+                    GameOverReason::Quit => "玩家退出".to_string(),
+                };
+                self.ecs_world.publish_event(GameEvent::GameOver { reason: msg });
+            }
+            GameStatus::Victory => {
+                self.ecs_world.publish_event(GameEvent::Victory);
+            }
+            _ => {}
+        }
     }
 
     /// Update game state by running all systems
@@ -611,61 +697,88 @@ impl HeadlessGameLoop {
 }
 
 /// Helper function to convert internal key event to player action
-fn key_event_to_player_action_from_internal(key_event: KeyEvent) -> Option<PlayerAction> {
-    match (key_event.code, key_event.modifiers.shift) {
-        // Movement keys
-        (KeyCode::Char('k'), false) | (KeyCode::Up, false) => {
-            Some(PlayerAction::Move(Direction::North))
+fn key_event_to_player_action_from_internal(
+    key_event: KeyEvent,
+    game_state: &GameStatus,
+) -> Option<PlayerAction> {
+    // 根据游戏状态决定如何解释按键（复用 input.rs 的语义）
+    match game_state {
+        GameStatus::MainMenu
+        | GameStatus::Paused
+        | GameStatus::Options { .. }
+        | GameStatus::Inventory { .. }
+        | GameStatus::Help
+        | GameStatus::CharacterInfo
+        | GameStatus::ConfirmQuit { .. } => {
+            // 菜单上下文：方向键/Enter/Esc 等（增加 WASD 支持）
+            match (key_event.code, key_event.modifiers.shift) {
+                (KeyCode::Up, _)
+                | (KeyCode::Char('k'), _)
+                | (KeyCode::Char('w'), _) => Some(PlayerAction::MenuNavigate(NavigateDirection::Up)),
+                (KeyCode::Down, _)
+                | (KeyCode::Char('j'), _)
+                | (KeyCode::Char('s'), _) => Some(PlayerAction::MenuNavigate(NavigateDirection::Down)),
+                (KeyCode::Left, _)
+                | (KeyCode::Char('h'), _)
+                | (KeyCode::Char('a'), _) => Some(PlayerAction::MenuNavigate(NavigateDirection::Left)),
+                (KeyCode::Right, _)
+                | (KeyCode::Char('l'), _)
+                | (KeyCode::Char('d'), _) => Some(PlayerAction::MenuNavigate(NavigateDirection::Right)),
+                (KeyCode::Enter, _) => Some(PlayerAction::MenuSelect),
+                (KeyCode::Esc, _) | (KeyCode::Backspace, _) => Some(PlayerAction::CloseMenu),
+                (KeyCode::Char('q'), _) => Some(PlayerAction::Quit),
+                _ => None,
+            }
         }
-        (KeyCode::Char('j'), false) | (KeyCode::Down, false) => {
-            Some(PlayerAction::Move(Direction::South))
+        _ => {
+            match (key_event.code, key_event.modifiers.shift) {
+                // Movement keys（仅支持方向键、vi-keys，避免与 'd' 丢弃冲突）
+                (KeyCode::Char('k'), _) | (KeyCode::Up, _) => Some(PlayerAction::Move(Direction::North)),
+                (KeyCode::Char('j'), _) | (KeyCode::Down, _) => Some(PlayerAction::Move(Direction::South)),
+                (KeyCode::Char('h'), _) | (KeyCode::Left, _) => Some(PlayerAction::Move(Direction::West)),
+                (KeyCode::Char('l'), _) | (KeyCode::Right, _) => Some(PlayerAction::Move(Direction::East)),
+                (KeyCode::Char('y'), _) => Some(PlayerAction::Move(Direction::NorthWest)),
+                (KeyCode::Char('u'), _) => Some(PlayerAction::Move(Direction::NorthEast)),
+                (KeyCode::Char('b'), _) => Some(PlayerAction::Move(Direction::SouthWest)),
+                (KeyCode::Char('n'), _) => Some(PlayerAction::Move(Direction::SouthEast)),
+
+                // Wait/skip turn
+                (KeyCode::Char('.'), _) => Some(PlayerAction::Wait),
+
+                // Stairs
+                (KeyCode::Char('>'), _) => Some(PlayerAction::Descend),
+                (KeyCode::Char('<'), _) => Some(PlayerAction::Ascend),
+
+                // Attack via direction（放宽 SHIFT 要求）
+                (KeyCode::Char('K'), _) => Some(PlayerAction::Attack(Position { x: 0, y: -1, z: 0 })),
+                (KeyCode::Char('J'), _) => Some(PlayerAction::Attack(Position { x: 0, y: 1, z: 0 })),
+                (KeyCode::Char('H'), _) => Some(PlayerAction::Attack(Position { x: -1, y: 0, z: 0 })),
+                (KeyCode::Char('L'), _) => Some(PlayerAction::Attack(Position { x: 1, y: 0, z: 0 })),
+                (KeyCode::Char('Y'), _) => Some(PlayerAction::Attack(Position { x: -1, y: -1, z: 0 })),
+                (KeyCode::Char('U'), _) => Some(PlayerAction::Attack(Position { x: 1, y: -1, z: 0 })),
+                (KeyCode::Char('B'), _) => Some(PlayerAction::Attack(Position { x: -1, y: 1, z: 0 })),
+                (KeyCode::Char('N'), _) => Some(PlayerAction::Attack(Position { x: 1, y: 1, z: 0 })),
+
+                // Game control
+                (KeyCode::Char('q'), _) => Some(PlayerAction::Quit),
+
+                // Number keys for items/spells
+                (KeyCode::Char('1'), _) => Some(PlayerAction::UseItem(0)),
+                (KeyCode::Char('2'), _) => Some(PlayerAction::UseItem(1)),
+                (KeyCode::Char('3'), _) => Some(PlayerAction::UseItem(2)),
+                (KeyCode::Char('4'), _) => Some(PlayerAction::UseItem(3)),
+                (KeyCode::Char('5'), _) => Some(PlayerAction::UseItem(4)),
+                (KeyCode::Char('6'), _) => Some(PlayerAction::UseItem(5)),
+                (KeyCode::Char('7'), _) => Some(PlayerAction::UseItem(6)),
+                (KeyCode::Char('8'), _) => Some(PlayerAction::UseItem(7)),
+                (KeyCode::Char('9'), _) => Some(PlayerAction::UseItem(8)),
+
+                // Drop item
+                (KeyCode::Char('d'), _) => Some(PlayerAction::DropItem(0)),
+
+                _ => None,
+            }
         }
-        (KeyCode::Char('h'), false) | (KeyCode::Left, false) => {
-            Some(PlayerAction::Move(Direction::West))
-        }
-        (KeyCode::Char('l'), false) | (KeyCode::Right, false) => {
-            Some(PlayerAction::Move(Direction::East))
-        }
-        (KeyCode::Char('y'), false) => Some(PlayerAction::Move(Direction::NorthWest)),
-        (KeyCode::Char('u'), false) => Some(PlayerAction::Move(Direction::NorthEast)),
-        (KeyCode::Char('b'), false) => Some(PlayerAction::Move(Direction::SouthWest)),
-        (KeyCode::Char('n'), false) => Some(PlayerAction::Move(Direction::SouthEast)),
-
-        // Wait/skip turn
-        (KeyCode::Char('.'), false) => Some(PlayerAction::Wait),
-
-        // Stairs
-        (KeyCode::Char('>'), false) => Some(PlayerAction::Descend),
-        (KeyCode::Char('<'), false) => Some(PlayerAction::Ascend),
-
-        // Attack via direction
-        (KeyCode::Char('K'), true) => Some(PlayerAction::Attack(Position { x: 0, y: -1, z: 0 })),
-        (KeyCode::Char('J'), true) => Some(PlayerAction::Attack(Position { x: 0, y: 1, z: 0 })),
-        (KeyCode::Char('H'), true) => Some(PlayerAction::Attack(Position { x: -1, y: 0, z: 0 })),
-        (KeyCode::Char('L'), true) => Some(PlayerAction::Attack(Position { x: 1, y: 0, z: 0 })),
-        (KeyCode::Char('Y'), true) => Some(PlayerAction::Attack(Position { x: -1, y: -1, z: 0 })),
-        (KeyCode::Char('U'), true) => Some(PlayerAction::Attack(Position { x: 1, y: -1, z: 0 })),
-        (KeyCode::Char('B'), true) => Some(PlayerAction::Attack(Position { x: -1, y: 1, z: 0 })),
-        (KeyCode::Char('N'), true) => Some(PlayerAction::Attack(Position { x: 1, y: 1, z: 0 })),
-
-        // Game control
-        (KeyCode::Char('q'), false) => Some(PlayerAction::Quit),
-
-        // Number keys for items/spells
-        (KeyCode::Char('1'), false) => Some(PlayerAction::UseItem(0)),
-        (KeyCode::Char('2'), false) => Some(PlayerAction::UseItem(1)),
-        (KeyCode::Char('3'), false) => Some(PlayerAction::UseItem(2)),
-        (KeyCode::Char('4'), false) => Some(PlayerAction::UseItem(3)),
-        (KeyCode::Char('5'), false) => Some(PlayerAction::UseItem(4)),
-        (KeyCode::Char('6'), false) => Some(PlayerAction::UseItem(5)),
-        (KeyCode::Char('7'), false) => Some(PlayerAction::UseItem(6)),
-        (KeyCode::Char('8'), false) => Some(PlayerAction::UseItem(7)),
-        (KeyCode::Char('9'), false) => Some(PlayerAction::UseItem(8)),
-
-        // Drop item
-        (KeyCode::Char('d'), false) => Some(PlayerAction::DropItem(0)),
-
-        _ => None,
     }
 }
 

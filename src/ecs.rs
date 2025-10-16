@@ -405,6 +405,18 @@ pub enum GameStatus {
     },
     Help,
     CharacterInfo,
+    // 确认退出对话框
+    ConfirmQuit {
+        return_to: ReturnTo,
+        selected_option: usize, // 0: 是, 1: 否
+    },
+}
+
+/// 退出对话框返回目的地
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum ReturnTo {
+    Running,
+    MainMenu,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]

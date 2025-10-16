@@ -129,10 +129,10 @@ impl Dungeon {
         let mut events = Vec::new();
 
         // 1. 陷阱检测（优先处理）
-        if let Some(mut trap) = self.current_level_mut().get_trap(x, y) {
-            if let Some(effect) = trap.trigger() {
-                events.push(InteractionEvent::TrapTriggered(effect.clone()));
-            }
+        if let Some(mut trap) = self.current_level_mut().get_trap(x, y)
+            && let Some(effect) = trap.trigger()
+        {
+            events.push(InteractionEvent::TrapTriggered(effect.clone()));
         }
 
         // 2. 物品拾取
