@@ -78,10 +78,8 @@ impl Food {
         let mut food = Food::new(kind);
 
         // 如果是神秘肉，有30%概率已烹饪
-        if let FoodKind::MysteryMeat = kind {
-            if rng.random_bool(0.3) {
-                food.cook();
-            }
+        if let FoodKind::MysteryMeat = kind && rng.random_bool(0.3) {
+            food.cook();
         }
 
         // 10%概率被污染
@@ -118,15 +116,15 @@ impl Food {
     pub fn color(&self) -> Color {
         // 污染状态优先显示
         if self.contaminated {
-            return Color::Green; // 污染状态使用绿色
-        }
-
-        match self.kind {
-            FoodKind::Ration => Color::Rgb(210, 180, 140), // 沙金色
-            FoodKind::Pasty => Color::LightRed,
-            FoodKind::MysteryMeat if self.cooked => Color::Rgb(139, 69, 19), // 棕色
-            FoodKind::MysteryMeat => Color::Red,
-            FoodKind::FrozenCarpaccio => Color::LightBlue,
+            Color::Green // 污染状态使用绿色
+        } else {
+            match self.kind {
+                FoodKind::Ration => Color::Rgb(210, 180, 140), // 沙金色
+                FoodKind::Pasty => Color::LightRed,
+                FoodKind::MysteryMeat if self.cooked => Color::Rgb(139, 69, 19), // 棕色
+                FoodKind::MysteryMeat => Color::Red,
+                FoodKind::FrozenCarpaccio => Color::LightBlue,
+            }
         }
     }
 

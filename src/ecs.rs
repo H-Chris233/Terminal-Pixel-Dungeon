@@ -1378,7 +1378,10 @@ mod tests {
         world.process_events();
 
         // 检查游戏状态
-        assert_eq!(world.resources.game_state.game_state, GameStatus::GameOver);
+        assert!(matches!(
+            world.resources.game_state.game_state,
+            GameStatus::GameOver { .. }
+        ));
         assert!(
             world
                 .resources

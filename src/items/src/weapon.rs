@@ -196,7 +196,7 @@ impl Weapon {
         self.upgrade_level += 1;
 
         // 每3级降低1点力量需求（最低1）
-        if self.upgrade_level % 3 == 0 {
+        if self.upgrade_level.is_multiple_of(3) {
             self.str_requirement = (self.str_requirement - 1).max(1);
         }
 
@@ -449,10 +449,8 @@ impl fmt::Display for Weapon {
         info.push_str(&format!("\n改造方向: {}", self.modifier));
 
         // 添加附魔效果（如果已鉴定且有附魔）
-        if self.identified {
-            if let Some(enhance) = &self.enchanted {
-                info.push_str(&format!("\n附魔效果: {}", enhance));
-            }
+        if self.identified && let Some(enhance) = &self.enchanted {
+            info.push_str(&format!("\n附魔效果: {}", enhance));
         }
 
         // 添加价值信息

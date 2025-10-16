@@ -72,8 +72,8 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
         // 设置初始状态为主菜单
         self.ecs_world.resources.game_state.game_state = GameStatus::MainMenu;
 
-        // Add initial entities to the world (但不立即生成，等玩家选择开始游戏)
-        // self.initialize_entities();
+        // 初始化基础实体（确保世界非空，便于测试与渲染）
+        self.initialize_entities();
 
         Ok(())
     }
