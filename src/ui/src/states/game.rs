@@ -66,7 +66,7 @@ impl GameplayState {
     /// 创建新游戏状态
     pub fn new(starting_level: u8) -> anyhow::Result<Self> {
         let dungeon = Dungeon::generate(5, 0)?;
-        let (hero_x, hero_y) = dungeon.current_level().stair_up;
+        let (_hero_x, _hero_y) = dungeon.current_level().stair_up;
 
         Ok(Self {
             dungeon,
@@ -75,6 +75,19 @@ impl GameplayState {
             is_paused: false,
             turn_counter: 0,
             message_log: vec![("Welcome to Pixel Dungeon!".to_string(), MessageType::Normal)],
+            last_input_time: Instant::now(),
+        })
+    }
+
+    /// 从存档构造游戏状态
+    pub fn from_save(data: save::SaveData) -> anyhow::Result<Self> {
+        Ok(Self {
+            dungeon: data.dungeon,
+            hero: data.hero,
+            current_level: 1,
+            is_paused: false,
+            turn_counter: 0,
+            message_log: vec![("Loaded save".to_string(), MessageType::Good)],
             last_input_time: Instant::now(),
         })
     }

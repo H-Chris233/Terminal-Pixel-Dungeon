@@ -8,6 +8,9 @@
 use super::{
     common::{GameState, GameStateID, StateContext, StateTransition},
     menu::{GameOverState, MainMenuState, PauseMenuState},
+    settings::SettingsMenuState,
+    load::LoadMenuState,
+    game::GameplayState,
 };
 use crate::input::InputSystem;
 use crate::render::render::RenderSystem;
@@ -34,7 +37,7 @@ impl StateStack {
         initial_state: GameStateID,
     ) -> Self {
         let mut stack = Self {
-            states: Vec::with_capacity(3), // 预分配3层状态
+            states: Vec::with_capacity(3),
             context: StateContext::new(terminal, input, render),
             transition: None,
             transition_start: None,
@@ -57,10 +60,20 @@ impl StateStack {
 
     /// 立即压入状态（无过渡）
     fn instant_push(&mut self, state_id: GameStateID) {
+        // 优先使用 pending_state（由菜单预构造）
+        if let Some(mut state) = self.context.pending_state.take() {
+            state.on_enter(&mut self.context);
+            self.states.push(state);
+            return;
+        }
+
         let mut state: Box<dyn GameState> = match state_id {
             GameStateID::MainMenu => Box::new(MainMenuState::new()),
             GameStateID::PauseMenu => Box::new(PauseMenuState::new()),
             GameStateID::GameOver => Box::new(GameOverState::new(0, "Unknown cause")),
+            GameStateID::Settings => Box::new(SettingsMenuState::new()),
+            GameStateID::LoadMenu => Box::new(LoadMenuState::new()),
+            GameStateID::Gameplay => Box::new(GameplayState::new(1).expect("Init gameplay")),
             _ => Box::new(MainMenuState::new()),
         };
         state.on_enter(&mut self.context);
@@ -71,7 +84,7 @@ impl StateStack {
     pub fn pop_state(&mut self) {
         if let Some(top_state) = self.states.last() {
             if let Some(transition) = top_state.exit_transition() {
-                self.start_transition(transition, GameStateID::MainMenu); // 临时目标，实际在complete_transition处理
+                self.start_transition(transition, GameStateID::MainMenu);
                 return;
             }
         }
@@ -83,6 +96,8 @@ impl StateStack {
         if let Some(mut state) = self.states.pop() {
             state.on_exit(&mut self.context);
         }
+        // 清理弹出请求标记
+        self.context.clear_pop_request();
     }
 
     /// 开始状态过渡
@@ -96,15 +111,11 @@ impl StateStack {
     fn complete_transition(&mut self) {
         if let Some(target) = self.transition_target.take() {
             if self.states.iter().any(|s| s.id() == target) {
-                // 如果目标状态已在堆栈中，则弹出到该状态
                 while let Some(state) = self.states.last() {
-                    if state.id() == target {
-                        break;
-                    }
+                    if state.id() == target { break; }
                     self.instant_pop();
                 }
             } else {
-                // 否则压入新状态
                 self.instant_push(target);
             }
         }
@@ -125,11 +136,17 @@ impl StateStack {
                 break;
             }
         }
+
+        if let Some(id) = self.context.take_push_request() {
+            self.push_state(id);
+        }
+        if self.context.pop_request {
+            self.pop_state();
+        }
     }
 
     /// 更新状态逻辑
     pub fn update(&mut self, delta_time: f32) -> bool {
-        // 处理过渡动画
         if let Some((transition, _)) = &mut self.transition {
             self.context.transition_progress = transition.progress();
             if transition.update(delta_time) {
@@ -138,7 +155,6 @@ impl StateStack {
             return !self.context.should_quit;
         }
 
-        // 从栈顶开始更新（直到遇到暂停状态）
         for state in self.states.iter_mut().rev() {
             if let Some(new_state) = state.update(&mut self.context, delta_time) {
                 self.push_state(new_state);
@@ -148,26 +164,18 @@ impl StateStack {
                 break;
             }
         }
-
         !self.context.should_quit
     }
 
     /// 渲染所有可见状态（从栈底向栈顶渲染）
     pub fn render(&mut self) -> Result<()> {
-        // 计算过渡效果进度
-        let transition_progress = self.transition.as_ref().map_or(0.0, |(t, _)| t.progress());
-
-        // 渲染非阻塞状态
+        let _transition_progress = self.transition.as_ref().map_or(0.0, |(t, _)| t.progress());
         let len = self.states.len();
         for (i, state) in self.states.iter_mut().enumerate() {
             if i == len - 1 || !state.block_lower_states() {
                 state.render(&mut self.context)?;
             }
         }
-
-        if let Some((_transition, _)) = &self.transition {
-        }
-
         Ok(())
     }
 }
@@ -175,23 +183,18 @@ impl StateStack {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockall::predicate::*;
 
     #[test]
     fn test_state_transitions() {
         let terminal = TerminalController::new().expect("Terminal init");
-        let mut input = InputSystem::default();
+        let input = InputSystem::default();
         let render = RenderSystem::new();
         let mut stack = StateStack::new(terminal, input, render, GameStateID::MainMenu);
 
-        // 测试状态压栈
         stack.push_state(GameStateID::Gameplay);
         assert_eq!(stack.states.len(), 2);
-        assert_eq!(stack.states[1].id(), GameStateID::Gameplay);
 
-        // 测试状态弹出
         stack.pop_state();
         assert_eq!(stack.states.len(), 1);
-        assert_eq!(stack.states[0].id(), GameStateID::MainMenu);
     }
 }

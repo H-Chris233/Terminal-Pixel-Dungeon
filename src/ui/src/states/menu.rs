@@ -13,6 +13,8 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
 };
 
+use crate::input::{map_to_ui_action, KeyBindings, UIAction};
+use crate::input::navigation::{NavDirection, NavigationState};
 use crate::states::common::GameState;
 use crate::states::common::GameStateID;
 use crate::states::common::StateContext;
@@ -46,15 +48,20 @@ pub struct MainMenuState {
     options: Vec<&'static str>,
     version: &'static str,
     blink_timer: f32,
+    nav: NavigationState,
+    bindings: KeyBindings,
 }
 
 impl MainMenuState {
     pub fn new() -> Self {
+        let options = vec!["New Game", "Load Game", "Settings", "Quit"];
         Self {
             selected_index: 0,
-            options: vec!["New Game", "Load Game", "Settings", "Quit"],
+            nav: NavigationState::new(options.len()),
+            options,
             version: "v0.1.0",
             blink_timer: 0.0,
+            bindings: KeyBindings::default(),
         }
     }
 
@@ -90,31 +97,28 @@ impl GameState for MainMenuState {
         context: &mut StateContext,
         event: &crossterm::event::Event,
     ) -> bool {
-        if let crossterm::event::Event::Key(key) = event {
-            match key.code {
-                KeyCode::Up => {
-                    self.selected_index = self.selected_index.saturating_sub(1);
-                    false
-                }
-                KeyCode::Down => {
-                    self.selected_index = (self.selected_index + 1).min(self.options.len() - 1);
-                    false
-                }
-                KeyCode::Enter => {
+        if let Some(action) = map_to_ui_action(event, &self.bindings) {
+            match action {
+                UIAction::NavigateUp => { self.nav.navigate(NavDirection::Up); }
+                UIAction::NavigateDown => { self.nav.navigate(NavDirection::Down); }
+                UIAction::NavigateLeft => {}
+                UIAction::NavigateRight => {}
+                UIAction::Confirm => {
+                    self.selected_index = self.nav.current();
                     match self.selected_index {
-                        0 => { context.transition_progress = 1.0; }
-                        1 => {}
-                        2 => { context.transition_progress = 1.0; }
+                        0 => { return Some(GameStateID::Gameplay).is_some(); }
+                        1 => { return Some(GameStateID::LoadMenu).is_some(); }
+                        2 => { return Some(GameStateID::Settings).is_some(); }
                         3 => { context.request_quit(); }
                         _ => {}
                     }
-                    true
                 }
-                _ => false,
+                UIAction::Cancel => { context.request_quit(); }
+                _ => {}
             }
-        } else {
-            false
+            return true;
         }
+        false
     }
 
     fn update(&mut self, _context: &mut StateContext, delta_time: f32) -> Option<GameStateID> {
@@ -146,7 +150,11 @@ impl GameState for MainMenuState {
                 .options
                 .iter()
                 .enumerate()
-                .map(|(i, _)| Line::from(self.render_options(show_cursor, i)))
+                .map(|(i, _)| {
+                    // 使用 NavigationState 的焦点
+                    self.selected_index = self.nav.current();
+                    Line::from(self.render_options(show_cursor, i))
+                })
                 .collect();
 
             let menu_block = Paragraph::new(menu_items)
@@ -183,14 +191,19 @@ pub struct PauseMenuState {
     selected_index: usize,
     options: Vec<&'static str>,
     blink_timer: f32,
+    nav: NavigationState,
+    bindings: KeyBindings,
 }
 
 impl PauseMenuState {
     pub fn new() -> Self {
+        let options = vec!["Continue", "Save Game", "Main Menu", "Quit"];
         Self {
             selected_index: 0,
-            options: vec!["Continue", "Save Game", "Main Menu", "Quit"],
+            nav: NavigationState::new(options.len()),
+            options,
             blink_timer: 0.0,
+            bindings: KeyBindings::default(),
         }
     }
 }
@@ -205,32 +218,26 @@ impl GameState for PauseMenuState {
         context: &mut StateContext,
         event: &crossterm::event::Event,
     ) -> bool {
-        if let crossterm::event::Event::Key(key) = event {
-            match key.code {
-                KeyCode::Esc => true,
-                KeyCode::Up => {
-                    self.selected_index = self.selected_index.saturating_sub(1);
-                    false
-                }
-                KeyCode::Down => {
-                    self.selected_index = (self.selected_index + 1).min(self.options.len() - 1);
-                    false
-                }
-                KeyCode::Enter => match self.selected_index {
-                    0 => true,
-                    1 => false,
-                    2 => true,
-                    3 => {
-                        context.request_quit();
-                        false
+        if let Some(action) = map_to_ui_action(event, &self.bindings) {
+            match action {
+                UIAction::NavigateUp => { self.nav.navigate(NavDirection::Up); }
+                UIAction::NavigateDown => { self.nav.navigate(NavDirection::Down); }
+                UIAction::Confirm => {
+                    self.selected_index = self.nav.current();
+                    match self.selected_index {
+                        0 => { context.request_pop(); } // 继续游戏
+                        1 => { /* TODO: 调用保存系统 */ }
+                        2 => { context.request_pop(); } // 返回主菜单由上层处理
+                        3 => { context.request_quit(); }
+                        _ => {}
                     }
-                    _ => false,
-                },
-                _ => false,
+                }
+                UIAction::Cancel => { context.request_pop(); }
+                _ => {}
             }
-        } else {
-            false
+            return true;
         }
+        false
     }
 
     fn update(&mut self, _context: &mut StateContext, delta_time: f32) -> Option<GameStateID> {
