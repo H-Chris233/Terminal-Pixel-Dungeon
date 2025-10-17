@@ -23,7 +23,7 @@ impl GameOverRenderer {
 
     /// 渲染游戏结束界面
     pub fn render_game_over(&self, frame: &mut Frame, area: Rect, resources: &Resources) {
-        let (reason, title_color, title_text, emoji) = match resources.game_state.game_state {
+        let (_reason, title_color, title_text, emoji) = match resources.game_state.game_state {
             GameStatus::GameOver { reason } => {
                 let (emoji, title_color, title_text) = match reason {
                     GameOverReason::Died(cause) => ("☠️", Color::Red, format!("你死了：{}", cause)),

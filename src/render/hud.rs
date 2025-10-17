@@ -33,14 +33,23 @@ impl HudRenderer {
 
         if player_data.is_none() {
             // 没有玩家数据，渲染空 HUD
-            let text = Paragraph::new("No player data")
-                .style(Style::default().fg(Color::Red))
+            let text = Paragraph::new("⚠️ 未找到玩家数据")
+                .style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
                 .alignment(Alignment::Center);
             frame.render_widget(text, area);
             return;
         }
 
         let (stats, wealth, hunger, progress, actor_name) = player_data.unwrap();
+
+        // 主布局：顶部状态栏 + 底部经验条
+        let main_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(2), // 主状态栏
+                Constraint::Length(1), // 经验条
+            ])
+            .split(area);
 
         // 四栏布局
         let chunks = Layout::default()
@@ -51,7 +60,7 @@ impl HudRenderer {
                 Constraint::Length(12), // 金币
                 Constraint::Length(12), // 饱食度
             ])
-            .split(area);
+            .split(main_chunks[0]);
 
         // 1. 渲染等级和职业
         self.render_level(frame, chunks[0], &stats, &progress, &actor_name);
@@ -64,6 +73,9 @@ impl HudRenderer {
 
         // 4. 渲染饱食度
         self.render_hunger(frame, chunks[3], &hunger);
+
+        // 5. 渲染经验条（使用 Stats 中的经验值）
+        self.render_experience(frame, main_chunks[1], &stats);
     }
 
     /// 从 ECS World 获取玩家数据
@@ -92,7 +104,7 @@ impl HudRenderer {
         area: Rect,
         stats: &Stats,
         progress: &PlayerProgress,
-        name: &str,
+        _name: &str,
     ) {
         let class_icon = match progress.class.as_str() {
             "Warrior" => "⚔",
@@ -167,5 +179,25 @@ impl HudRenderer {
         ]);
 
         frame.render_widget(Paragraph::new(text).alignment(Alignment::Center), area);
+    }
+
+    fn render_experience(&self, frame: &mut Frame, area: Rect, stats: &Stats) {
+        // 计算经验值比例（简单估算：下一级需要 level * 100 经验）
+        let current_exp = stats.experience;
+        let next_level_exp = stats.level * 100;
+        
+        let exp_ratio = if next_level_exp > 0 {
+            (current_exp as f64 / next_level_exp as f64).min(1.0)
+        } else {
+            0.0
+        };
+
+        let exp_gauge = Gauge::default()
+            .gauge_style(Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD))
+            .percent((exp_ratio * 100.0) as u16)
+            .label(format!("EXP {}/{}", current_exp, next_level_exp))
+            .use_unicode(true);
+
+        frame.render_widget(exp_gauge, area);
     }
 }

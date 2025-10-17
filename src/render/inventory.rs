@@ -108,7 +108,7 @@ impl InventoryRenderer {
     }
 
     ///    渲染装备栏
-    fn render_equipment(&self, frame: &mut Frame, area: Rect, world: &World) {
+    fn render_equipment(&self, frame: &mut Frame, area: Rect, _world: &World) {
         let block = Block::default()
             .title("═══ ⚔️ 装备 ═══")
             .title_alignment(Alignment::Center)

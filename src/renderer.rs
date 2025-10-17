@@ -161,7 +161,7 @@ impl RatatuiRenderer {
                     self.dungeon_renderer.render(f, chunks[1], &ecs_world.world);
 
                     // 渲染消息日志（改进版）
-                    self.render_message_log(f, chunks[2], &ecs_world.resources.game_state.message_log);
+                    Self::render_message_log(f, chunks[2], &ecs_world.resources.game_state.message_log);
                 }
             }
         })?;
@@ -169,7 +169,7 @@ impl RatatuiRenderer {
     }
 
     /// 渲染角色信息界面（临时实现）
-    fn render_character_info_static(frame: &mut Frame<'_>, area: Rect, resources: &Resources) {
+    fn render_character_info_static(frame: &mut Frame<'_>, area: Rect, _resources: &Resources) {
         let text = vec![
             Line::from("👤 角色信息"),
             Line::from(""),
@@ -186,7 +186,7 @@ impl RatatuiRenderer {
     }
 
     /// 渲染消息日志（改进版）
-    fn render_message_log(&self, frame: &mut Frame<'_>, area: Rect, messages: &[String]) {
+    fn render_message_log(frame: &mut Frame<'_>, area: Rect, messages: &[String]) {
         let message_lines: Vec<Line> = if messages.is_empty() {
             vec![
                 Line::from(vec![
