@@ -35,10 +35,15 @@ impl DungeonRenderer {
     ///
     /// 从 ECS World 读取数据并渲染到指定区域
     pub fn render(&self, frame: &mut Frame, area: Rect, world: &World) {
+        // 获取地牢深度信息
+        let depth = self.get_dungeon_depth(world);
+        
         let block = Block::default()
-            .title("Dungeon")
+            .title(format!("🗺️  地牢探索 - 第 {} 层  🗺️", depth))
+            .title_alignment(ratatui::layout::Alignment::Center)
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(TuiColor::DarkGray));
+            .border_style(Style::default().fg(TuiColor::Rgb(100, 100, 100)))
+            .border_type(ratatui::widgets::BorderType::Rounded);
 
         let inner_area = block.inner(area);
         frame.render_widget(block, area);
@@ -50,6 +55,15 @@ impl DungeonRenderer {
         };
 
         frame.render_widget(dungeon_widget, inner_area);
+    }
+
+    /// 获取当前地牢深度
+    fn get_dungeon_depth(&self, world: &World) -> i32 {
+        // 从玩家位置获取深度
+        for (_, (pos, _player)) in world.query::<(&Position, &Player)>().iter() {
+            return pos.z.abs();
+        }
+        1 // 默认第1层
     }
 }
 
@@ -75,7 +89,7 @@ impl<'a> Widget for DungeonWidget<'a> {
         let (player_pos, visible_set, memory_set) = self.get_player_vision();
 
         // 渲染地图块（Tiles）
-        for (_, (pos, tile, renderable)) in
+        for (_, (pos, tile, _renderable)) in
             self.world.query::<(&Position, &Tile, &Renderable)>().iter()
         {
             // 只渲染当前层级
@@ -181,17 +195,17 @@ impl<'a> DungeonWidget<'a> {
         (player_pos, visible_set, memory_set)
     }
 
-    /// 获取 Tile 的外观（符号和颜色）
+    /// 获取 Tile 的外观（符号和颜色）- 使用Unicode字符提升视觉效果
     fn get_tile_appearance(&self, tile: &Tile) -> (char, TuiColor) {
         match tile.terrain_type {
-            TerrainType::Wall => ('#', TuiColor::Gray),
-            TerrainType::Floor => ('.', TuiColor::DarkGray),
-            TerrainType::Door => ('+', TuiColor::Yellow),
-            TerrainType::StairsDown => ('>', TuiColor::White),
-            TerrainType::StairsUp => ('<', TuiColor::White),
-            TerrainType::Water => ('~', TuiColor::Blue),
-            TerrainType::Trap => ('^', TuiColor::Red),
-            TerrainType::Barrel => ('O', TuiColor::Yellow),
+            TerrainType::Wall => ('█', TuiColor::Rgb(80, 80, 80)),
+            TerrainType::Floor => ('·', TuiColor::Rgb(120, 120, 120)),
+            TerrainType::Door => ('▒', TuiColor::Rgb(139, 69, 19)),
+            TerrainType::StairsDown => ('▼', TuiColor::Cyan),
+            TerrainType::StairsUp => ('▲', TuiColor::Magenta),
+            TerrainType::Water => ('≈', TuiColor::Blue),
+            TerrainType::Trap => ('⚠', TuiColor::Red),
+            TerrainType::Barrel => ('⚱', TuiColor::Yellow),
             TerrainType::Empty => (' ', TuiColor::Black),
         }
     }
@@ -199,15 +213,16 @@ impl<'a> DungeonWidget<'a> {
     /// 将颜色变暗（用于记忆区域）
     fn darken_color(&self, color: TuiColor) -> TuiColor {
         match color {
-            TuiColor::Red => TuiColor::Rgb(100, 0, 0),
-            TuiColor::Green => TuiColor::Rgb(0, 100, 0),
-            TuiColor::Yellow => TuiColor::Rgb(100, 100, 0),
-            TuiColor::Blue => TuiColor::Rgb(0, 0, 100),
-            TuiColor::Magenta => TuiColor::Rgb(100, 0, 100),
-            TuiColor::Cyan => TuiColor::Rgb(0, 100, 100),
-            TuiColor::Gray => TuiColor::Rgb(60, 60, 60),
-            TuiColor::DarkGray => TuiColor::Rgb(30, 30, 30),
-            TuiColor::White => TuiColor::Rgb(100, 100, 100),
+            TuiColor::Red => TuiColor::Rgb(80, 0, 0),
+            TuiColor::Green => TuiColor::Rgb(0, 80, 0),
+            TuiColor::Yellow => TuiColor::Rgb(80, 80, 0),
+            TuiColor::Blue => TuiColor::Rgb(0, 0, 80),
+            TuiColor::Magenta => TuiColor::Rgb(80, 0, 80),
+            TuiColor::Cyan => TuiColor::Rgb(0, 80, 80),
+            TuiColor::Gray => TuiColor::Rgb(40, 40, 40),
+            TuiColor::DarkGray => TuiColor::Rgb(20, 20, 20),
+            TuiColor::White => TuiColor::Rgb(80, 80, 80),
+            TuiColor::Rgb(r, g, b) => TuiColor::Rgb(r / 2, g / 2, b / 2),
             other => other,
         }
     }

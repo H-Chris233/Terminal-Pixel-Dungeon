@@ -150,7 +150,7 @@ impl RatatuiRenderer {
                         .constraints([
                             Constraint::Length(3), // HUD (状态栏)
                             Constraint::Min(10),   // Main game area (地牢)
-                            Constraint::Length(3), // Message log (消息栏)
+                            Constraint::Length(5), // Message log (消息栏)
                         ])
                         .split(f.area());
 
@@ -160,13 +160,8 @@ impl RatatuiRenderer {
                     // 渲染地牢
                     self.dungeon_renderer.render(f, chunks[1], &ecs_world.world);
 
-                    // 渲染消息日志
-                    let messages = Paragraph::new(format_messages(
-                        &ecs_world.resources.game_state.message_log,
-                    ))
-                    .style(Style::default().fg(TuiColor::Gray))
-                    .block(Block::default().borders(Borders::TOP));
-                    f.render_widget(messages, chunks[2]);
+                    // 渲染消息日志（改进版）
+                    Self::render_message_log(f, chunks[2], &ecs_world.resources.game_state.message_log);
                 }
             }
         })?;
@@ -174,7 +169,7 @@ impl RatatuiRenderer {
     }
 
     /// 渲染角色信息界面（临时实现）
-    fn render_character_info_static(frame: &mut Frame<'_>, area: Rect, resources: &Resources) {
+    fn render_character_info_static(frame: &mut Frame<'_>, area: Rect, _resources: &Resources) {
         let text = vec![
             Line::from("👤 角色信息"),
             Line::from(""),
@@ -188,6 +183,60 @@ impl RatatuiRenderer {
             .wrap(ratatui::widgets::Wrap { trim: true });
 
         frame.render_widget(paragraph, area);
+    }
+
+    /// 渲染消息日志（改进版）
+    fn render_message_log(frame: &mut Frame<'_>, area: Rect, messages: &[String]) {
+        let message_lines: Vec<Line> = if messages.is_empty() {
+            vec![
+                Line::from(vec![
+                    ratatui::text::Span::styled("欢迎来到", Style::default().fg(TuiColor::White)),
+                    ratatui::text::Span::styled(" 终端像素地牢", Style::default().fg(TuiColor::Yellow)),
+                    ratatui::text::Span::styled("！", Style::default().fg(TuiColor::White)),
+                ]),
+                Line::from(ratatui::text::Span::styled(
+                    "小心探索，祝你好运！",
+                    Style::default().fg(TuiColor::Green),
+                )),
+            ]
+        } else {
+            // 显示最近的 3 条消息
+            messages
+                .iter()
+                .rev()
+                .take(3)
+                .rev()
+                .map(|msg| {
+                    let (prefix, color) = if msg.starts_with("!") || msg.contains("死亡") || msg.contains("受伤") {
+                        ("⚠ ", TuiColor::Red)
+                    } else if msg.starts_with("+") || msg.contains("获得") || msg.contains("拾取") {
+                        ("✓ ", TuiColor::Green)
+                    } else if msg.starts_with("*") || msg.contains("发现") {
+                        ("★ ", TuiColor::Yellow)
+                    } else {
+                        ("• ", TuiColor::White)
+                    };
+
+                    Line::from(vec![
+                        ratatui::text::Span::styled(prefix, Style::default().fg(color)),
+                        ratatui::text::Span::styled(msg, Style::default().fg(color)),
+                    ])
+                })
+                .collect()
+        };
+
+        let messages_widget = Paragraph::new(message_lines)
+            .style(Style::default().fg(TuiColor::Gray))
+            .block(
+                Block::default()
+                    .title("📜 消息日志")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(TuiColor::Rgb(100, 100, 100)))
+                    .border_type(ratatui::widgets::BorderType::Rounded),
+            )
+            .wrap(ratatui::widgets::Wrap { trim: true });
+
+        frame.render_widget(messages_widget, area);
     }
 }
 

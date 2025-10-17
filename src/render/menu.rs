@@ -56,8 +56,21 @@ impl MenuRenderer {
             ])
             .split(menu_area);
 
-        // 渲染标题
-        let title = Paragraph::new("🏰 终端像素地牢 🏰")
+        // 渲染标题（添加 ASCII 艺术装饰）
+        let title_text = vec![
+            Line::from("╔═══════════════════════════════════════╗"),
+            Line::from(vec![
+                Span::raw("║  "),
+                Span::styled("🏰 终端像素地牢 🏰", 
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD)),
+                Span::raw("  ║"),
+            ]),
+            Line::from("╚═══════════════════════════════════════╝"),
+        ];
+
+        let title = Paragraph::new(title_text)
             .style(
                 Style::default()
                     .fg(Color::Yellow)
@@ -65,9 +78,11 @@ impl MenuRenderer {
             )
             .block(
                 Block::default()
-                    .title("版本 v0.1.0")
+                    .title(" 版本 v0.1.0 ")
                     .title_alignment(ratatui::layout::Alignment::Right)
-                    .borders(Borders::ALL),
+                    .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Double)
+                    .border_style(Style::default().fg(Color::Yellow)),
             )
             .alignment(Alignment::Center);
 
@@ -100,8 +115,14 @@ impl MenuRenderer {
             })
             .collect();
 
-        let list =
-            List::new(menu_list).block(Block::default().title("主菜单").borders(Borders::ALL));
+        let list = List::new(menu_list).block(
+            Block::default()
+                .title("═══ 主菜单 ═══")
+                .title_alignment(ratatui::layout::Alignment::Center)
+                .borders(Borders::ALL)
+                .border_type(ratatui::widgets::BorderType::Rounded)
+                .border_style(Style::default().fg(Color::Cyan)),
+        );
 
         frame.render_widget(list, title_layout[1]);
 
@@ -148,13 +169,18 @@ impl MenuRenderer {
             .split(menu_area);
 
         // 渲染标题
-        let title = Paragraph::new("⏸️  游戏暂停")
+        let title = Paragraph::new("⏸️  游戏暂停  ⏸️")
             .style(
                 Style::default()
                     .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),
             )
-            .block(Block::default().borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Double)
+                    .border_style(Style::default().fg(Color::Cyan)),
+            )
             .alignment(Alignment::Center);
 
         frame.render_widget(title, layout[0]);
@@ -184,8 +210,14 @@ impl MenuRenderer {
             })
             .collect();
 
-        let list =
-            List::new(menu_list).block(Block::default().title("选择操作").borders(Borders::ALL));
+        let list = List::new(menu_list).block(
+            Block::default()
+                .title("═══ 选择操作 ═══")
+                .title_alignment(ratatui::layout::Alignment::Center)
+                .borders(Borders::ALL)
+                .border_type(ratatui::widgets::BorderType::Rounded)
+                .border_style(Style::default().fg(Color::Cyan)),
+        );
 
         frame.render_widget(list, layout[1]);
 
@@ -328,13 +360,18 @@ impl MenuRenderer {
             .split(help_area);
 
         // 标题
-        let title = Paragraph::new("❓ 帮助说明")
+        let title = Paragraph::new("❓ 帮助说明 ❓")
             .style(
                 Style::default()
                     .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),
             )
-            .block(Block::default().borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Double)
+                    .border_style(Style::default().fg(Color::Cyan)),
+            )
             .alignment(Alignment::Center);
 
         frame.render_widget(title, layout[0]);
@@ -342,7 +379,14 @@ impl MenuRenderer {
         // 帮助内容
         let help_paragraph = Paragraph::new(help_text.join("\n"))
             .style(Style::default().fg(Color::White))
-            .block(Block::default().borders(Borders::ALL).title("操作指南"))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("═══ 操作指南 ═══")
+                    .title_alignment(ratatui::layout::Alignment::Center)
+                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_style(Style::default().fg(Color::Green)),
+            )
             .wrap(ratatui::widgets::Wrap { trim: true });
 
         frame.render_widget(help_paragraph, layout[1]);
