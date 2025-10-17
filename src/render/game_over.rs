@@ -120,7 +120,14 @@ impl GameOverRenderer {
                     .fg(Color::Yellow)
                     .add_modifier(Modifier::BOLD),
             )
-            .block(Block::default().title("🎊 胜利 🎊").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("═══ 🎊 胜利 🎊 ═══")
+                    .title_alignment(ratatui::layout::Alignment::Center)
+                    .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Double)
+                    .border_style(Style::default().fg(Color::Yellow)),
+            )
             .alignment(Alignment::Center);
 
         frame.render_widget(title, layout[0]);
@@ -165,8 +172,11 @@ impl GameOverRenderer {
             )
             .block(
                 Block::default()
-                    .title("💀 游戏结束 💀")
-                    .borders(Borders::ALL),
+                    .title("═══ 💀 游戏结束 💀 ═══")
+                    .title_alignment(ratatui::layout::Alignment::Center)
+                    .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Double)
+                    .border_style(Style::default().fg(title_color)),
             )
             .alignment(Alignment::Center);
 
@@ -180,7 +190,14 @@ impl GameOverRenderer {
 
         let stats_paragraph = Paragraph::new(stats_lines)
             .style(Style::default().fg(Color::White))
-            .block(Block::default().title("本局统计").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("═══ 📊 本局统计 ═══")
+                    .title_alignment(ratatui::layout::Alignment::Center)
+                    .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_style(Style::default().fg(Color::Cyan)),
+            )
             .wrap(ratatui::widgets::Wrap { trim: true });
 
         frame.render_widget(stats_paragraph, area);
@@ -248,7 +265,14 @@ impl GameOverRenderer {
 
         let menu_paragraph = Paragraph::new(menu_text)
             .style(Style::default().fg(Color::Gray))
-            .block(Block::default().borders(Borders::ALL).title("选择操作"))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("═══ 选择操作 ═══")
+                    .title_alignment(ratatui::layout::Alignment::Center)
+                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_style(Style::default().fg(Color::White)),
+            )
             .alignment(Alignment::Center);
 
         frame.render_widget(menu_paragraph, area);

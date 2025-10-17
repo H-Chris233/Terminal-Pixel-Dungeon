@@ -60,6 +60,15 @@ impl HudRenderer {
         self.current_exp = hero.experience;
         self.next_level_exp = hero.level * 100;
 
+        // 主布局：顶部状态栏 + 底部经验/饥饿条
+        let main_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(2), // 主状态栏
+                Constraint::Length(1), // 经验条和饥饿度
+            ])
+            .split(area);
+
         // 经典四栏布局
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
@@ -69,7 +78,7 @@ impl HudRenderer {
                 Constraint::Length(12), // 金币
                 Constraint::Length(10), // 深度
             ])
-            .split(area);
+            .split(main_chunks[0]);
 
         // 1. 渲染等级和职业
         self.render_level(f, chunks[0], hero);
@@ -83,7 +92,10 @@ impl HudRenderer {
         // 4. 渲染深度指示
         self.render_depth(f, chunks[3], hero);
 
-        // 5. 渲染浮动伤害数字
+        // 5. 渲染经验条和饥饿度
+        self.render_exp_and_hunger(f, main_chunks[1], hero);
+
+        // 6. 渲染浮动伤害数字
         self.render_damage_numbers(f);
     }
 
@@ -190,8 +202,13 @@ impl HudRenderer {
     }
 
     fn render_depth(&self, f: &mut Frame, area: Rect, hero: &Hero) {
+        let depth_value = hero.z.abs() + 1; // z 是负数，转换为正的楼层数
         let text = Line::from(vec![
-            Span::raw(" D."),
+            Span::styled("🏰", Style::default().fg(Color::Cyan)),
+            Span::styled(
+                format!(" {}", depth_value),
+                Style::default().fg(Color::White),
+            ),
         ]);
 
         let block = Block::default().borders(Borders::NONE);
@@ -200,6 +217,60 @@ impl HudRenderer {
                 .block(block)
                 .alignment(Alignment::Center),
             area,
+        );
+    }
+
+    fn render_exp_and_hunger(&self, f: &mut Frame, area: Rect, hero: &Hero) {
+        // 分为两半：左边经验条，右边饥饿度
+        let chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(70), // 经验条
+                Constraint::Percentage(30), // 饥饿度
+            ])
+            .split(area);
+
+        // 渲染经验条
+        let exp_ratio = if self.next_level_exp > 0 {
+            (self.current_exp as f64 / self.next_level_exp as f64).min(1.0)
+        } else {
+            0.0
+        };
+
+        let exp_gauge = Gauge::default()
+            .gauge_style(Style::default().fg(Color::Magenta))
+            .percent((exp_ratio * 100.0) as u16)
+            .label(format!("EXP {}/{}", self.current_exp, self.next_level_exp))
+            .use_unicode(true);
+
+        f.render_widget(exp_gauge, chunks[0]);
+
+        // 渲染饥饿度
+        let hunger_ratio = (hero.hunger as f64 / 1000.0).min(1.0);
+        let hunger_color = match hunger_ratio {
+            r if r > 0.5 => Color::Green,
+            r if r > 0.25 => Color::Yellow,
+            _ => Color::Red,
+        };
+
+        let hunger_icon = match hunger_ratio {
+            r if r > 0.75 => "🍖",
+            r if r > 0.5 => "🥩",
+            r if r > 0.25 => "🍗",
+            _ => "💀",
+        };
+
+        let hunger_text = Line::from(vec![
+            Span::styled(hunger_icon, Style::default().fg(hunger_color)),
+            Span::styled(
+                format!(" {}%", (hunger_ratio * 100.0) as u16),
+                Style::default().fg(hunger_color),
+            ),
+        ]);
+
+        f.render_widget(
+            Paragraph::new(hunger_text).alignment(Alignment::Center),
+            chunks[1],
         );
     }
 

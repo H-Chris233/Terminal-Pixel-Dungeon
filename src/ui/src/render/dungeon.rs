@@ -4,7 +4,7 @@ use dungeon::level::tiles::{TerrainType, Tile, StairDirection};
 use hero::Hero;
 use ratatui::{
     layout::Rect,
-    style::{Color, Style},
+    style::{Color, Modifier, Style},
     text::Span,
     widgets::{Block, Borders, Paragraph},
     Frame,
@@ -36,9 +36,11 @@ impl DungeonRenderer {
     /// 主渲染入口
     pub fn render(&self, f: &mut Frame, area: Rect, dungeon: &Dungeon, hero: &Hero) {
         let block = Block::default()
-            .title(format!("Depth: {}", dungeon.depth))
+            .title(format!("🗺️  地牢探索 - 第 {} 层  🗺️", dungeon.depth))
+            .title_alignment(ratatui::layout::Alignment::Center)
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::DarkGray));
+            .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
+            .border_type(ratatui::widgets::BorderType::Rounded);
         f.render_widget(block.clone(), area);
 
         self.render_visible_area(f, block.inner(area), dungeon, hero);
@@ -247,34 +249,45 @@ impl DungeonRenderer {
         is_visible: bool,
         is_hero: bool,
     ) {
-        // 经典像素地牢符号系统
-        let (symbol, color) = match tile.info.terrain_type {
-            TerrainType::Wall => ('#', Color::Gray),
-            TerrainType::Floor => ('.', Color::Gray),
-            TerrainType::Door(_) => ('+', Color::Yellow),
-            TerrainType::Stair(StairDirection::Down) => ('>', Color::White),
-            TerrainType::Stair(StairDirection::Up) => ('<', Color::White),
-            TerrainType::Water => ('~', Color::Blue),
-            TerrainType::Trap(_) => ('^', Color::Red),
-            _ => (' ', Color::Reset),
+        // 英雄显示优先
+        if is_hero {
+            let hero_symbol = '@';
+            let hero_style = Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD);
+            let paragraph = Paragraph::new(Span::styled(hero_symbol.to_string(), hero_style));
+            f.render_widget(paragraph, rect);
+            return;
+        }
+
+        // 经典像素地牢符号系统（改进配色）
+        let (symbol, color, modifier) = match tile.info.terrain_type {
+            TerrainType::Wall => ('█', Color::Rgb(80, 80, 80), Modifier::empty()),
+            TerrainType::Floor => ('·', Color::Rgb(120, 120, 120), Modifier::empty()),
+            TerrainType::Door(_) => ('▒', Color::Rgb(139, 69, 19), Modifier::BOLD),
+            TerrainType::Stair(StairDirection::Down) => ('▼', Color::Cyan, Modifier::BOLD),
+            TerrainType::Stair(StairDirection::Up) => ('▲', Color::Magenta, Modifier::BOLD),
+            TerrainType::Water => ('≈', Color::Blue, Modifier::empty()),
+            TerrainType::Trap(_) => ('⚠', Color::Red, Modifier::BOLD),
+            _ => (' ', Color::Reset, Modifier::empty()),
         };
 
         // 可见性处理（记忆系统）
-        let style = if is_hero {
-            Style::default().fg(Color::Red) // 英雄始终高亮
-        } else if is_visible {
-            Style::default().fg(color) // 可见区域正常颜色
+        let style = if is_visible {
+            // 可见区域正常颜色
+            Style::default().fg(color).add_modifier(modifier)
         } else {
             // 记忆区域颜色变暗处理
             let dark_color = match color {
-                Color::Red => Color::Rgb(100, 0, 0),       // DarkRed
-                Color::Green => Color::Rgb(0, 100, 0),     // DarkGreen
-                Color::Yellow => Color::Rgb(100, 100, 0),  // DarkYellow
-                Color::Blue => Color::Rgb(0, 0, 100),      // DarkBlue
-                Color::Magenta => Color::Rgb(100, 0, 100), // DarkMagenta
-                Color::Cyan => Color::Rgb(0, 100, 100),    // DarkCyan
-                Color::Gray => Color::Rgb(50, 50, 50),     // DarkGray
-                other => other,                            // 其他颜色保持不变
+                Color::Red => Color::Rgb(80, 0, 0),
+                Color::Green => Color::Rgb(0, 80, 0),
+                Color::Yellow => Color::Rgb(80, 80, 0),
+                Color::Blue => Color::Rgb(0, 0, 80),
+                Color::Magenta => Color::Rgb(80, 0, 80),
+                Color::Cyan => Color::Rgb(0, 80, 80),
+                Color::Gray => Color::Rgb(40, 40, 40),
+                Color::Rgb(r, g, b) => Color::Rgb(r / 2, g / 2, b / 2),
+                other => other,
             };
             Style::default().fg(dark_color)
         };
