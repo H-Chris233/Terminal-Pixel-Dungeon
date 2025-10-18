@@ -337,13 +337,7 @@ impl CombatSystem {
                         if let Some((target, target_name, target_id)) = target_info {
                             let player_id = player_entity.id();
 
-                            // 发布战斗开始事件
-                            world.publish_event(GameEvent::CombatStarted {
-                                attacker: player_id,
-                                defender: target_id,
-                            });
-
-                            // 执行战斗计算 - 克隆 Stats 以避免借用问题
+                            // 执行战斗计算 - 克隆 Stats 以避免借用问题，并使用潜行判定
                             let combat_result = {
                                 let player_stats = world
                                     .world
@@ -359,58 +353,77 @@ impl CombatSystem {
                                     let mut attacker = SimpleCombatant::new(&mut temp_player);
                                     let mut defender = SimpleCombatant::new(&mut temp_target);
 
-                                    // 执行战斗
-                                    let result = ::combat::Combat::engage(
-                                        &mut attacker,
-                                        &mut defender,
-                                        false,
-                                    );
+                                    // 构建阻挡检测闭包（基于地图Tile）
+                                    let z = player_pos.z;
+                                    let mut blocked_set = std::collections::HashSet::new();
+                                    for (_, (pos, tile)) in world.world.query::<(&Position, &Tile)>().iter() {
+                                        if pos.z == z && tile.blocks_sight {
+                                            blocked_set.insert((pos.x, pos.y));
+                                        }
+                                    }
+                                    let is_blocked = |x: i32, y: i32| -> bool {
+                                        blocked_set.contains(&(x, y))
+                                    };
+
+
+                                    // 获取攻击者FOV范围
+                                    let attacker_fov_range = world
+                                        .world
+                                        .get::<&Viewshed>(player_entity)
+                                        .map(|v| v.range as u32)
+                                        .unwrap_or(8);
+
+                                    // 攻击参数（带潜行）
+                                    let mut params = ::combat::AttackParams {
+                                        attacker: &mut attacker,
+                                        attacker_id: player_id,
+                                        attacker_x: player_pos.x,
+                                        attacker_y: player_pos.y,
+                                        defender: &mut defender,
+                                        defender_id: target_id,
+                                        defender_x: attack_pos.x,
+                                        defender_y: attack_pos.y,
+                                        is_blocked: &is_blocked,
+                                        attacker_fov_range,
+                                    };
+
+                                    // 执行战斗（包含潜行与反击）
+                                    let result = ::combat::Combat::perform_attack_with_ambush(&mut params);
                                     Some((temp_player.hp, temp_target.hp, result))
                                 } else {
                                     None
                                 }
                             };
 
-                            if let Some((new_player_hp, new_target_hp, combat_result)) =
-                                combat_result
-                            {
-                                // 计算伤害值
-                                let player_old_hp = world
-                                    .world
-                                    .get::<&Stats>(player_entity)
-                                    .map(|s| s.hp)
-                                    .unwrap_or(0);
-                                let target_old_hp =
-                                    world.world.get::<&Stats>(target).map(|s| s.hp).unwrap_or(0);
-
-                                let damage_to_target = target_old_hp.saturating_sub(new_target_hp);
-                                let damage_to_player = player_old_hp.saturating_sub(new_player_hp);
-
-                                // 发布伤害事件
-                                if damage_to_target > 0 {
-                                    world.publish_event(GameEvent::DamageDealt {
-                                        attacker: player_id,
-                                        victim: target_id,
-                                        damage: damage_to_target,
-                                        is_critical: combat_result
-                                            .logs
-                                            .iter()
-                                            .any(|log| log.contains("Critical")),
-                                    });
+                            if let Some((new_player_hp, new_target_hp, combat_result)) = combat_result {
+                                // 将 CombatResult 事件映射到游戏事件总线
+                                for ev in &combat_result.events {
+                                    match ev {
+                                        ::combat::CombatEvent::CombatStarted { attacker, defender } => {
+                                            world.publish_event(GameEvent::CombatStarted { attacker: *attacker, defender: *defender });
+                                        }
+                                        ::combat::CombatEvent::DamageDealt { attacker, victim, damage, is_critical } => {
+                                            world.publish_event(GameEvent::DamageDealt {
+                                                attacker: *attacker,
+                                                victim: *victim,
+                                                damage: *damage,
+                                                is_critical: *is_critical,
+                                            });
+                                        }
+                                        ::combat::CombatEvent::EntityDied { entity, entity_name } => {
+                                            world.publish_event(GameEvent::EntityDied { entity: *entity, entity_name: entity_name.clone() });
+                                        }
+                                        ::combat::CombatEvent::Ambush { attacker: _, defender: _ } => {
+                                            world.publish_event(GameEvent::LogMessage {
+                                                message: format!("伏击！{} -> {}", player_name, target_name),
+                                                level: LogLevel::Info,
+                                            });
+                                        }
+                                    }
                                 }
 
-                                if damage_to_player > 0 {
-                                    world.publish_event(GameEvent::DamageDealt {
-                                        attacker: target_id,
-                                        victim: player_id,
-                                        damage: damage_to_player,
-                                        is_critical: false,
-                                    });
-                                }
-
-                                // 应用实际伤害
-                                if let Ok(mut stats) = world.world.get::<&mut Stats>(player_entity)
-                                {
+                                // 应用实际伤害（更新HP）
+                                if let Ok(mut stats) = world.world.get::<&mut Stats>(player_entity) {
                                     stats.hp = new_player_hp;
                                 }
                                 if let Ok(mut stats) = world.world.get::<&mut Stats>(target) {
@@ -425,31 +438,20 @@ impl CombatSystem {
                                     });
                                 }
 
-                                // 检查目标是否死亡
+                                // 检查目标是否死亡（移除实体）
                                 if new_target_hp == 0 {
-                                    world.publish_event(GameEvent::EntityDied {
-                                        entity: target_id,
-                                        entity_name: target_name.clone(),
-                                    });
-                                    // 移除死亡的实体
                                     let _ = world.world.despawn(target);
                                 }
 
                                 // 检查玩家是否死亡
                                 if new_player_hp == 0 {
-                                    world.publish_event(GameEvent::EntityDied {
-                                        entity: player_id,
-                                        entity_name: player_name.clone(),
-                                    });
                                     world.publish_event(GameEvent::GameOver {
                                         reason: "你被击败了！".to_string(),
                                     });
                                 }
 
                                 // 消耗能量
-                                if let Ok(mut energy) =
-                                    world.world.get::<&mut Energy>(player_entity)
-                                {
+                                if let Ok(mut energy) = world.world.get::<&mut Energy>(player_entity) {
                                     energy.current = energy.current.saturating_sub(100);
                                 }
                             }
