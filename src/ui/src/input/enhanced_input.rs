@@ -11,7 +11,7 @@ use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
 
 /// 扩展的输入事件
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum EnhancedInputEvent {
     /// 单个按键
     KeyPress(KeyEvent),
@@ -30,7 +30,7 @@ pub enum EnhancedInputEvent {
 }
 
 /// 输入模式
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum InputMode {
     /// 游戏模式 - 标准游戏控制
     Game,
@@ -73,11 +73,17 @@ impl KeyMapping {
         // 游戏模式映射
         let mut game_mappings = HashMap::new();
         
-        // 移动
+        // 移动 - 支持 vi-keys, 方向键, 完整 WASD
         game_mappings.insert("h".to_string(), "move_west".to_string());
         game_mappings.insert("j".to_string(), "move_south".to_string());
         game_mappings.insert("k".to_string(), "move_north".to_string());
         game_mappings.insert("l".to_string(), "move_east".to_string());
+        // 添加完整的WASD支持
+        game_mappings.insert("w".to_string(), "move_north".to_string());
+        game_mappings.insert("a".to_string(), "move_west".to_string());
+        game_mappings.insert("s".to_string(), "move_south".to_string());
+        game_mappings.insert("d".to_string(), "move_east".to_string());
+        // 对角线移动
         game_mappings.insert("y".to_string(), "move_northwest".to_string());
         game_mappings.insert("u".to_string(), "move_northeast".to_string());
         game_mappings.insert("b".to_string(), "move_southwest".to_string());
@@ -88,7 +94,7 @@ impl KeyMapping {
         game_mappings.insert(">".to_string(), "descend".to_string());
         game_mappings.insert("<".to_string(), "ascend".to_string());
         game_mappings.insert("g".to_string(), "pickup".to_string());
-        game_mappings.insert("d".to_string(), "drop".to_string());
+        game_mappings.insert("Delete".to_string(), "drop".to_string());
         
         // 界面
         game_mappings.insert("i".to_string(), "inventory".to_string());

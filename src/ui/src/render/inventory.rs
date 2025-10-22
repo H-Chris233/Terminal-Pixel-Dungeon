@@ -29,7 +29,7 @@ impl InventoryRenderer {
     }
 
     /// 主渲染方法（整合分页和选择高亮）
-    pub fn render(&mut self, f: &mut Frame, area: Rect, hero: &Hero) {
+    pub fn render(&mut self, f: &mut Frame, area: Rect, _hero: &Hero) {
         // 1. 直接访问Vec<Item> (Inventory是Vec<Item>的别名)
         let items: Vec<items::Item> = Vec::new();
         // 2. 分页计算（增加防零除保护）

@@ -116,30 +116,30 @@ impl TerminalUI {
                     continue;
                 }
 
-                // 处理游戏按键
+                // 处理游戏按键 - 支持完整的 WASD
                 match key.code {
-                    KeyCode::Char('h') | KeyCode::Left => { 
+                    KeyCode::Char('h') | KeyCode::Left | KeyCode::Char('a') => { 
                         let old_pos = (hero.x, hero.y);
                         hero.x = (hero.x - 1).max(0);
                         if (hero.x, hero.y) != old_pos {
                             self.add_message(GameMessage::movement("Moved west".to_string()));
                         }
                     }
-                    KeyCode::Char('j') | KeyCode::Down => { 
+                    KeyCode::Char('j') | KeyCode::Down | KeyCode::Char('s') => { 
                         let old_pos = (hero.x, hero.y);
                         hero.y = (hero.y + 1).max(0);
                         if (hero.x, hero.y) != old_pos {
                             self.add_message(GameMessage::movement("Moved south".to_string()));
                         }
                     }
-                    KeyCode::Char('k') | KeyCode::Up => { 
+                    KeyCode::Char('k') | KeyCode::Up | KeyCode::Char('w') => { 
                         let old_pos = (hero.x, hero.y);
                         hero.y = (hero.y - 1).max(0);
                         if (hero.x, hero.y) != old_pos {
                             self.add_message(GameMessage::movement("Moved north".to_string()));
                         }
                     }
-                    KeyCode::Char('l') | KeyCode::Right => { 
+                    KeyCode::Char('l') | KeyCode::Right | KeyCode::Char('d') => { 
                         let old_pos = (hero.x, hero.y);
                         hero.x = (hero.x + 1).max(0);
                         if (hero.x, hero.y) != old_pos {
@@ -148,7 +148,7 @@ impl TerminalUI {
                     }
                     KeyCode::Char('i') => self.show_inventory(hero),
                     KeyCode::Char('u') => self.use_item(hero),
-                    KeyCode::Char('d') => self.drop_item(hero),
+                    KeyCode::Delete => self.drop_item(hero),
                     KeyCode::Char('>') => self.descend(dungeon, hero),
                     KeyCode::Char('<') => self.ascend(dungeon, hero),
                     KeyCode::Char('?') => self.show_help(),
@@ -283,6 +283,10 @@ impl TerminalUI {
 
         // 在闭包外渲染消息和对话框
         self.terminal.draw(|f| {
+            use ratatui::{
+                layout::{Constraint, Direction, Layout},
+            };
+            
             let size = f.area();
             let chunks = Layout::default()
                 .direction(Direction::Vertical)

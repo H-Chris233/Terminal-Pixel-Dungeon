@@ -41,3 +41,7 @@ ui = { path = "src/ui", version = "0.1.0" }
 [[example]]
 name = "ui_demo"
 path = "examples/ui_demo.rs"
+
+[[example]]
+name = "enhanced_controls_demo"
+path = "examples/enhanced_controls_demo.rs"

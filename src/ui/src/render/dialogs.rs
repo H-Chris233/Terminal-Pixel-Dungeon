@@ -374,7 +374,7 @@ impl DialogRenderer {
         let hint = Paragraph::new("Press any key to continue")
             .alignment(Alignment::Center)
             .style(Style::default().fg(Color::Gray));
-        f.render_widget(hint, hint_area.inner(&Margin { horizontal: 1, vertical: 0 }));
+        f.render_widget(hint, hint_area.inner(Margin { horizontal: 1, vertical: 0 }));
     }
 
     /// 渲染错误对话框

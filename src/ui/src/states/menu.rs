@@ -14,7 +14,7 @@ use ratatui::{
 };
 
 use crate::input::{map_to_ui_action, KeyBindings, UIAction};
-use crate::input::navigation::{NavDirection, NavigationState};
+use crate::input::{NavDirection, NavigationState};
 use crate::states::common::GameState;
 use crate::states::common::GameStateID;
 use crate::states::common::StateContext;
@@ -146,13 +146,14 @@ impl GameState for MainMenuState {
 
             // 菜单选项（带闪烁效果）
             let show_cursor = self.blink_timer < 0.5;
+            // 先更新选中的索引
+            self.selected_index = self.nav.current();
+            
             let menu_items: Vec<Line> = self
                 .options
                 .iter()
                 .enumerate()
                 .map(|(i, _)| {
-                    // 使用 NavigationState 的焦点
-                    self.selected_index = self.nav.current();
                     Line::from(self.render_options(show_cursor, i))
                 })
                 .collect();
@@ -324,7 +325,7 @@ impl GameState for GameOverState {
 
     fn handle_input(
         &mut self,
-        context: &mut StateContext,
+        _context: &mut StateContext,
         event: &crossterm::event::Event,
     ) -> bool {
         if let crossterm::event::Event::Key(key) = event {

@@ -6,8 +6,8 @@
 //! - 快捷键列表
 //! - 分类浏览
 
-use crate::ui::input::{InputMode, KeyMapping};
-use crate::ui::render::animation::{Animation, AnimationManager, AnimationType, EaseType};
+use crate::input::{InputMode, KeyMapping};
+use crate::render::animation::{Animation, AnimationManager, AnimationType, EaseType};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
@@ -141,10 +141,11 @@ impl HelpDatabase {
                 ("hjkl".to_string(), "Move left/down/up/right (vi-keys)".to_string()),
                 ("yubn".to_string(), "Move diagonally".to_string()),
                 ("Arrow Keys".to_string(), "Alternative movement".to_string()),
-                ("wasd".to_string(), "WASD movement (partial)".to_string()),
+                ("WASD".to_string(), "Complete WASD movement support".to_string()),
             ])
             .with_details(vec![
                 "Use hjkl keys for precise movement (vim style)".to_string(),
+                "Full WASD support: W/A/S/D for up/left/down/right".to_string(),
                 "Diagonal movement uses yubn keys".to_string(),
                 "Moving into enemies will attack them".to_string(),
                 "Moving into walls will do nothing".to_string(),
@@ -157,7 +158,7 @@ impl HelpDatabase {
             .with_key_bindings(vec![
                 (".".to_string(), "Wait/Skip turn".to_string()),
                 ("g".to_string(), "Pick up items".to_string()),
-                ("d".to_string(), "Drop items".to_string()),
+                ("Del".to_string(), "Drop items".to_string()),
                 (">".to_string(), "Descend stairs".to_string()),
                 ("<".to_string(), "Ascend stairs".to_string()),
             ]),
@@ -181,7 +182,7 @@ impl HelpDatabase {
             )
             .with_key_bindings(vec![
                 ("1-9".to_string(), "Use item in quickslot".to_string()),
-                ("SHIFT+HJKL".to_string(), "Attack in direction".to_string()),
+                ("SHIFT+HJKL/WASD".to_string(), "Attack in direction".to_string()),
             ]),
         ];
         self.entries.insert(HelpTopic::Controls, controls_entries);

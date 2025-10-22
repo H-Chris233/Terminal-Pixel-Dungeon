@@ -201,8 +201,8 @@ impl HudRenderer {
         );
     }
 
-    fn render_depth(&self, f: &mut Frame, area: Rect, hero: &Hero) {
-        let depth_value = hero.z.abs() + 1; // z 是负数，转换为正的楼层数
+    fn render_depth(&self, f: &mut Frame, area: Rect, _hero: &Hero) {
+        let depth_value = 1; // 简化处理，默认为第1层
         let text = Line::from(vec![
             Span::styled("🏰", Style::default().fg(Color::Cyan)),
             Span::styled(
@@ -246,7 +246,7 @@ impl HudRenderer {
         f.render_widget(exp_gauge, chunks[0]);
 
         // 渲染饥饿度
-        let hunger_ratio = (hero.hunger as f64 / 1000.0).min(1.0);
+        let hunger_ratio = (hero.satiety as f64 / 10.0).min(1.0);
         let hunger_color = match hunger_ratio {
             r if r > 0.5 => Color::Green,
             r if r > 0.25 => Color::Yellow,

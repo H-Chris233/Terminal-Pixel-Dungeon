@@ -8,7 +8,7 @@ use ratatui::{
 };
 
 use crate::input::{map_to_ui_action, KeyBindings, UIAction};
-use crate::input::navigation::{NavDirection, NavigationState};
+use crate::input::{NavDirection, NavigationState};
 use crate::states::common::{GameState, GameStateID, StateContext, StateTransition};
 
 #[derive(Debug)]

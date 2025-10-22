@@ -125,15 +125,27 @@ impl NavigationState {
         self.grid_width = Some(width);
     }
 
-    /// 处理导航输入（带200ms防抖）
+    /// 处理导航输入（带防抖）
     pub fn navigate(&mut self, direction: NavDirection) -> bool {
-        let is_first_input = self.last_input_time == Instant::now();
-        let now = Instant::now();
-        if !is_first_input && now.duration_since(self.last_input_time) < Duration::from_millis(200)
-        {
-            return false;
+        self.navigate_internal(direction, true)
+    }
+
+    /// 处理导航输入（测试用，无防抖）
+    #[cfg(test)]
+    pub fn navigate_no_debounce(&mut self, direction: NavDirection) -> bool {
+        self.navigate_internal(direction, false)
+    }
+
+    /// 内部导航处理方法
+    fn navigate_internal(&mut self, direction: NavDirection, use_debounce: bool) -> bool {
+        if use_debounce {
+            let now = Instant::now();
+            // 防抖逻辑：只在间隔时间过短时才防抖
+            if now.duration_since(self.last_input_time) < Duration::from_millis(50) {
+                return false;
+            }
+            self.last_input_time = now;
         }
-        self.last_input_time = now;
 
         let moved = match direction {
             // 垂直导航（考虑网格布局）
@@ -167,11 +179,14 @@ impl NavigationState {
                 row.saturating_sub(1)
             };
 
-            let new_index = new_row.saturating_mul(width).saturating_add(col);
-            if new_index < self.item_count {
+            let new_index = new_row * width + col;
+            if new_index < self.item_count && new_row != row {
                 self.current_focus = new_index;
                 return true;
             }
+        } else {
+            // 如果没有网格布局，垂直移动等同于线性移动
+            return self.move_linear(delta);
         }
         false
     }
@@ -253,11 +268,11 @@ mod tests {
         nav.set_grid(4);
 
         // 测试向右移动
-        assert!(nav.navigate(NavDirection::Right));
+        assert!(nav.navigate_no_debounce(NavDirection::Right));
         assert_eq!(nav.current(), 1);
 
         // 测试向下移动
-        assert!(nav.navigate(NavDirection::Down));
+        assert!(nav.navigate_no_debounce(NavDirection::Down));
         assert_eq!(nav.current(), 5);
 
         // 测试边界
@@ -284,6 +299,6 @@ mod tests {
 fn test_single_column_grid() {
     let mut nav = NavigationState::new(5);
     nav.set_grid(1); // 单列
-    assert!(nav.navigate(NavDirection::Down));
+    assert!(nav.navigate_no_debounce(NavDirection::Down));
     assert_eq!(nav.current(), 1);
 }
