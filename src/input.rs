@@ -268,7 +268,7 @@ fn match_key_for_menu_context(key: CrosstermKeyEvent) -> Option<PlayerAction> {
 /// 处理游戏上下文中的按键
 fn match_key_for_game_context(key: CrosstermKeyEvent) -> Option<PlayerAction> {
     match (key.code, key.modifiers) {
-        // Movement keys（支持方向键、vi-keys，部分 WASD：w/a/s；d 保留给丢弃）
+        // Movement keys（支持方向键、vi-keys、完整 WASD）
         (CrosstermKeyCode::Char('k'), _)
         | (CrosstermKeyCode::Up, _)
         | (CrosstermKeyCode::Char('w'), _) => Some(PlayerAction::Move(Direction::North)),
@@ -279,7 +279,8 @@ fn match_key_for_game_context(key: CrosstermKeyEvent) -> Option<PlayerAction> {
         | (CrosstermKeyCode::Left, _)
         | (CrosstermKeyCode::Char('a'), _) => Some(PlayerAction::Move(Direction::West)),
         (CrosstermKeyCode::Char('l'), _)
-        | (CrosstermKeyCode::Right, _) => Some(PlayerAction::Move(Direction::East)),
+        | (CrosstermKeyCode::Right, _)
+        | (CrosstermKeyCode::Char('d'), _) => Some(PlayerAction::Move(Direction::East)),
         (CrosstermKeyCode::Char('y'), _) => Some(PlayerAction::Move(Direction::NorthWest)),
         (CrosstermKeyCode::Char('u'), _) => Some(PlayerAction::Move(Direction::NorthEast)),
         (CrosstermKeyCode::Char('b'), _) => Some(PlayerAction::Move(Direction::SouthWest)),
@@ -292,23 +293,19 @@ fn match_key_for_game_context(key: CrosstermKeyEvent) -> Option<PlayerAction> {
         (CrosstermKeyCode::Char('>'), _) => Some(PlayerAction::Descend),
         (CrosstermKeyCode::Char('<'), _) => Some(PlayerAction::Ascend),
 
-        // Attack via direction（放宽 SHIFT 要求，直接识别大写字符）
+        // Attack via direction（支持 vi-keys 和 WASD 的 Shift 组合）
         (CrosstermKeyCode::Char('K'), _)
-            => Some(PlayerAction::Attack(Position { x: 0, y: -1, z: 0 })),
+        | (CrosstermKeyCode::Char('W'), _) => Some(PlayerAction::Attack(Position { x: 0, y: -1, z: 0 })),
         (CrosstermKeyCode::Char('J'), _)
-            => Some(PlayerAction::Attack(Position { x: 0, y: 1, z: 0 })),
+        | (CrosstermKeyCode::Char('S'), _) => Some(PlayerAction::Attack(Position { x: 0, y: 1, z: 0 })),
         (CrosstermKeyCode::Char('H'), _)
-            => Some(PlayerAction::Attack(Position { x: -1, y: 0, z: 0 })),
+        | (CrosstermKeyCode::Char('A'), _) => Some(PlayerAction::Attack(Position { x: -1, y: 0, z: 0 })),
         (CrosstermKeyCode::Char('L'), _)
-            => Some(PlayerAction::Attack(Position { x: 1, y: 0, z: 0 })),
-        (CrosstermKeyCode::Char('Y'), _)
-            => Some(PlayerAction::Attack(Position { x: -1, y: -1, z: 0 })),
-        (CrosstermKeyCode::Char('U'), _)
-            => Some(PlayerAction::Attack(Position { x: 1, y: -1, z: 0 })),
-        (CrosstermKeyCode::Char('B'), _)
-            => Some(PlayerAction::Attack(Position { x: -1, y: 1, z: 0 })),
-        (CrosstermKeyCode::Char('N'), _)
-            => Some(PlayerAction::Attack(Position { x: 1, y: 1, z: 0 })),
+        | (CrosstermKeyCode::Char('D'), _) => Some(PlayerAction::Attack(Position { x: 1, y: 0, z: 0 })),
+        (CrosstermKeyCode::Char('Y'), _) => Some(PlayerAction::Attack(Position { x: -1, y: -1, z: 0 })),
+        (CrosstermKeyCode::Char('U'), _) => Some(PlayerAction::Attack(Position { x: 1, y: -1, z: 0 })),
+        (CrosstermKeyCode::Char('B'), _) => Some(PlayerAction::Attack(Position { x: -1, y: 1, z: 0 })),
+        (CrosstermKeyCode::Char('N'), _) => Some(PlayerAction::Attack(Position { x: 1, y: 1, z: 0 })),
 
         // Game control
         (CrosstermKeyCode::Char('q'), _) => Some(PlayerAction::Quit),
@@ -324,8 +321,8 @@ fn match_key_for_game_context(key: CrosstermKeyEvent) -> Option<PlayerAction> {
         (CrosstermKeyCode::Char('8'), _) => Some(PlayerAction::UseItem(7)),
         (CrosstermKeyCode::Char('9'), _) => Some(PlayerAction::UseItem(8)),
 
-        // Drop item
-        (CrosstermKeyCode::Char('d'), _) => Some(PlayerAction::DropItem(0)), // Default to first item
+        // Drop item - 现在使用 Delete 键而不是 'd' 键
+        (CrosstermKeyCode::Delete, _) => Some(PlayerAction::DropItem(0)), // Default to first item
 
         // 游戏中的快捷键
         (CrosstermKeyCode::Char('i'), _) => Some(PlayerAction::OpenInventory),

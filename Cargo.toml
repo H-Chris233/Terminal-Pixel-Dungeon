@@ -1,11 +1,11 @@
 [workspace]
 members = [
-	"src/combat",
-	"src/dungeon",
-	"src/hero",
-	"src/items",
-	"src/save",
-	"src/error",
+    "src/combat",
+    "src/dungeon",
+    "src/hero",
+    "src/items",
+    "src/save",
+    "src/error",
 ]
 resolver = "2"
 
