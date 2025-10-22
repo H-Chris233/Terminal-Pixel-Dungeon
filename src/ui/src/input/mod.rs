@@ -35,6 +35,7 @@
 //! ```
 
 mod actions;
+mod enhanced_input;
 mod input;
 mod navigation;
 
@@ -44,6 +45,14 @@ pub use actions::{
     GameAction,         // 游戏实体动作 (移动/交互等)
     KeyBindings,        // 可配置的键位绑定
     UIAction,           // 界面控制动作 (确认/导航等)
+};
+
+pub use enhanced_input::{
+    EnhancedInputEvent, // 增强输入事件
+    EnhancedInputProcessor, // 增强输入处理器
+    InputContextManager, // 输入上下文管理器
+    InputMode,          // 输入模式
+    KeyMapping,         // 按键映射配置
 };
 
 pub use input::{
