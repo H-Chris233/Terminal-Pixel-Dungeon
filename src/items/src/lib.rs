@@ -9,23 +9,27 @@ use serde::{Deserialize, Serialize};
 
 pub use crate::armor::Armor;
 pub use crate::food::Food;
+pub use crate::herb::{Herb, HerbKind};
 pub use crate::misc::{MiscItem, MiscKind};
 pub use crate::potion::Potion;
 pub use crate::ring::Ring;
 pub use crate::scroll::Scroll;
 pub use crate::seed::Seed;
 pub use crate::stone::Stone;
+pub use crate::throwable::{Throwable, ThrowableKind};
 pub use crate::wand::Wand;
 pub use crate::weapon::Weapon;
 
 pub mod armor;
 pub mod food;
+pub mod herb;
 pub mod misc;
 pub mod potion;
 pub mod ring;
 pub mod scroll;
 pub mod seed;
 pub mod stone;
+pub mod throwable;
 pub mod wand;
 pub mod weapon;
 
@@ -43,16 +47,18 @@ pub struct Item {
 /// 物品类型枚举（与Shattered PD完全一致）
 #[derive(PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub enum ItemKind {
-    Weapon(Weapon), // 近战武器
-    Armor(Armor),   // 护甲
-    Potion(Potion), // 药水（12种）
-    Scroll(Scroll), // 卷轴（10种）
-    Food(Food),     // 食物（3种）
-    Wand(Wand),     // 法杖（8种）
-    Ring(Ring),     // 戒指（10种）
-    Seed(Seed),     // 种子（8种）
-    Stone(Stone),   // 魔法石（6种）
-    Misc(MiscItem), // 杂项（钥匙等）
+    Weapon(Weapon),    // 近战武器
+    Armor(Armor),      // 护甲
+    Potion(Potion),    // 药水（12种）
+    Scroll(Scroll),    // 卷轴（10种）
+    Food(Food),        // 食物（3种）
+    Wand(Wand),        // 法杖（8种）
+    Ring(Ring),        // 戒指（10种）
+    Seed(Seed),        // 种子（8种）
+    Stone(Stone),      // 魔法石（6种）
+    Misc(MiscItem),    // 杂项（钥匙等）
+    Throwable(Throwable), // 投掷武器
+    Herb(Herb),        // 药草
 }
 
 impl Item {
@@ -67,6 +73,8 @@ impl Item {
             ItemKind::Ring(r) => r.name(),
             ItemKind::Seed(s) => s.name(),
             ItemKind::Stone(s) => s.name(),
+            ItemKind::Throwable(t) => t.name(),
+            ItemKind::Herb(h) => h.name(),
             ItemKind::Misc(m) => m.name().clone(),
         };
 
@@ -91,6 +99,8 @@ impl Item {
             ItemKind::Ring(r) => r.name(),
             ItemKind::Seed(s) => s.name(),
             ItemKind::Stone(s) => s.name(),
+            ItemKind::Throwable(t) => t.name(),
+            ItemKind::Herb(h) => h.name(),
             ItemKind::Misc(m) => m.name().clone(),
         }
     }
@@ -99,7 +109,11 @@ impl Item {
     pub fn is_consumable(&self) -> bool {
         matches!(
             &self.kind,
-            ItemKind::Potion(_) | ItemKind::Scroll(_) | ItemKind::Food(_)
+            ItemKind::Potion(_)
+                | ItemKind::Scroll(_)
+                | ItemKind::Food(_)
+                | ItemKind::Herb(_)
+                | ItemKind::Throwable(_)
         )
     }
 
@@ -128,6 +142,8 @@ impl Item {
             ItemKind::Ring(r) => r.value(),
             ItemKind::Seed(s) => s.value(),
             ItemKind::Stone(s) => s.value(),
+            ItemKind::Throwable(t) => t.value(),
+            ItemKind::Herb(h) => h.value(),
             ItemKind::Misc(m) => m.value(),
         }
     }
@@ -211,6 +227,22 @@ impl Item {
             None
         }
     }
+
+    pub fn as_throwable(&self) -> Option<&Throwable> {
+        if let ItemKind::Throwable(ref t) = self.kind {
+            Some(t)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_herb(&self) -> Option<&Herb> {
+        if let ItemKind::Herb(ref h) = self.kind {
+            Some(h)
+        } else {
+            None
+        }
+    }
 }
 
 impl Default for Item {
@@ -243,25 +275,61 @@ pub trait ItemTrait:
     /// 物品分类（用于自动整理）
     fn category(&self) -> ItemCategory;
 
+    /// 稀有度（用于掉落权重、显示颜色等）
+    fn rarity(&self) -> ItemRarity {
+        ItemRarity::Common
+    }
+
     /// 排序权重（数值越大排序越前）
     fn sort_value(&self) -> u32;
 
     fn stacking_id(&self) -> u64;
 }
 
+/// 物品稀有度
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
+pub enum ItemRarity {
+    Common,
+    Rare,
+    Epic,
+    Legendary,
+}
+
+impl ItemRarity {
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            ItemRarity::Common => "普通",
+            ItemRarity::Rare => "稀有",
+            ItemRarity::Epic => "史诗",
+            ItemRarity::Legendary => "传奇",
+        }
+    }
+
+    pub fn color(&self) -> ratatui::style::Color {
+        match self {
+            ItemRarity::Common => ratatui::style::Color::Gray,
+            ItemRarity::Rare => ratatui::style::Color::Cyan,
+            ItemRarity::Epic => ratatui::style::Color::Magenta,
+            ItemRarity::Legendary => ratatui::style::Color::Yellow,
+        }
+    }
+}
+
 /// 物品分类（完全匹配游戏内分类）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
 pub enum ItemCategory {
-    Weapon, // 武器
-    Armor,  // 护甲
-    Potion, // 药水
-    Scroll, // 卷轴
-    Wand,   // 法杖
-    Ring,   // 戒指
-    Seed,   // 种子
-    Stone,  // 魔法石
-    Food,   // 食物
-    Misc,   // 杂项
+    Weapon,    // 武器
+    Armor,     // 护甲
+    Potion,    // 药水
+    Scroll,    // 卷轴
+    Wand,      // 法杖
+    Ring,      // 戒指
+    Seed,      // 种子
+    Stone,     // 魔法石
+    Throwable, // 投掷武器
+    Herb,      // 药草
+    Food,      // 食物
+    Misc,      // 杂项
 }
 
 impl ItemTrait for Item {
@@ -276,6 +344,8 @@ impl ItemTrait for Item {
             ItemKind::Ring(r) => r.is_stackable(),
             ItemKind::Seed(s) => s.is_stackable(),
             ItemKind::Stone(s) => s.is_stackable(),
+            ItemKind::Throwable(t) => t.is_stackable(),
+            ItemKind::Herb(h) => h.is_stackable(),
             ItemKind::Misc(m) => m.is_stackable(),
         }
     }
@@ -291,6 +361,8 @@ impl ItemTrait for Item {
             ItemKind::Ring(r) => r.max_stack(),
             ItemKind::Seed(s) => s.max_stack(),
             ItemKind::Stone(s) => s.max_stack(),
+            ItemKind::Throwable(t) => t.max_stack(),
+            ItemKind::Herb(h) => h.max_stack(),
             ItemKind::Misc(m) => m.max_stack(),
         }
     }
@@ -306,6 +378,8 @@ impl ItemTrait for Item {
             ItemKind::Ring(r) => r.stacking_id(),
             ItemKind::Seed(s) => s.stacking_id(),
             ItemKind::Stone(s) => s.stacking_id(),
+            ItemKind::Throwable(t) => t.stacking_id(),
+            ItemKind::Herb(h) => h.stacking_id(),
             ItemKind::Misc(m) => m.stacking_id(),
         }
     }
@@ -321,6 +395,8 @@ impl ItemTrait for Item {
             ItemKind::Ring(r) => r.name(),
             ItemKind::Seed(s) => s.name(),
             ItemKind::Stone(s) => s.name(),
+            ItemKind::Throwable(t) => t.name(),
+            ItemKind::Herb(h) => h.name(),
             ItemKind::Misc(m) => m.name(),
         }
     }
@@ -335,8 +411,27 @@ impl ItemTrait for Item {
             ItemKind::Ring(_) => ItemCategory::Ring,
             ItemKind::Seed(_) => ItemCategory::Seed,
             ItemKind::Stone(_) => ItemCategory::Stone,
+            ItemKind::Throwable(_) => ItemCategory::Throwable,
+            ItemKind::Herb(_) => ItemCategory::Herb,
             ItemKind::Food(_) => ItemCategory::Food,
             ItemKind::Misc(_) => ItemCategory::Misc,
+        }
+    }
+
+    fn rarity(&self) -> ItemRarity {
+        match &self.kind {
+            ItemKind::Weapon(w) => w.rarity(),
+            ItemKind::Armor(a) => a.rarity(),
+            ItemKind::Potion(p) => p.rarity(),
+            ItemKind::Scroll(s) => s.rarity(),
+            ItemKind::Food(f) => f.rarity(),
+            ItemKind::Wand(w) => w.rarity(),
+            ItemKind::Ring(r) => r.rarity(),
+            ItemKind::Seed(s) => s.rarity(),
+            ItemKind::Stone(s) => s.rarity(),
+            ItemKind::Throwable(t) => t.rarity(),
+            ItemKind::Herb(h) => h.rarity(),
+            ItemKind::Misc(m) => m.rarity(),
         }
     }
 
@@ -350,6 +445,8 @@ impl ItemTrait for Item {
             ItemKind::Ring(r) => r.sort_value(),
             ItemKind::Seed(s) => s.sort_value(),
             ItemKind::Stone(s) => s.sort_value(),
+            ItemKind::Throwable(t) => t.sort_value(),
+            ItemKind::Herb(h) => h.sort_value(),
             ItemKind::Food(f) => f.sort_value(),
             ItemKind::Misc(m) => m.sort_value(),
         }

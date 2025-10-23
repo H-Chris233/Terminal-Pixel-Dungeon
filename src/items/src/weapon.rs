@@ -12,6 +12,7 @@ use crate::BINCODE_CONFIG;
 use crate::Item;
 use crate::ItemCategory;
 use crate::ItemKind;
+use crate::ItemRarity;
 use crate::ItemTrait;
 
 pub mod kind;
@@ -189,6 +190,15 @@ impl Weapon {
         }
 
         value
+    }
+
+    pub fn rarity_level(&self) -> ItemRarity {
+        match self.tier {
+            Tier::One | Tier::Two => ItemRarity::Common,
+            Tier::Three => ItemRarity::Rare,
+            Tier::Four => ItemRarity::Epic,
+            Tier::Five => ItemRarity::Legendary,
+        }
     }
 
     /// 强化武器（还原Shattered PD的强化系统）
@@ -570,6 +580,11 @@ impl ItemTrait for Weapon {
     fn category(&self) -> ItemCategory {
         ItemCategory::Weapon
     }
+
+    fn rarity(&self) -> ItemRarity {
+        self.rarity_level()
+    }
+
     fn sort_value(&self) -> u32 {
         (self.tier as u32 * 100) + self.upgrade_level as u32
     }

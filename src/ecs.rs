@@ -639,6 +639,7 @@ pub enum ItemType {
     Weapon { damage: u32 },
     Armor { defense: u32 },
     Consumable { effect: ConsumableEffect },
+    Throwable { damage: (u32, u32), range: u8 },
     Key,
     Quest,
 }
@@ -715,6 +716,13 @@ impl ECSItem {
             items::ItemKind::Scroll(_) => ItemType::Consumable {
                 effect: ConsumableEffect::Identify,
             },
+            items::ItemKind::Throwable(t) => ItemType::Throwable {
+                damage: t.damage,
+                range: t.range,
+            },
+            items::ItemKind::Herb(_) => ItemType::Consumable {
+                effect: ConsumableEffect::Healing { amount: 8 },
+            },
             _ => ItemType::Quest, // 其他类型映射为任务物品
         }
     }
@@ -732,12 +740,12 @@ impl ECSItem {
 
     /// 是否为可堆叠物品
     pub fn is_stackable(&self) -> bool {
-        matches!(self.item_type, ItemType::Consumable { .. })
+        matches!(self.item_type, ItemType::Consumable { .. } | ItemType::Throwable { .. })
     }
 
     /// 是否可用
     pub fn is_usable(&self) -> bool {
-        matches!(self.item_type, ItemType::Consumable { .. })
+        matches!(self.item_type, ItemType::Consumable { .. } | ItemType::Throwable { .. })
     }
 
     /// 是否可装备

@@ -7,12 +7,14 @@ use items::{
     Item, ItemKind,
     armor::Armor,
     food::Food,
+    herb::Herb,
     misc::{MiscItem, MiscKind},
     potion::Potion,
     ring::Ring,
     scroll::{Scroll, ScrollKind},
     seed::Seed,
     stone::Stone,
+    throwable::Throwable,
     wand::Wand,
     weapon::Weapon,
 };
@@ -27,18 +29,20 @@ use inventory::{Inventory, InventoryError, InventorySlot};
 /// 完整的背包系统（遵循破碎的像素地牢机制）
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct Bag {
-    gold: u32,                  // 金币数量
-    equipment: Equipment,       // 已装备的物品
-    weapons: Inventory<Weapon>, // 武器库存
-    armors: Inventory<Armor>,   // 护甲库存
-    potions: Inventory<Potion>, // 药水库存
-    scrolls: Inventory<Scroll>, // 卷轴库存
-    wands: Inventory<Wand>,     // 法杖库存
-    rings: Inventory<Ring>,     // 戒指库存
-    seeds: Inventory<Seed>,     // 种子库存
-    stones: Inventory<Stone>,   // 宝石库存
-    food: Inventory<Food>,      // 食物库存
-    misc: Inventory<MiscItem>,  // 杂项物品
+    gold: u32,                      // 金币数量
+    equipment: Equipment,           // 已装备的物品
+    weapons: Inventory<Weapon>,     // 武器库存
+    armors: Inventory<Armor>,       // 护甲库存
+    potions: Inventory<Potion>,     // 药水库存
+    scrolls: Inventory<Scroll>,     // 卷轴库存
+    wands: Inventory<Wand>,         // 法杖库存
+    rings: Inventory<Ring>,         // 戒指库存
+    seeds: Inventory<Seed>,         // 种子库存
+    stones: Inventory<Stone>,       // 宝石库存
+    food: Inventory<Food>,          // 食物库存
+    misc: Inventory<MiscItem>,      // 杂项物品
+    throwables: Inventory<Throwable>, // 投掷武器
+    herbs: Inventory<Herb>,         // 药草库存
 }
 
 /// 背包特定的错误类型
@@ -70,16 +74,18 @@ impl Bag {
         Self {
             gold: 0,
             equipment: Equipment::new(),
-            weapons: Inventory::new(4), // 武器容量4
-            armors: Inventory::new(3),  // 护甲容量3
-            potions: Inventory::new(8), // 药水容量8
-            scrolls: Inventory::new(8), // 卷轴容量8
-            wands: Inventory::new(4),   // 法杖容量4
-            rings: Inventory::new(4),   // 戒指容量4
-            seeds: Inventory::new(4),   // 种子容量4
-            stones: Inventory::new(4),  // 宝石容量4
-            food: Inventory::new(4),    // 食物容量4
-            misc: Inventory::new(4),    // 杂项容量4
+            weapons: Inventory::new(4),      // 武器容量4
+            armors: Inventory::new(3),       // 护甲容量3
+            potions: Inventory::new(8),      // 药水容量8
+            scrolls: Inventory::new(8),      // 卷轴容量8
+            wands: Inventory::new(4),        // 法杖容量4
+            rings: Inventory::new(4),        // 戒指容量4
+            seeds: Inventory::new(4),        // 种子容量4
+            stones: Inventory::new(4),       // 宝石容量4
+            food: Inventory::new(4),         // 食物容量4
+            misc: Inventory::new(4),         // 杂项容量4
+            throwables: Inventory::new(6),   // 投掷武器容量6
+            herbs: Inventory::new(6),        // 药草容量6
         }
     }
 
@@ -138,6 +144,14 @@ impl Bag {
             ItemKind::Stone(_) => {
                 let stone = self.stones.remove(index)?;
                 Ok(Item::from((*stone).clone()))
+            }
+            ItemKind::Throwable(_) => {
+                let throwable = self.throwables.remove(index)?;
+                Ok(Item::from((*throwable).clone()))
+            }
+            ItemKind::Herb(_) => {
+                let herb = self.herbs.remove(index)?;
+                Ok(Item::from((*herb).clone()))
             }
             _ => Err(BagError::CannotUseItem),
         }
@@ -200,6 +214,10 @@ impl Bag {
             ItemKind::Seed(s) => self.seeds.add(s),
             ItemKind::Stone(s) => self.stones.add(s),
             ItemKind::Food(f) => self.food.add(f),
+            ItemKind::Throwable(t) => self.throwables.add_sorted(t, |a, b| {
+                b.range.cmp(&a.range).then_with(|| b.damage.1.cmp(&a.damage.1))
+            }),
+            ItemKind::Herb(h) => self.herbs.add(h),
             ItemKind::Misc(m) => match m.kind {
                 MiscKind::Gold(amount) => {
                     let _ = self.add_gold(amount);
@@ -262,6 +280,20 @@ impl Bag {
 
         if idx < self.misc.len() {
             return self.misc.remove(idx).map(|_| ()).map_err(Into::into);
+        }
+        idx -= self.misc.len();
+
+        if idx < self.throwables.len() {
+            return self
+                .throwables
+                .remove(idx)
+                .map(|_| ())
+                .map_err(Into::into);
+        }
+        idx -= self.throwables.len();
+
+        if idx < self.herbs.len() {
+            return self.herbs.remove(idx).map(|_| ()).map_err(Into::into);
         }
 
         Err(BagError::InvalidIndex)
@@ -401,6 +433,32 @@ impl Bag {
         if idx < self.misc.len() {
             return self
                 .misc
+                .get(idx)
+                .map(|slot| match slot {
+                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => {
+                        Item::from(item.as_ref().clone())
+                    }
+                })
+                .ok_or(BagError::InvalidIndex);
+        }
+        idx -= self.misc.len();
+
+        if idx < self.throwables.len() {
+            return self
+                .throwables
+                .get(idx)
+                .map(|slot| match slot {
+                    InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => {
+                        Item::from(item.as_ref().clone())
+                    }
+                })
+                .ok_or(BagError::InvalidIndex);
+        }
+        idx -= self.throwables.len();
+
+        if idx < self.herbs.len() {
+            return self
+                .herbs
                 .get(idx)
                 .map(|slot| match slot {
                     InventorySlot::Single(item) | InventorySlot::Stackable(item, _) => {
