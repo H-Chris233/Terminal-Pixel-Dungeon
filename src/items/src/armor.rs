@@ -10,6 +10,7 @@ use crate::BINCODE_CONFIG;
 use crate::Item;
 use crate::ItemCategory;
 use crate::ItemKind;
+use crate::ItemRarity;
 use crate::ItemTrait;
 
 /// 护甲数据（精确还原游戏机制）
@@ -136,6 +137,21 @@ impl Armor {
         }
 
         value
+    }
+
+    pub fn rarity_level(&self) -> ItemRarity {
+        let base = match self.tier {
+            1 | 2 => ItemRarity::Common,
+            3 => ItemRarity::Rare,
+            4 => ItemRarity::Epic,
+            _ => ItemRarity::Legendary,
+        };
+
+        if self.glyph.is_some() && matches!(base, ItemRarity::Common) {
+            ItemRarity::Rare
+        } else {
+            base
+        }
     }
 
     /// 获取基础防御值（根据游戏平衡数据）
@@ -415,6 +431,11 @@ impl ItemTrait for Armor {
     fn category(&self) -> ItemCategory {
         ItemCategory::Armor
     }
+
+    fn rarity(&self) -> ItemRarity {
+        self.rarity_level()
+    }
+
     fn sort_value(&self) -> u32 {
         (self.tier * 100) + self.upgrade_level as u32
     }

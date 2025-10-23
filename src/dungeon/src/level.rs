@@ -16,7 +16,8 @@ use crate::level::tiles::{DoorState, StairDirection, TerrainType, Tile, TileInfo
 use crate::trap::{Trap, TrapKind};
 use combat::enemy::{Enemy, EnemyKind};
 use items::{
-    Armor, Food, Item, ItemKind, MiscItem, Potion, Ring, Scroll, Seed, Stone, Wand, Weapon,
+    Armor, Food, Herb, Item, ItemKind, MiscItem, Potion, Ring, Scroll, Seed, Stone, Throwable,
+    Wand, Weapon,
 };
 
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
@@ -245,7 +246,7 @@ impl Level {
                 let (x, y) = room.random_point(rng);
 
                 // 创建随机物品
-                let item = match rng.random_range(0..10) {
+                let item = match rng.random_range(0..12) {
                     0 => Item::new(ItemKind::Weapon(Weapon::random_new())),
                     1 => Item::new(ItemKind::Armor(Armor::random_new())),
                     2 => Item::new(ItemKind::Potion(Potion::random_new())),
@@ -255,6 +256,8 @@ impl Level {
                     6 => Item::new(ItemKind::Ring(Ring::random_new())),
                     7 => Item::new(ItemKind::Seed(Seed::random_new())),
                     8 => Item::new(ItemKind::Stone(Stone::random_new())),
+                    9 => Item::new(ItemKind::Throwable(Throwable::random_new())),
+                    10 => Item::new(ItemKind::Herb(Herb::random_new())),
                     _ => Item::new(ItemKind::Misc(MiscItem::random_new())),
                 };
 
@@ -262,6 +265,11 @@ impl Level {
                 let mut item = item;
                 item.x = x;
                 item.y = y;
+                item.quantity = match &item.kind {
+                    ItemKind::Herb(h) => h.quantity,
+                    ItemKind::Throwable(t) => t.quantity,
+                    _ => item.quantity,
+                };
                 items.push(item);
             }
         }

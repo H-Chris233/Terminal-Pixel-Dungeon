@@ -3,7 +3,13 @@ use crate::{
     bag::BagError,
     effects::{Effect, EffectType},
 };
-use items::{Item, ItemCategory, potion::PotionKind, scroll::ScrollKind};
+use items::{
+    Item, ItemCategory, ItemKind,
+    herb::HerbKind,
+    potion::PotionKind,
+    scroll::ScrollKind,
+    seed::{Seed, SeedKind},
+};
 
 use crate::Hero;
 
@@ -15,11 +21,19 @@ impl Hero {
     pub fn use_item(&mut self, category: ItemCategory, index: usize) -> Result<(), HeroError> {
         match category {
             ItemCategory::Potion => {
-                let _ = self.use_potion(index);
+                self.use_potion(index)?;
                 Ok(())
             }
             ItemCategory::Scroll => {
-                let _ = self.use_scroll(index);
+                self.use_scroll(index)?;
+                Ok(())
+            }
+            ItemCategory::Herb => {
+                self.use_herb(index)?;
+                Ok(())
+            }
+            ItemCategory::Throwable => {
+                self.use_throwable(index)?;
                 Ok(())
             }
             ItemCategory::Weapon => {
@@ -101,6 +115,109 @@ impl Hero {
             }
         }
         Ok(())
+    }
+
+    fn use_herb(&mut self, index: usize) -> Result<(), HeroError> {
+        let preview_item = self
+            .bag
+            .get_item_by_index(index)
+            .map_err(|_| HeroError::ActionFailed)?;
+
+        let (herb_kind, herb_name) = if let items::ItemKind::Herb(ref herb) = preview_item.kind {
+            (herb.kind, herb.name())
+        } else {
+            return Err(HeroError::ActionFailed);
+        };
+
+        let recipe_seed = match herb_kind {
+            HerbKind::Sungrass => Some(SeedKind::Earthroot),
+            HerbKind::Moonleaf => Some(SeedKind::Fadeleaf),
+            HerbKind::Nightshade => Some(SeedKind::Sorrowmoss),
+            HerbKind::SpiritMoss => Some(SeedKind::Dreamfoil),
+            HerbKind::Dragonthorn => Some(SeedKind::Stormvine),
+            HerbKind::Glowcap => Some(SeedKind::Icecap),
+        };
+
+        if let Some(seed_kind) = recipe_seed {
+            if let Ok(potion_item) = self.bag.combine_reagents(herb_kind, seed_kind) {
+                if let ItemKind::Potion(ref potion) = potion_item.kind {
+                    let seed_name = Seed::new(seed_kind).name();
+                    self.notify(&format!(
+                        "你将{}与{}炼制出了{}。",
+                        herb_name,
+                        seed_name,
+                        potion.name()
+                    ));
+                }
+                return Ok(());
+            }
+        }
+
+        let item = self
+            .bag
+            .use_item(index)
+            .map_err(|_| HeroError::ActionFailed)?;
+
+        if let items::ItemKind::Herb(herb) = item.kind {
+            let potency = herb.potency as u32;
+            match herb.kind {
+                HerbKind::Sungrass => {
+                    self.heal(potency * 5);
+                    self.notify("日光草的温暖治愈了你的伤势。");
+                }
+                HerbKind::Moonleaf => {
+                    self.effects
+                        .add(Effect::new(EffectType::Invisibility, 8 + potency));
+                    self.notify("月影叶让你融入了阴影。");
+                }
+                HerbKind::Nightshade => {
+                    self.effects.add(Effect::new(EffectType::Poison, 4 + potency));
+                    self.notify("夜影花的毒素在你的血液中流淌！");
+                }
+                HerbKind::SpiritMoss => {
+                    self.effects.remove(EffectType::Poison);
+                    self.effects.remove(EffectType::Burning);
+                    self.heal(10 + potency * 2);
+                    self.notify("灵魂苔净化了你的身体。");
+                }
+                HerbKind::Dragonthorn => {
+                    self.effects
+                        .add(Effect::new(EffectType::Haste, 6 + potency));
+                    self.notify("龙棘草让你的动作变得更加迅捷。");
+                }
+                HerbKind::Glowcap => {
+                    self.effects.add(Effect::new(EffectType::Light, 12 + potency));
+                    self.notify("萤帽菌的微光照亮了前方道路。");
+                }
+            }
+
+            let satiety_gain = match herb.kind {
+                HerbKind::Nightshade => 0,
+                _ => herb.potency.min(3),
+            };
+            self.satiety = self.satiety.saturating_add(satiety_gain).min(10);
+            Ok(())
+        } else {
+            Err(HeroError::ActionFailed)
+        }
+    }
+
+    fn use_throwable(&mut self, index: usize) -> Result<(), HeroError> {
+        let item = self
+            .bag
+            .use_item(index)
+            .map_err(|_| HeroError::ActionFailed)?;
+
+        if let items::ItemKind::Throwable(throwable) = item.kind {
+            let haste_turns = (throwable.range as u32).max(2) + 2;
+            self.effects
+                .add(Effect::new(EffectType::Haste, haste_turns));
+            self.satiety = self.satiety.saturating_sub(1);
+            self.notify(&format!("你熟练地练习投掷{}，身手更加敏捷。", throwable.name()));
+            Ok(())
+        } else {
+            Err(HeroError::ActionFailed)
+        }
     }
 }
 
