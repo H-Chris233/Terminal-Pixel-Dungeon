@@ -200,11 +200,12 @@ impl ItemTrait for Herb {
 
 impl From<Herb> for Item {
     fn from(herb: Herb) -> Self {
+        let qty = herb.quantity;
         Item {
             name: herb.name(),
             kind: ItemKind::Herb(herb),
             description: "...".to_string(),
-            quantity: 1,
+            quantity: qty.max(1),
             x: -1,
             y: -1,
         }

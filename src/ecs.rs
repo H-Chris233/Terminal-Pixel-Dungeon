@@ -1296,11 +1296,6 @@ impl From<&Bag> for Inventory {
                         item: Some(ecs_item),
                         quantity,
                     });
-                } else {
-                    slots.push(ItemSlot {
-                        item: None,
-                        quantity: count.max(1),
-                    });
                 }
             }
         }

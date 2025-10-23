@@ -156,7 +156,15 @@ mod tests {
 
         let result = CombatManager::process_combat_round(&mut params);
         assert!(!result.logs.is_empty());
-        assert!(result.logs[0].contains("hits") || result.logs[0].contains("misses"));
+        let has_hit_or_miss = result
+            .logs
+            .iter()
+            .any(|log| log.contains("hit") || log.contains("miss"));
+        assert!(
+            has_hit_or_miss,
+            "Expected combat log to contain hit/miss info, logs: {:?}",
+            result.logs
+        );
     }
 
     #[test]

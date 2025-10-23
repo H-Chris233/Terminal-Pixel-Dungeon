@@ -195,11 +195,12 @@ impl ItemTrait for Throwable {
 
 impl From<Throwable> for Item {
     fn from(throwable: Throwable) -> Self {
+        let qty = throwable.quantity;
         Item {
             name: throwable.name(),
             kind: ItemKind::Throwable(throwable),
             description: "...".to_string(),
-            quantity: 1,
+            quantity: qty.max(1),
             x: -1,
             y: -1,
         }

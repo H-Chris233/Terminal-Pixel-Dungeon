@@ -136,6 +136,29 @@ impl Scroll {
     pub fn identify(&mut self) {
         self.identified = true;
     }
+
+    pub fn rarity_level(&self) -> ItemRarity {
+        let base = match self.kind {
+            ScrollKind::Upgrade => ItemRarity::Legendary,
+            ScrollKind::RemoveCurse | ScrollKind::Transmutation => ItemRarity::Epic,
+            ScrollKind::Recharging | ScrollKind::MagicMapping | ScrollKind::Teleportation => {
+                ItemRarity::Rare
+            }
+            ScrollKind::Identify | ScrollKind::MirrorImage => ItemRarity::Rare,
+            ScrollKind::Lullaby | ScrollKind::Rage => ItemRarity::Common,
+        };
+
+        if self.exotic {
+            match base {
+                ItemRarity::Common => ItemRarity::Rare,
+                ItemRarity::Rare => ItemRarity::Epic,
+                ItemRarity::Epic => ItemRarity::Legendary,
+                ItemRarity::Legendary => ItemRarity::Legendary,
+            }
+        } else {
+            base
+        }
+    }
 }
 
 /// 卷轴种类（对应SPD中的10种卷轴）
@@ -212,6 +235,9 @@ impl ItemTrait for Scroll {
     }
     fn category(&self) -> ItemCategory {
         ItemCategory::Scroll
+    }
+    fn rarity(&self) -> ItemRarity {
+        self.rarity_level()
     }
     fn sort_value(&self) -> u32 {
         match self.kind {
