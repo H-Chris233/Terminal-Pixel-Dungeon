@@ -162,7 +162,7 @@ impl TurnSystem {
                     // Handle Quit action specially（现在改为弹出确认对话框，不直接退出）
                     if matches!(action, PlayerAction::Quit) {
                         let return_to = match resources.game_state.game_state {
-                            GameStatus::MainMenu => ReturnTo::MainMenu,
+                            GameStatus::MainMenu { .. } => ReturnTo::MainMenu,
                             _ => ReturnTo::Running,
                         };
                         resources.game_state.game_state = GameStatus::ConfirmQuit {

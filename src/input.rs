@@ -5,7 +5,6 @@ use crate::ecs::{NavigateDirection, PlayerAction};
 use anyhow;
 use crossterm::event::{
     self, Event as CEvent, KeyCode as CrosstermKeyCode, KeyEvent as CrosstermKeyEvent,
-    KeyModifiers as CrosstermKeyModifiers,
 };
 use std::time::Duration;
 
@@ -216,11 +215,12 @@ pub fn key_event_to_player_action(
     // 根据游戏状态决定如何解释按键
     match game_state {
         crate::ecs::GameStatus::MainMenu { .. }
-        | crate::ecs::GameStatus::Paused
+        | crate::ecs::GameStatus::Paused { .. }
         | crate::ecs::GameStatus::Options { .. }
         | crate::ecs::GameStatus::Inventory { .. }
         | crate::ecs::GameStatus::Help
-        | crate::ecs::GameStatus::CharacterInfo => {
+        | crate::ecs::GameStatus::CharacterInfo
+        | crate::ecs::GameStatus::ConfirmQuit { .. } => {
             // 在菜单状态下，按键被解释为菜单导航
             match_key_for_menu_context(key)
         }
