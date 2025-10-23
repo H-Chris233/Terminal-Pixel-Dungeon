@@ -2,6 +2,7 @@ pub mod core;
 pub mod ecs;
 pub mod event_bus;
 pub mod input;
+pub mod render;
 pub mod systems;
 pub mod turn_system;
 

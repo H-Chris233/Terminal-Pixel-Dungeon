@@ -1,6 +1,7 @@
 //! Turn-based system implementation for the game.
 
 use crate::ecs::*;
+use crate::event_bus::GameEvent;
 use anyhow;
 use hecs::{Entity, World};
 
@@ -51,7 +52,7 @@ impl TurnSystem {
     /// Deduct energy for a completed player action
     pub fn consume_player_energy(
         &mut self,
-        world: &mut World,
+        ecs_world: &mut ECSWorld,
         action: &PlayerAction,
     ) -> Result<(), anyhow::Error> {
         let energy_cost = match action {
@@ -76,6 +77,7 @@ impl TurnSystem {
         };
 
         if energy_cost > 0 {
+            let world = &mut ecs_world.world;
             if let Some(player_entity) = find_player(world) {
                 if let Ok(mut energy) = world.get::<&mut Energy>(player_entity) {
                     let before = energy.current;
@@ -98,9 +100,10 @@ impl TurnSystem {
     /// Process AI turns until the player's energy is full again
     pub fn process_ai_turns(
         &mut self,
-        world: &mut World,
-        _resources: &mut Resources,
+        ecs_world: &mut ECSWorld,
     ) -> Result<(), anyhow::Error> {
+        let world = &mut ecs_world.world;
+
         // Continue processing AI actions until player energy is refilled or no AI can act
         loop {
             // If player has full energy, stop AI processing
@@ -147,25 +150,23 @@ impl TurnSystem {
     }
 
     /// Process a complete turn cycle (player action + AI actions until player energy is full)
-    pub fn process_turn_cycle(
-        &mut self,
-        world: &mut World,
-        resources: &mut Resources,
-    ) -> Result<(), anyhow::Error> {
+    pub fn process_turn_cycle(&mut self, ecs_world: &mut ECSWorld) -> Result<(), anyhow::Error> {
         match self.state {
             TurnState::PlayerTurn => {
                 // Process completed actions and deduct energy
-                let completed_actions =
-                    std::mem::take(&mut resources.input_buffer.completed_actions);
+                let completed_actions = {
+                    let resources = &mut ecs_world.resources;
+                    std::mem::take(&mut resources.input_buffer.completed_actions)
+                };
 
                 for action in completed_actions {
                     // Handle Quit action specially（现在改为弹出确认对话框，不直接退出）
                     if matches!(action, PlayerAction::Quit) {
-                        let return_to = match resources.game_state.game_state {
+                        let return_to = match ecs_world.resources.game_state.game_state {
                             GameStatus::MainMenu { .. } => ReturnTo::MainMenu,
                             _ => ReturnTo::Running,
                         };
-                        resources.game_state.game_state = GameStatus::ConfirmQuit {
+                        ecs_world.resources.game_state.game_state = GameStatus::ConfirmQuit {
                             return_to,
                             selected_option: 1, // 默认选中“否”
                         };
@@ -173,30 +174,35 @@ impl TurnSystem {
                     }
 
                     // Consume energy for the completed action
-                    self.consume_player_energy(world, &action)?;
+                    self.consume_player_energy(ecs_world, &action)?;
                 }
 
                 // If player has taken an action, switch to AI turn
                 if self.player_action_taken {
                     self.state = TurnState::AITurn;
                     self.player_action_taken = false; // Reset for next turn
+                    ecs_world.publish_event(GameEvent::AITurnStarted);
                 }
             }
             TurnState::AITurn => {
                 // Process AI turns
-                self.process_ai_turns(world, resources)?;
+                self.process_ai_turns(ecs_world)?;
 
                 // After AI turn, regenerate energy for all entities
-                self.regenerate_energy(world);
+                self.regenerate_energy(&mut ecs_world.world);
 
                 // Switch back to player turn
                 self.state = TurnState::PlayerTurn;
+                ecs_world.publish_event(GameEvent::PlayerTurnStarted);
             }
             // For the other states, we'll handle them if needed
             _ => {
                 // Default behavior
             }
         }
+
+        let turn = ecs_world.resources.clock.turn_count;
+        ecs_world.publish_event(GameEvent::TurnEnded { turn });
 
         Ok(())
     }

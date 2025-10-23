@@ -144,18 +144,22 @@ impl RatatuiRenderer {
 
                 // === 正常游戏状态 ===
                 GameStatus::Running => {
-                    // Create main layout
+                    // Create main layout with adaptive HUD/log heights for new turn overlays
+                    let area = f.area();
+                    let hud_height: u16 = if area.height >= 18 { 6 } else { 4 };
+                    let log_height: u16 = if area.height >= 18 { 6 } else { 4 };
                     let chunks = Layout::default()
                         .direction(Direction::Vertical)
                         .constraints([
-                            Constraint::Length(3), // HUD (状态栏)
-                            Constraint::Min(10),   // Main game area (地牢)
-                            Constraint::Length(5), // Message log (消息栏)
+                            Constraint::Length(hud_height), // HUD 区域（含回合信息）
+                            Constraint::Min(8),             // 主游戏区域（地牢）
+                            Constraint::Length(log_height), // 消息日志
                         ])
-                        .split(f.area());
+                        .split(area);
 
-                    // 渲染 HUD
-                    self.hud_renderer.render(f, chunks[0], &ecs_world.world);
+                    // 渲染 HUD（含回合与状态信息）
+                    self.hud_renderer
+                        .render(f, chunks[0], &ecs_world.world, &ecs_world.resources.game_state);
 
                     // 渲染地牢
                     self.dungeon_renderer.render(f, chunks[1], &ecs_world.world);
@@ -374,11 +378,11 @@ impl RatatuiRenderer {
                 )),
             ]
         } else {
-            // 显示最近的 3 条消息
+            // 显示最近的 4 条消息
             messages
                 .iter()
                 .rev()
-                .take(3)
+                .take(4)
                 .rev()
                 .map(|msg| {
                     let (prefix, color) = if msg.starts_with("!") || msg.contains("死亡") || msg.contains("受伤") {

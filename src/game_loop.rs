@@ -2,6 +2,7 @@
 
 use crate::core::GameEngine;
 use crate::ecs::*;
+use crate::event_bus::GameEvent;
 use crate::input::*;
 use crate::renderer::*;
 use crate::systems::*;
@@ -76,6 +77,11 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
 
         // 初始化基础实体（确保世界非空，便于测试与渲染）
         self.initialize_entities();
+
+        // 初始化 HUD 回合信息并广播玩家回合开始
+        self.ecs_world.rebuild_turn_overlay(Some(Faction::Player));
+        self.ecs_world.publish_event(GameEvent::PlayerTurnStarted);
+        self.ecs_world.process_events();
 
         Ok(())
     }
@@ -338,6 +344,35 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
     fn update_turn(&mut self) -> anyhow::Result<()> {
         // 记录状态以便桥接事件（UIAction → GameEvent）
         let prev_status = self.ecs_world.resources.game_state.game_state;
+        let is_running_gameplay = matches!(prev_status, GameStatus::Running);
+
+        if !is_running_gameplay {
+            // 仅处理输入与菜单，跳过能量调度
+            for system in &mut self.systems {
+                let name = system.name();
+                if name != "InputSystem" && name != "MenuSystem" {
+                    continue;
+                }
+
+                match system.run(&mut self.ecs_world.world, &mut self.ecs_world.resources) {
+                    SystemResult::Continue => continue,
+                    SystemResult::Stop => {
+                        self.is_running = false;
+                        return Ok(());
+                    }
+                    SystemResult::Error(msg) => {
+                        eprintln!("System error: {}", msg);
+                        return Err(anyhow::anyhow!(msg));
+                    }
+                }
+            }
+
+            self.ecs_world.process_events();
+            self.bridge_status_events(prev_status);
+            self.ecs_world.process_events();
+            self.ecs_world.next_frame();
+            return Ok(());
+        }
 
         // Run systems based on turn state
         if self.turn_system.is_player_turn() {
@@ -395,8 +430,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
             self.ecs_world.process_events();
 
             // Process the player's turn
-            self.turn_system
-                .process_turn_cycle(&mut self.ecs_world.world, &mut self.ecs_world.resources)?;
+            self.turn_system.process_turn_cycle(&mut self.ecs_world)?;
         } else {
             // Process AI turns without player input
             // Run non-input systems
@@ -453,8 +487,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
             self.ecs_world.process_events();
 
             // Process AI turns
-            self.turn_system
-                .process_turn_cycle(&mut self.ecs_world.world, &mut self.ecs_world.resources)?;
+            self.turn_system.process_turn_cycle(&mut self.ecs_world)?;
         }
 
         // 桥接：根据 GameStatus 变化发布事件

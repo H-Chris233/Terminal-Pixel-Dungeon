@@ -97,30 +97,29 @@ impl ECSWorld {
                 } else {
                     format!("造成 {} 点伤害", damage)
                 };
-                self.resources.game_state.message_log.push(msg);
+                self.resources.game_state.message_log.push(msg.clone());
+                self.push_status_event(msg, Color::Red);
             }
 
             GameEvent::EntityDied { entity_name, .. } => {
-                self.resources
-                    .game_state
-                    .message_log
-                    .push(format!("{} 已死亡", entity_name));
+                let msg = format!("{} 已死亡", entity_name);
+                self.resources.game_state.message_log.push(msg.clone());
+                self.push_status_event(msg, Color::Red);
+                self.rebuild_turn_overlay(None);
             }
 
             GameEvent::ItemPickedUp { item_name, .. } => {
-                self.resources
-                    .game_state
-                    .message_log
-                    .push(format!("拾取了 {}", item_name));
+                let msg = format!("拾取了 {}", item_name);
+                self.resources.game_state.message_log.push(msg.clone());
+                self.push_status_event(msg, Color::Green);
             }
 
             GameEvent::ItemUsed {
                 item_name, effect, ..
             } => {
-                self.resources
-                    .game_state
-                    .message_log
-                    .push(format!("使用了 {}，{}", item_name, effect));
+                let msg = format!("使用了 {}，{}", item_name, effect);
+                self.resources.game_state.message_log.push(msg.clone());
+                self.push_status_event(msg, Color::Cyan);
             }
 
             GameEvent::LevelChanged {
@@ -128,28 +127,26 @@ impl ECSWorld {
                 new_level,
             } => {
                 self.resources.game_state.depth = *new_level;
-                self.resources
-                    .game_state
-                    .message_log
-                    .push(format!("从第 {} 层进入第 {} 层", old_level, new_level));
+                let msg = format!("从第 {} 层进入第 {} 层", old_level, new_level);
+                self.resources.game_state.message_log.push(msg.clone());
+                self.push_status_event(msg, Color::Magenta);
+                self.rebuild_turn_overlay(None);
             }
 
             GameEvent::GameOver { reason } => {
                 self.resources.game_state.game_state = GameStatus::GameOver {
                     reason: GameOverReason::Died("游戏结束"),
                 };
-                self.resources
-                    .game_state
-                    .message_log
-                    .push(format!("游戏结束：{}", reason));
+                let msg = format!("游戏结束：{}", reason);
+                self.resources.game_state.message_log.push(msg.clone());
+                self.push_status_event(msg, Color::Red);
             }
 
             GameEvent::Victory => {
                 self.resources.game_state.game_state = GameStatus::Victory;
-                self.resources
-                    .game_state
-                    .message_log
-                    .push("恭喜！你获得了胜利！".to_string());
+                let msg = "恭喜！你获得了胜利！".to_string();
+                self.resources.game_state.message_log.push(msg.clone());
+                self.push_status_event(msg, Color::Yellow);
             }
 
             GameEvent::LogMessage { message, level } => {
@@ -159,55 +156,84 @@ impl ECSWorld {
                     LogLevel::Warning => "[警告] ",
                     LogLevel::Error => "[错误] ",
                 };
-                self.resources
-                    .game_state
-                    .message_log
-                    .push(format!("{}{}", prefix, message));
+                let msg = format!("{}{}", prefix, message);
+                self.resources.game_state.message_log.push(msg.clone());
+                let color = match level {
+                    LogLevel::Debug => Color::DarkGray,
+                    LogLevel::Info => Color::Gray,
+                    LogLevel::Warning => Color::Yellow,
+                    LogLevel::Error => Color::Red,
+                };
+                self.push_status_event(msg, color);
             }
 
             GameEvent::TrapTriggered { trap_type, .. } => {
-                self.resources
-                    .game_state
-                    .message_log
-                    .push(format!("触发了{}陷阱！", trap_type));
+                let msg = format!("触发了{}陷阱！", trap_type);
+                self.resources.game_state.message_log.push(msg.clone());
+                self.push_status_event(msg, Color::Magenta);
             }
 
             GameEvent::StatusApplied {
                 status, duration, ..
             } => {
-                self.resources
-                    .game_state
-                    .message_log
-                    .push(format!("受到{}效果影响，持续{}回合", status, duration));
+                let msg = format!("受到{}效果影响，持续{}回合", status, duration);
+                self.resources.game_state.message_log.push(msg.clone());
+                self.push_status_event(msg, Color::Magenta);
             }
 
             GameEvent::StatusRemoved { status, .. } => {
-                self.resources
-                    .game_state
-                    .message_log
-                    .push(format!("{}效果已消失", status));
+                let msg = format!("{}效果已消失", status);
+                self.resources.game_state.message_log.push(msg.clone());
+                self.push_status_event(msg, Color::Green);
             }
 
-            // 饥饿事件处理
             GameEvent::PlayerHungry { satiety, .. } => {
-                self.resources
-                    .game_state
-                    .message_log
-                    .push(format!("你感到饥饿...（饱食度：{}）", satiety));
+                let msg = format!("你感到饥饿...（饱食度：{}）", satiety);
+                self.resources.game_state.message_log.push(msg.clone());
+                self.push_status_event(msg, Color::Yellow);
             }
 
             GameEvent::PlayerStarving { .. } => {
-                self.resources
-                    .game_state
-                    .message_log
-                    .push("你正在饿死！".to_string());
+                let msg = "你正在饿死！".to_string();
+                self.resources.game_state.message_log.push(msg.clone());
+                self.push_status_event(msg, Color::Red);
             }
 
             GameEvent::StarvationDamage { damage, .. } => {
-                self.resources
-                    .game_state
-                    .message_log
-                    .push(format!("饥饿造成了 {} 点伤害", damage));
+                let msg = format!("饥饿造成了 {} 点伤害", damage);
+                self.resources.game_state.message_log.push(msg.clone());
+                self.push_status_event(msg, Color::Red);
+            }
+
+            GameEvent::HungerChanged {
+                old_satiety,
+                new_satiety,
+                ..
+            } => {
+                if new_satiety > old_satiety {
+                    let msg = format!("饱食度恢复到 {}", new_satiety);
+                    self.resources.game_state.message_log.push(msg.clone());
+                    self.push_status_event(msg, Color::Green);
+                } else if new_satiety < old_satiety {
+                    let msg = format!("饱食度下降到 {}", new_satiety);
+                    self.resources.game_state.message_log.push(msg.clone());
+                    self.push_status_event(msg, Color::Yellow);
+                }
+            }
+
+            GameEvent::TurnEnded { turn } => {
+                self.resources.game_state.turn_overlay.turn_count = *turn;
+                self.rebuild_turn_overlay(None);
+            }
+
+            GameEvent::PlayerTurnStarted => {
+                self.rebuild_turn_overlay(Some(Faction::Player));
+                self.push_status_event("玩家准备行动", Color::Cyan);
+            }
+
+            GameEvent::AITurnStarted => {
+                self.rebuild_turn_overlay(Some(Faction::Enemy));
+                self.push_status_event("敌人准备行动", Color::Magenta);
             }
 
             _ => {}
@@ -226,6 +252,75 @@ impl ECSWorld {
     fn sync_message_log(&mut self) {
         // 这里可以从事件处理器获取日志并同步到 Resources
         // 目前保持简单实现
+    }
+
+    pub fn rebuild_turn_overlay(&mut self, focus: Option<Faction>) {
+        let mut entries: Vec<TurnQueueEntry> = self
+            .world
+            .query::<(&Actor, &Energy)>()
+            .iter()
+            .map(|(entity, (actor, energy))| {
+                let regen = energy.regeneration_rate.max(1);
+                let deficit = energy.max.saturating_sub(energy.current);
+                let eta = if deficit == 0 {
+                    0
+                } else {
+                    (deficit + regen - 1) / regen
+                };
+
+                TurnQueueEntry {
+                    entity: entity.id() as u32,
+                    name: actor.name.clone(),
+                    faction: actor.faction.clone(),
+                    energy: energy.current,
+                    max_energy: energy.max,
+                    regen,
+                    eta,
+                    queued_action: if eta > 0 {
+                        Some("排队".to_string())
+                    } else {
+                        None
+                    },
+                }
+            })
+            .collect();
+
+        entries.sort_by(|a, b| {
+            a.eta
+                .cmp(&b.eta)
+                .then(b.energy.cmp(&a.energy))
+                .then(a.name.cmp(&b.name))
+        });
+
+        let mut current = None;
+        if let Some(focus_faction) = focus {
+            current = entries
+                .iter()
+                .find(|entry| entry.faction == focus_faction && entry.eta == 0)
+                .cloned()
+                .or_else(|| entries.iter().find(|entry| entry.faction == focus_faction).cloned());
+        }
+
+        if current.is_none() {
+            current = entries.first().cloned();
+        }
+
+        self.resources.game_state.turn_overlay.turn_count = self.resources.clock.turn_count;
+        self.resources.game_state.turn_overlay.current_actor = current;
+        self.resources.game_state.turn_overlay.queue = entries;
+    }
+
+    fn push_status_event(&mut self, message: impl Into<String>, color: Color) {
+        const MAX_STATUS_FEED: usize = 5;
+        let feed = &mut self.resources.game_state.turn_overlay.status_feed;
+        feed.push(StatusFeedEntry {
+            message: message.into(),
+            color,
+        });
+        if feed.len() > MAX_STATUS_FEED {
+            let overflow = feed.len() - MAX_STATUS_FEED;
+            feed.drain(0..overflow);
+        }
     }
 }
 
@@ -385,6 +480,57 @@ pub struct GameState {
     pub terminal_width: u16,
     pub terminal_height: u16,
     pub frame_count: u64, // 渲染帧计数器，用于动画和缓存管理
+    pub turn_overlay: TurnHudState,
+}
+
+#[derive(Clone, Default)]
+pub struct TurnHudState {
+    pub turn_count: u32,
+    pub current_actor: Option<TurnQueueEntry>,
+    pub queue: Vec<TurnQueueEntry>,
+    pub status_feed: Vec<StatusFeedEntry>,
+}
+
+#[derive(Clone)]
+pub struct TurnQueueEntry {
+    pub entity: u32,
+    pub name: String,
+    pub faction: Faction,
+    pub energy: u32,
+    pub max_energy: u32,
+    pub regen: u32,
+    pub eta: u32,
+    pub queued_action: Option<String>,
+}
+
+impl Default for TurnQueueEntry {
+    fn default() -> Self {
+        Self {
+            entity: 0,
+            name: String::new(),
+            faction: Faction::Neutral,
+            energy: 0,
+            max_energy: 0,
+            regen: 1,
+            eta: 0,
+            queued_action: None,
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct StatusFeedEntry {
+    pub message: String,
+    pub color: Color,
+}
+
+impl Default for StatusFeedEntry {
+    fn default() -> Self {
+        Self {
+            message: String::new(),
+            color: Color::Gray,
+        }
+    }
 }
 
 #[derive(Default, Clone, Copy, PartialEq, Debug)]
