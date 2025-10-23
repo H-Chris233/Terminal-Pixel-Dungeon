@@ -126,6 +126,8 @@ impl Item {
             ItemKind::Wand(w) => !w.identified,
             ItemKind::Weapon(w) => !w.identified,
             ItemKind::Armor(a) => !a.identified,
+            ItemKind::Throwable(t) => !t.identified,
+            ItemKind::Herb(h) => !h.identified,
             _ => false, // 其他物品默认不需要鉴定
         }
     }

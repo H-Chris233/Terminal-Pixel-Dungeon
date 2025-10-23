@@ -7,17 +7,18 @@ use items::{
     Item, ItemKind,
     armor::Armor,
     food::Food,
-    herb::Herb,
+    herb::{Herb, HerbKind},
     misc::{MiscItem, MiscKind},
-    potion::Potion,
+    potion::{Potion, PotionKind},
     ring::Ring,
     scroll::{Scroll, ScrollKind},
-    seed::Seed,
+    seed::{Seed, SeedKind},
     stone::Stone,
     throwable::Throwable,
     wand::Wand,
     weapon::Weapon,
 };
+use items::ItemTrait;
 
 // 子模块定义
 pub mod equipment; // 装备管理
@@ -25,6 +26,14 @@ pub mod inventory; // 物品库存管理
 
 use equipment::{EquipError, Equipment, EquipmentSlot};
 use inventory::{Inventory, InventoryError, InventorySlot};
+
+fn default_throwable_inventory() -> Inventory<Throwable> {
+    Inventory::new(6)
+}
+
+fn default_herb_inventory() -> Inventory<Herb> {
+    Inventory::new(6)
+}
 
 /// 完整的背包系统（遵循破碎的像素地牢机制）
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
@@ -41,7 +50,9 @@ pub struct Bag {
     stones: Inventory<Stone>,       // 宝石库存
     food: Inventory<Food>,          // 食物库存
     misc: Inventory<MiscItem>,      // 杂项物品
+    #[serde(default = "default_throwable_inventory")]
     throwables: Inventory<Throwable>, // 投掷武器
+    #[serde(default = "default_herb_inventory")]
     herbs: Inventory<Herb>,         // 药草库存
 }
 
@@ -66,6 +77,8 @@ pub enum BagError {
     CannotUseItem, // 不可使用
     #[error("物品无法装备")]
     CannotEquipItem, // 不可装备
+    #[error("无法合成物品")]
+    CombinationFailed,
 }
 
 impl Bag {
@@ -200,6 +213,8 @@ impl Bag {
 
     /* ================== 物品管理 ================== */
     pub fn add_item(&mut self, item: Item) -> Result<(), BagError> {
+        let quantity = item.quantity.max(1);
+
         match item.kind {
             ItemKind::Weapon(w) => self
                 .weapons
@@ -207,26 +222,114 @@ impl Bag {
             ItemKind::Armor(a) => self
                 .armors
                 .add_sorted(a, |a, b| b.upgrade_level.cmp(&a.upgrade_level)),
-            ItemKind::Potion(p) => self.potions.add(p),
-            ItemKind::Scroll(s) => self.scrolls.add(s),
-            ItemKind::Wand(w) => self.wands.add_sorted(w, |a, b| b.level.cmp(&a.level)),
+            ItemKind::Potion(p) => {
+                if quantity > 1 {
+                    self.potions.add_multiple(p, quantity)
+                } else {
+                    self.potions.add(p)
+                }
+            }
+            ItemKind::Scroll(s) => {
+                if quantity > 1 {
+                    self.scrolls.add_multiple(s, quantity)
+                } else {
+                    self.scrolls.add(s)
+                }
+            }
+            ItemKind::Wand(w) => self
+                .wands
+                .add_sorted(w, |a, b| b.level.cmp(&a.level)),
             ItemKind::Ring(r) => self.rings.add(r),
-            ItemKind::Seed(s) => self.seeds.add(s),
-            ItemKind::Stone(s) => self.stones.add(s),
-            ItemKind::Food(f) => self.food.add(f),
-            ItemKind::Throwable(t) => self.throwables.add_sorted(t, |a, b| {
-                b.range.cmp(&a.range).then_with(|| b.damage.1.cmp(&a.damage.1))
-            }),
-            ItemKind::Herb(h) => self.herbs.add(h),
+            ItemKind::Seed(s) => {
+                if quantity > 1 {
+                    self.seeds.add_multiple(s, quantity)
+                } else {
+                    self.seeds.add(s)
+                }
+            }
+            ItemKind::Stone(s) => {
+                if quantity > 1 {
+                    self.stones.add_multiple(s, quantity)
+                } else {
+                    self.stones.add(s)
+                }
+            }
+            ItemKind::Food(f) => {
+                if quantity > 1 {
+                    self.food.add_multiple(f, quantity)
+                } else {
+                    self.food.add(f)
+                }
+            }
+            ItemKind::Throwable(t) => {
+                let mut result = Ok(());
+                for _ in 0..quantity {
+                    result = self.throwables.add_sorted(
+                        t.clone(),
+                        |a, b| b.range.cmp(&a.range).then_with(|| b.damage.1.cmp(&a.damage.1)),
+                    );
+                    if result.is_err() {
+                        break;
+                    }
+                }
+                result
+            }
+            ItemKind::Herb(h) => {
+                if quantity > 1 {
+                    self.herbs.add_multiple(h, quantity)
+                } else {
+                    self.herbs.add(h)
+                }
+            }
             ItemKind::Misc(m) => match m.kind {
                 MiscKind::Gold(amount) => {
-                    let _ = self.add_gold(amount);
+                    let total = amount.saturating_mul(quantity);
+                    let _ = self.add_gold(total);
                     Ok(())
                 }
-                _ => self.misc.add(m),
+                _ => {
+                    if quantity > 1 && m.is_stackable() {
+                        self.misc.add_multiple(m, quantity)
+                    } else {
+                        self.misc.add(m)
+                    }
+                }
             },
         }
         .map_err(Into::into)
+    }
+
+    /// 合成药草与种子，生成特定药水
+    pub fn combine_reagents(
+        &mut self,
+        herb_kind: HerbKind,
+        seed_kind: SeedKind,
+    ) -> Result<Item, BagError> {
+        let recipe = match (herb_kind, seed_kind) {
+            (HerbKind::Sungrass, SeedKind::Earthroot) => PotionKind::Healing,
+            (HerbKind::Moonleaf, SeedKind::Fadeleaf) => PotionKind::Invisibility,
+            (HerbKind::Nightshade, SeedKind::Sorrowmoss) => PotionKind::ToxicGas,
+            (HerbKind::SpiritMoss, SeedKind::Dreamfoil) => PotionKind::Purity,
+            (HerbKind::Dragonthorn, SeedKind::Stormvine) => PotionKind::Strength,
+            (HerbKind::Glowcap, SeedKind::Icecap) => PotionKind::MindVision,
+            _ => return Err(BagError::CombinationFailed),
+        };
+
+        let herb_index = self
+            .herbs
+            .find(|h| h.kind == herb_kind)
+            .ok_or(BagError::CombinationFailed)?;
+        let seed_index = self
+            .seeds
+            .find(|s| s.kind == seed_kind)
+            .ok_or(BagError::CombinationFailed)?;
+
+        self.herbs.remove(herb_index)?;
+        self.seeds.remove(seed_index)?;
+
+        let potion_item = Item::new(ItemKind::Potion(Potion::new_alchemy(recipe)));
+        self.add_item(potion_item.clone())?;
+        Ok(potion_item)
     }
 
     pub fn remove_item(&mut self, index: usize) -> Result<(), BagError> {
@@ -535,6 +638,10 @@ impl Bag {
         &self.scrolls
     }
 
+    pub fn wands(&self) -> &Inventory<Wand> {
+        &self.wands
+    }
+
     pub fn equipment(&self) -> &Equipment {
         &self.equipment
     }
@@ -543,8 +650,28 @@ impl Bag {
         &self.rings
     }
 
+    pub fn seeds(&self) -> &Inventory<Seed> {
+        &self.seeds
+    }
+
+    pub fn stones(&self) -> &Inventory<Stone> {
+        &self.stones
+    }
+
     pub fn food(&self) -> &Inventory<Food> {
         &self.food
+    }
+
+    pub fn misc(&self) -> &Inventory<MiscItem> {
+        &self.misc
+    }
+
+    pub fn throwables(&self) -> &Inventory<Throwable> {
+        &self.throwables
+    }
+
+    pub fn herbs(&self) -> &Inventory<Herb> {
+        &self.herbs
     }
 
     /* ================== 装备属性计算 ================== */
@@ -554,5 +681,50 @@ impl Bag {
             .armor
             .as_ref()
             .map_or(0, |a| a.evasion_penalty())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn combine_reagents_creates_identified_potion() {
+        let mut bag = Bag::new();
+
+        let mut herb_item = Item::new(ItemKind::Herb(Herb::new(HerbKind::Sungrass)));
+        if let ItemKind::Herb(ref mut herb) = herb_item.kind {
+            herb.identified = true;
+        }
+        bag.add_item(herb_item).expect("failed to add herb");
+
+        let seed_item = Item::new(ItemKind::Seed(Seed::new(SeedKind::Earthroot)));
+        bag.add_item(seed_item).expect("failed to add seed");
+
+        let result = bag
+            .combine_reagents(HerbKind::Sungrass, SeedKind::Earthroot)
+            .expect("combination should succeed");
+
+        match result.kind {
+            ItemKind::Potion(ref potion) => {
+                assert!(matches!(potion.kind, PotionKind::Healing));
+                assert!(potion.identified);
+            }
+            _ => panic!("expected potion from combination"),
+        }
+
+        assert!(bag.herbs().items().is_empty());
+        assert!(bag.seeds().items().is_empty());
+    }
+
+    #[test]
+    fn combine_reagents_requires_matching_seed() {
+        let mut bag = Bag::new();
+
+        bag.add_item(Item::new(ItemKind::Herb(Herb::new(HerbKind::Sungrass))))
+            .expect("failed to add herb");
+
+        let result = bag.combine_reagents(HerbKind::Sungrass, SeedKind::Fadeleaf);
+        assert!(matches!(result, Err(BagError::CombinationFailed)));
     }
 }

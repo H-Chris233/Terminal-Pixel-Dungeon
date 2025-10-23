@@ -16,6 +16,7 @@ use crate::BINCODE_CONFIG;
 use crate::Item;
 use crate::ItemCategory;
 use crate::ItemKind;
+use crate::ItemRarity;
 use crate::ItemTrait;
 
 /// 卷轴系统（完整10种）
