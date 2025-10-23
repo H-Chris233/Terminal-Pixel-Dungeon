@@ -35,7 +35,7 @@ impl MenuRenderer {
 
         // 计算选中项 - 使用 game_state 中的选项索引
         let selected_index = match resources.game_state.game_state {
-            GameStatus::MainMenu { .. } => 0, // 默认选中第一项
+            GameStatus::MainMenu { selected_option } => selected_option,
             _ => 0,
         };
 
@@ -148,7 +148,7 @@ impl MenuRenderer {
 
         // 从 game_state 获取选中的索引（如果是暂停状态）
         let selected_index = match resources.game_state.game_state {
-            GameStatus::Paused => 0, // 默认选中"继续游戏"
+            GameStatus::Paused { selected_option } => selected_option,
             _ => 0,
         };
 

@@ -162,11 +162,15 @@ mod combat_tests {
         let mut attacker = TestCombatant::new("Attacker");
         let mut defender = TestCombatant::new("Defender");
 
+        // Set very high accuracy and low evasion to ensure hit
+        attacker.accuracy = 100;
+        defender.evasion = 0;
+
         let result = crate::Combat::engage(&mut attacker, &mut defender, false);
 
         assert!(!result.logs.is_empty());
-        // The defender should have taken some damage
-        assert!(defender.hp < defender.max_hp);
+        // The defender should have taken some damage (hit guaranteed)
+        assert!(defender.hp < defender.max_hp, "Defender should have taken damage");
     }
 
     #[test]
