@@ -1,10 +1,18 @@
-//! Turn-based system implementation for the game.
+//! Energy-driven turn scheduler orchestrating player/AI phases.
+//!
+//! The `TurnSystem` consumes actions that upstream systems mark as
+//! `completed`, applies the canonical energy costs defined here, and flips
+//! between `PlayerTurn` and `AITurn` states until the player regains full
+//! energy. See `docs/turn_system.md` for a full architecture guide.
 
 use crate::ecs::*;
 use anyhow;
 use hecs::{Entity, World};
 
-/// Energy cost constants
+/// Energy cost constants consumed by the scheduler.
+///
+/// Keep this list in sync with `docs/turn_system.md` so that gameplay,
+/// documentation, and tooling share the same source of truth.
 pub mod energy_costs {
     /// Full action energy cost (movement, attack, use item, etc.)
     pub const FULL_ACTION: u32 = 100;
@@ -25,14 +33,22 @@ pub trait TurnTaker {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+/// High-level phases recognised by the turn scheduler.
 pub enum TurnState {
+    /// Player-facing systems are allowed to enqueue or resolve actions.
     PlayerTurn,
+    /// Reserved for multi-step player actions that span multiple frames.
     ProcessingPlayerAction,
+    /// AI controllers resolve intents until the player regains full energy.
     AITurn,
+    /// Reserved for scripted AI sequences that should not interleave with the player.
     ProcessingAIActions,
 }
 
-/// System to manage turn-based game flow
+/// Coordinates energy consumption and state transitions between player and AI.
+///
+/// The game loop owns the event bus and must publish `GameEvent::PlayerTurnStarted`,
+/// `GameEvent::AITurnStarted`, and `GameEvent::TurnEnded` when `state` changes.
 pub struct TurnSystem {
     /// Current state of the turn system
     pub state: TurnState,
@@ -48,7 +64,11 @@ impl TurnSystem {
         }
     }
 
-    /// Deduct energy for a completed player action
+    /// Deduct energy for a completed player action.
+    ///
+    /// Callers must only invoke this after an action has been moved from
+    /// `pending_actions` into `completed_actions`. The invariant keeps the
+    /// scheduler from double-charging multi-system interactions.
     pub fn consume_player_energy(
         &mut self,
         world: &mut World,
@@ -95,7 +115,11 @@ impl TurnSystem {
         !resources.input_buffer.pending_actions.is_empty()
     }
 
-    /// Process AI turns until the player's energy is full again
+    /// Process AI turns until the player's energy is full again.
+    ///
+    /// AI controllers are expected to consume energy in 100-point chunks; if
+    /// you introduce actors with different step costs, update this loop and the
+    /// documentation table accordingly.
     pub fn process_ai_turns(
         &mut self,
         world: &mut World,
@@ -146,7 +170,10 @@ impl TurnSystem {
         }
     }
 
-    /// Process a complete turn cycle (player action + AI actions until player energy is full)
+    /// Process a complete turn cycle (player action + AI actions until player energy is full).
+    ///
+    /// The caller should compare `self.state` before/after invoking this method
+    /// and publish the appropriate `GameEvent` turn hooks.
     pub fn process_turn_cycle(
         &mut self,
         world: &mut World,

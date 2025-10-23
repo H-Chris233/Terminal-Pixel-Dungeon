@@ -1,11 +1,16 @@
-//! Game loop implementation that orchestrates ECS systems.
+//! Game loop orchestrating the deterministic phase pipeline described in
+//! `docs/turn_system.md`.
+//!
+//! Besides running systems, the loop bridges turn-state transitions to
+//! `GameEvent` notifications and gates AI processing based on the energy
+//! scheduler.
 
 use crate::core::GameEngine;
 use crate::ecs::*;
 use crate::input::*;
 use crate::renderer::*;
 use crate::systems::*;
-use crate::turn_system::TurnSystem;
+use crate::turn_system::{TurnState, TurnSystem};
 use anyhow;
 use save::{AutoSave, SaveSystem};
 use std::time::Duration;
@@ -25,6 +30,8 @@ pub struct GameLoop<R: Renderer, I: InputSource, C: Clock> {
 
 impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> GameLoop<R, I, C> {
     pub fn new(renderer: R, input_source: I, clock: C) -> Self {
+        // The order of this vector defines the phase pipeline described in the
+        // turn-system documentation. Update `docs/turn_system.md` when adjusting it.
         let systems: Vec<Box<dyn System>> = vec![
             Box::new(InputSystem),
             Box::new(MenuSystem), // 菜单系统（需要优先处理菜单动作）
@@ -338,6 +345,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
     fn update_turn(&mut self) -> anyhow::Result<()> {
         // 记录状态以便桥接事件（UIAction → GameEvent）
         let prev_status = self.ecs_world.resources.game_state.game_state;
+        let prev_turn_state = self.turn_system.state.clone();
 
         // Run systems based on turn state
         if self.turn_system.is_player_turn() {
@@ -457,6 +465,9 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                 .process_turn_cycle(&mut self.ecs_world.world, &mut self.ecs_world.resources)?;
         }
 
+        let current_turn_state = self.turn_system.state.clone();
+        self.emit_turn_state_events(prev_turn_state, current_turn_state);
+
         // 桥接：根据 GameStatus 变化发布事件
         self.bridge_status_events(prev_status);
 
@@ -476,6 +487,36 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
         }
 
         Ok(())
+    }
+
+    /// Publish turn-related events whenever the scheduler state changes.
+    ///
+    /// Systems interested in providing HUD cues or analytics can subscribe to
+    /// these high-level hooks instead of polling action buffers directly.
+    fn emit_turn_state_events(&mut self, previous: TurnState, current: TurnState) {
+        use crate::event_bus::GameEvent;
+
+        if previous == current {
+            return;
+        }
+
+        match (previous, current) {
+            (TurnState::PlayerTurn, TurnState::AITurn)
+            | (TurnState::ProcessingPlayerAction, TurnState::AITurn) => {
+                self.ecs_world.publish_event(GameEvent::AITurnStarted);
+            }
+            (TurnState::AITurn, TurnState::PlayerTurn)
+            | (TurnState::ProcessingAIActions, TurnState::PlayerTurn) => {
+                self.ecs_world.publish_event(GameEvent::TurnEnded {
+                    turn: self.ecs_world.resources.clock.turn_count,
+                });
+                self.ecs_world.publish_event(GameEvent::PlayerTurnStarted);
+            }
+            (TurnState::AITurn, TurnState::ProcessingAIActions) => {
+                self.ecs_world.publish_event(GameEvent::AITurnStarted);
+            }
+            _ => {}
+        }
     }
 
     /// 将状态机变化桥接到事件总线
@@ -602,6 +643,7 @@ pub struct HeadlessGameLoop {
 
 impl HeadlessGameLoop {
     pub fn new() -> Self {
+        // Keep the phase order in sync with the documentation and the interactive loop.
         let systems: Vec<Box<dyn System>> = vec![
             Box::new(InputSystem),
             Box::new(MenuSystem), // 菜单系统（需要优先处理菜单动作）
