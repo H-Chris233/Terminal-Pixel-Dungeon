@@ -639,6 +639,7 @@ pub enum ItemType {
     Weapon { damage: u32 },
     Armor { defense: u32 },
     Consumable { effect: ConsumableEffect },
+    Throwable { damage: (u32, u32), range: u8 },
     Key,
     Quest,
 }
@@ -715,6 +716,13 @@ impl ECSItem {
             items::ItemKind::Scroll(_) => ItemType::Consumable {
                 effect: ConsumableEffect::Identify,
             },
+            items::ItemKind::Throwable(t) => ItemType::Throwable {
+                damage: t.damage,
+                range: t.range,
+            },
+            items::ItemKind::Herb(_) => ItemType::Consumable {
+                effect: ConsumableEffect::Healing { amount: 8 },
+            },
             _ => ItemType::Quest, // 其他类型映射为任务物品
         }
     }
@@ -732,12 +740,12 @@ impl ECSItem {
 
     /// 是否为可堆叠物品
     pub fn is_stackable(&self) -> bool {
-        matches!(self.item_type, ItemType::Consumable { .. })
+        matches!(self.item_type, ItemType::Consumable { .. } | ItemType::Throwable { .. })
     }
 
     /// 是否可用
     pub fn is_usable(&self) -> bool {
-        matches!(self.item_type, ItemType::Consumable { .. })
+        matches!(self.item_type, ItemType::Consumable { .. } | ItemType::Throwable { .. })
     }
 
     /// 是否可装备
@@ -1198,33 +1206,52 @@ pub fn set_dungeon_instance(world: &mut World, dungeon: dungeon::Dungeon) {
 
 impl From<&Inventory> for Bag {
     fn from(inventory: &Inventory) -> Self {
+        use game_items::ItemTrait;
+
         let mut bag = Bag::new();
 
-        fn map_item(item: &ECSItem) -> game_items::ItemKind {
-            match &item.item_type {
-                ItemType::Weapon { damage: _ } => game_items::ItemKind::Weapon(
-                    game_items::Weapon::new(1, game_items::weapon::WeaponKind::Dagger),
-                ),
-                ItemType::Armor { defense: _ } => {
-                    game_items::ItemKind::Armor(game_items::Armor::new(1))
-                }
-                ItemType::Consumable { effect: _ } => game_items::ItemKind::Potion(
-                    game_items::Potion::new_alchemy(game_items::potion::PotionKind::Healing),
-                ),
-                ItemType::Key => game_items::ItemKind::Misc(game_items::MiscItem::new(
-                    game_items::misc::MiscKind::Torch,
-                )),
-                ItemType::Quest => game_items::ItemKind::Misc(game_items::MiscItem::new(
-                    game_items::misc::MiscKind::Gold(10),
-                )),
-            }
-        }
+        for slot in &inventory.items {
+            if let Some(item) = &slot.item {
+                if let Ok(mut source_item) = item.to_items_item() {
+                    let quantity = slot.quantity.max(1);
 
-        for item_slot in &inventory.items {
-            if let Some(item) = &item_slot.item {
-                let kind = map_item(item);
-                let hero_item = game_items::Item::new(kind);
-                let _ = bag.add_item(hero_item);
+                    if source_item.is_stackable() {
+                        source_item.quantity = 1;
+                    }
+
+                    for _ in 0..quantity {
+                        let _ = bag.add_item(source_item.clone());
+                    }
+
+                    continue;
+                }
+
+                let fallback_kind = match &item.item_type {
+                    ItemType::Weapon { .. } => game_items::ItemKind::Weapon(
+                        game_items::Weapon::new(1, game_items::weapon::WeaponKind::Dagger),
+                    ),
+                    ItemType::Armor { .. } => {
+                        game_items::ItemKind::Armor(game_items::Armor::new(1))
+                    }
+                    ItemType::Consumable { .. } => game_items::ItemKind::Potion(
+                        game_items::Potion::new_alchemy(game_items::potion::PotionKind::Healing),
+                    ),
+                    ItemType::Throwable { .. } => game_items::ItemKind::Throwable(
+                        game_items::Throwable::new(game_items::ThrowableKind::Dart),
+                    ),
+                    ItemType::Key => game_items::ItemKind::Misc(game_items::MiscItem::new(
+                        game_items::misc::MiscKind::Torch,
+                    )),
+                    ItemType::Quest => game_items::ItemKind::Misc(game_items::MiscItem::new(
+                        game_items::misc::MiscKind::Gold(10),
+                    )),
+                };
+
+                let fallback_item = game_items::Item::new(fallback_kind);
+                let iterations = slot.quantity.max(1);
+                for _ in 0..iterations {
+                    let _ = bag.add_item(fallback_item.clone());
+                }
             }
         }
 
@@ -1252,10 +1279,139 @@ where
 
 impl From<&Bag> for Inventory {
     fn from(bag: &Bag) -> Self {
-        // Conservative fallback: create empty inventory to avoid depending on Bag internals
-        Self {
-            items: Vec::new(),
-            max_slots: 20,
+        let mut items: Vec<ItemSlot> = Vec::new();
+
+        const BAG_DEFAULT_CAPACITY: usize = 64;
+
+        fn push_from_collection(
+            collection: Vec<(game_items::Item, u32)>,
+            slots: &mut Vec<ItemSlot>,
+        ) {
+            for (item, count) in collection {
+                if let Ok(mut ecs_item) = ECSItem::from_items_item(&item) {
+                    let quantity = count.max(1);
+                    ecs_item.quantity = quantity;
+                    ecs_item.identified = !item.needs_identify();
+                    slots.push(ItemSlot {
+                        item: Some(ecs_item),
+                        quantity,
+                    });
+                }
+            }
+        }
+
+        push_from_collection(
+            bag.weapons()
+                .items()
+                .into_iter()
+                .map(|(weapon, count)| (game_items::Item::from(weapon), count))
+                .collect(),
+            &mut items,
+        );
+
+        push_from_collection(
+            bag.armors()
+                .items()
+                .into_iter()
+                .map(|(armor, count)| (game_items::Item::from(armor), count))
+                .collect(),
+            &mut items,
+        );
+
+        push_from_collection(
+            bag.potions()
+                .items()
+                .into_iter()
+                .map(|(potion, count)| (game_items::Item::from(potion), count))
+                .collect(),
+            &mut items,
+        );
+
+        push_from_collection(
+            bag.scrolls()
+                .items()
+                .into_iter()
+                .map(|(scroll, count)| (game_items::Item::from(scroll), count))
+                .collect(),
+            &mut items,
+        );
+
+        push_from_collection(
+            bag.wands()
+                .items()
+                .into_iter()
+                .map(|(wand, count)| (game_items::Item::from(wand), count))
+                .collect(),
+            &mut items,
+        );
+
+        push_from_collection(
+            bag.rings()
+                .items()
+                .into_iter()
+                .map(|(ring, count)| (game_items::Item::from(ring), count))
+                .collect(),
+            &mut items,
+        );
+
+        push_from_collection(
+            bag.seeds()
+                .items()
+                .into_iter()
+                .map(|(seed, count)| (game_items::Item::from(seed), count))
+                .collect(),
+            &mut items,
+        );
+
+        push_from_collection(
+            bag.stones()
+                .items()
+                .into_iter()
+                .map(|(stone, count)| (game_items::Item::from(stone), count))
+                .collect(),
+            &mut items,
+        );
+
+        push_from_collection(
+            bag.food()
+                .items()
+                .into_iter()
+                .map(|(food, count)| (game_items::Item::from(food), count))
+                .collect(),
+            &mut items,
+        );
+
+        push_from_collection(
+            bag.misc()
+                .items()
+                .into_iter()
+                .map(|(misc, count)| (game_items::Item::from(misc), count))
+                .collect(),
+            &mut items,
+        );
+
+        push_from_collection(
+            bag.throwables()
+                .items()
+                .into_iter()
+                .map(|(throwable, count)| (game_items::Item::from(throwable), count))
+                .collect(),
+            &mut items,
+        );
+
+        push_from_collection(
+            bag.herbs()
+                .items()
+                .into_iter()
+                .map(|(herb, count)| (game_items::Item::from(herb), count))
+                .collect(),
+            &mut items,
+        );
+
+        let item_count = items.len();
+        Inventory {
+            items,
+            max_slots: BAG_DEFAULT_CAPACITY.max(item_count + 8),
         }
     }
 }
@@ -1434,5 +1590,48 @@ mod tests {
                 .iter()
                 .any(|msg| msg.contains("从第 1 层进入第 2 层"))
         );
+    }
+
+    #[test]
+    fn test_herb_and_throwable_roundtrip_conversion() {
+        let mut bag = Bag::new();
+
+        let mut herb_item = game_items::Item::new(game_items::ItemKind::Herb(
+            game_items::Herb::new(game_items::HerbKind::Sungrass),
+        ));
+        if let game_items::ItemKind::Herb(ref mut herb) = herb_item.kind {
+            herb.quantity = 3;
+        }
+        herb_item.quantity = 3;
+        bag.add_item(herb_item).expect("failed to add herb stack");
+
+        let mut throwable_item = game_items::Item::new(game_items::ItemKind::Throwable(
+            game_items::Throwable::new(game_items::ThrowableKind::Shuriken),
+        ));
+        if let game_items::ItemKind::Throwable(ref mut throwable) = throwable_item.kind {
+            throwable.quantity = 4;
+        }
+        throwable_item.quantity = 4;
+        bag.add_item(throwable_item)
+            .expect("failed to add throwable stack");
+
+        let inventory: Inventory = (&bag).into();
+        let reconstructed: Bag = (&inventory).into();
+
+        let herb_total: u32 = reconstructed
+            .herbs()
+            .items()
+            .into_iter()
+            .map(|(_, count)| count)
+            .sum();
+        assert_eq!(herb_total, 3);
+
+        let throwable_total: u32 = reconstructed
+            .throwables()
+            .items()
+            .into_iter()
+            .map(|(_, count)| count)
+            .sum();
+        assert_eq!(throwable_total, 4);
     }
 }

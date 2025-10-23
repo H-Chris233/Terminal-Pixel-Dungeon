@@ -203,11 +203,17 @@ impl InventoryRenderer {
     ///    根据物品类型获取颜色
     fn get_item_color(&self, item: &ECSItem) -> Color {
         use crate::ecs::ItemType;
+        use items::ItemTrait;
+
+        if let Ok(reference_item) = item.to_items_item() {
+            return reference_item.rarity().color();
+        }
 
         match &item.item_type {
             ItemType::Weapon { .. } => Color::Red,
             ItemType::Armor { .. } => Color::Blue,
             ItemType::Consumable { .. } => Color::Green,
+            ItemType::Throwable { .. } => Color::LightMagenta,
             ItemType::Key => Color::LightYellow,
             ItemType::Quest => Color::Magenta,
         }
@@ -221,6 +227,7 @@ impl InventoryRenderer {
             ItemType::Weapon { .. } => "⚔️",
             ItemType::Armor { .. } => "🛡️",
             ItemType::Consumable { .. } => "🧪",
+            ItemType::Throwable { .. } => "🎯",
             ItemType::Key => "🔑",
             ItemType::Quest => "📜",
         }

@@ -14,6 +14,7 @@ use crate::BINCODE_CONFIG;
 use crate::Item;
 use crate::ItemCategory;
 use crate::ItemKind;
+use crate::ItemRarity;
 use crate::ItemTrait;
 
 /// 药水系统（完整12种药水）
@@ -79,6 +80,21 @@ impl Potion {
             (base_value as f32 * 0.5) as u32 // 未鉴定药水价值减半
         } else {
             base_value
+        }
+    }
+
+    pub fn rarity_level(&self) -> ItemRarity {
+        match self.kind {
+            PotionKind::Strength | PotionKind::Experience => ItemRarity::Legendary,
+            PotionKind::Invisibility
+            | PotionKind::MindVision
+            | PotionKind::Haste
+            | PotionKind::Purity => ItemRarity::Epic,
+            PotionKind::Healing
+            | PotionKind::Levitation
+            | PotionKind::Frost
+            | PotionKind::LiquidFlame => ItemRarity::Rare,
+            PotionKind::ToxicGas | PotionKind::ParalyticGas => ItemRarity::Common,
         }
     }
 
@@ -337,6 +353,9 @@ impl ItemTrait for Potion {
     }
     fn category(&self) -> ItemCategory {
         ItemCategory::Potion
+    }
+    fn rarity(&self) -> ItemRarity {
+        self.rarity_level()
     }
     fn sort_value(&self) -> u32 {
         match self.kind {
