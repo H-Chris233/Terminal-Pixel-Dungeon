@@ -391,12 +391,16 @@ pub struct GameState {
 pub enum GameStatus {
     #[default]
     Running,
-    Paused,
+    Paused {
+        selected_option: usize,
+    },
     GameOver {
         reason: GameOverReason,
     },
     Victory,
-    MainMenu,
+    MainMenu {
+        selected_option: usize,
+    },
     Inventory {
         selected_item: usize,
     },

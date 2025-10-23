@@ -1982,12 +1982,24 @@ impl System for MenuSystem {
                             // 在确认退出对话框中按 Esc/Backspace 返回到原状态
                             resources.game_state.game_state = match return_to {
                                 crate::ecs::ReturnTo::Running => GameStatus::Running,
-                                crate::ecs::ReturnTo::MainMenu => GameStatus::MainMenu,
+                                crate::ecs::ReturnTo::MainMenu => GameStatus::MainMenu {
+                                    selected_option: 0,
+                                },
                             };
                         }
-                        GameStatus::MainMenu => {
+                        GameStatus::MainMenu { .. } => {
                             // 在主菜单按下 Esc 不再退出，避免误触直接退出
                             // 保持在主菜单，等待明确的退出动作（如 'q'）
+                        }
+                        GameStatus::Paused { .. } => {
+                            // 在暂停菜单按 Esc 返回游戏
+                            resources.game_state.game_state = GameStatus::Running;
+                        }
+                        GameStatus::Running => {
+                            // 游戏中按 Esc 打开暂停菜单
+                            resources.game_state.game_state = GameStatus::Paused {
+                                selected_option: 0,
+                            };
                         }
                         _ => {
                             // 在其他菜单状态，返回游戏或上一级菜单
@@ -1999,7 +2011,7 @@ impl System for MenuSystem {
                 PlayerAction::Quit => {
                     // 触发确认退出对话框
                     let return_to = match resources.game_state.game_state {
-                        GameStatus::MainMenu => crate::ecs::ReturnTo::MainMenu,
+                        GameStatus::MainMenu { .. } => crate::ecs::ReturnTo::MainMenu,
                         _ => crate::ecs::ReturnTo::Running,
                     };
                     resources.game_state.game_state = GameStatus::ConfirmQuit {
@@ -2046,6 +2058,36 @@ impl MenuSystem {
     /// 处理菜单导航
     fn handle_menu_navigation(&self, resources: &mut Resources, direction: &NavigateDirection) {
         match resources.game_state.game_state {
+            GameStatus::MainMenu {
+                ref mut selected_option,
+            } => {
+                // 主菜单导航（5个选项：开始游戏、继续游戏、游戏设置、帮助说明、退出游戏）
+                match direction {
+                    NavigateDirection::Up => {
+                        *selected_option = selected_option.saturating_sub(1);
+                    }
+                    NavigateDirection::Down => {
+                        *selected_option = (*selected_option + 1).min(4);
+                    }
+                    _ => {}
+                }
+            }
+
+            GameStatus::Paused {
+                ref mut selected_option,
+            } => {
+                // 暂停菜单导航（6个选项）
+                match direction {
+                    NavigateDirection::Up => {
+                        *selected_option = selected_option.saturating_sub(1);
+                    }
+                    NavigateDirection::Down => {
+                        *selected_option = (*selected_option + 1).min(5);
+                    }
+                    _ => {}
+                }
+            }
+
             GameStatus::Options {
                 ref mut selected_option,
             } => {
@@ -2055,7 +2097,7 @@ impl MenuSystem {
                         *selected_option = selected_option.saturating_sub(1);
                     }
                     NavigateDirection::Down => {
-                        *selected_option = (*selected_option + 1).min(4); // 假设有4个选项
+                        *selected_option = (*selected_option + 1).min(4); // 5个选项
                     }
                     _ => {}
                 }
@@ -2064,13 +2106,13 @@ impl MenuSystem {
             GameStatus::Inventory {
                 ref mut selected_item,
             } => {
-                // 物品栏导航（简化版本）
+                // 物品栏导航
                 match direction {
                     NavigateDirection::Up => {
                         *selected_item = selected_item.saturating_sub(1);
                     }
                     NavigateDirection::Down => {
-                        *selected_item = (*selected_item + 1).min(9); // 假设最多10格物品栏
+                        *selected_item = (*selected_item + 1).min(9); // 最多10格物品栏
                     }
                     _ => {}
                 }
@@ -2096,9 +2138,78 @@ impl MenuSystem {
     /// 处理菜单选择
     fn handle_menu_selection(&self, resources: &mut Resources) {
         match resources.game_state.game_state {
-            GameStatus::MainMenu => {
-                // 主菜单选择逻辑 - 简化版本，选择第一个选项开始游戏
-                MenuSystem::start_new_game(resources);
+            GameStatus::MainMenu { selected_option } => {
+                // 主菜单选择逻辑
+                match selected_option {
+                    0 => {
+                        // 开始新游戏
+                        MenuSystem::start_new_game(resources);
+                    }
+                    1 => {
+                        // 继续游戏（TODO: 实现加载存档功能）
+                        resources
+                            .game_state
+                            .message_log
+                            .push("继续游戏功能暂未实现".to_string());
+                        MenuSystem::start_new_game(resources); // 临时：直接开始新游戏
+                    }
+                    2 => {
+                        // 游戏设置
+                        resources.game_state.game_state = GameStatus::Options {
+                            selected_option: 0,
+                        };
+                    }
+                    3 => {
+                        // 帮助说明
+                        resources.game_state.game_state = GameStatus::Help;
+                    }
+                    4 => {
+                        // 退出游戏
+                        resources.game_state.game_state = GameStatus::ConfirmQuit {
+                            return_to: crate::ecs::ReturnTo::MainMenu,
+                            selected_option: 1, // 默认选中"否"
+                        };
+                    }
+                    _ => {}
+                }
+            }
+
+            GameStatus::Paused { selected_option } => {
+                // 暂停菜单选择逻辑
+                match selected_option {
+                    0 => {
+                        // 继续游戏
+                        resources.game_state.game_state = GameStatus::Running;
+                    }
+                    1 => {
+                        // 物品栏
+                        resources.game_state.game_state = GameStatus::Inventory {
+                            selected_item: 0,
+                        };
+                    }
+                    2 => {
+                        // 角色信息
+                        resources.game_state.game_state = GameStatus::CharacterInfo;
+                    }
+                    3 => {
+                        // 游戏设置
+                        resources.game_state.game_state = GameStatus::Options {
+                            selected_option: 0,
+                        };
+                    }
+                    4 => {
+                        // 帮助说明
+                        resources.game_state.game_state = GameStatus::Help;
+                    }
+                    5 => {
+                        // 保存并退出
+                        resources.game_state.game_state = GameStatus::ConfirmQuit {
+                            return_to: crate::ecs::ReturnTo::MainMenu,
+                            selected_option: 1,
+                        };
+                    }
+                    _ => {}
+                }
             }
 
             GameStatus::Options { selected_option } => {
@@ -2162,7 +2273,9 @@ impl MenuSystem {
                     // 返回原状态
                     resources.game_state.game_state = match return_to {
                         crate::ecs::ReturnTo::Running => GameStatus::Running,
-                        crate::ecs::ReturnTo::MainMenu => GameStatus::MainMenu,
+                        crate::ecs::ReturnTo::MainMenu => GameStatus::MainMenu {
+                            selected_option: 0,
+                        },
                     };
                 }
             }

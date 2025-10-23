@@ -10,8 +10,8 @@ use ratatui::{
     Frame, Terminal,
     backend::Backend,
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color as TuiColor, Style},
-    text::Line,
+    style::{Color as TuiColor, Modifier, Style},
+    text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
 };
 use std::collections::HashMap;
@@ -96,12 +96,12 @@ impl RatatuiRenderer {
             // 根据游戏状态决定渲染内容
             match ecs_world.resources.game_state.game_state {
                 // === 菜单状态 ===
-                GameStatus::MainMenu => {
+                GameStatus::MainMenu { .. } => {
                     self.menu_renderer
                         .render_main_menu(f, f.area(), &ecs_world.resources);
                 }
 
-                GameStatus::Paused => {
+                GameStatus::Paused { .. } => {
                     self.menu_renderer
                         .render_pause_menu(f, f.area(), &ecs_world.resources);
                 }
@@ -117,8 +117,8 @@ impl RatatuiRenderer {
                 }
 
                 GameStatus::CharacterInfo => {
-                    // TODO: 实现角色信息界面
-                    Self::render_character_info_static(f, f.area(), &ecs_world.resources);
+                    // 渲染角色信息界面
+                    Self::render_character_info(f, f.area(), &ecs_world.world);
                 }
 
                 GameStatus::Inventory { .. } => {
@@ -168,21 +168,195 @@ impl RatatuiRenderer {
         Ok(())
     }
 
-    /// 渲染角色信息界面（临时实现）
-    fn render_character_info_static(frame: &mut Frame<'_>, area: Rect, _resources: &Resources) {
-        let text = vec![
-            Line::from("👤 角色信息"),
+    /// 渲染角色信息界面
+    fn render_character_info(frame: &mut Frame<'_>, area: Rect, world: &hecs::World) {
+        use crate::ecs::{Actor, Hunger, Player, PlayerProgress, Stats, Wealth};
+
+        // 获取玩家数据
+        let player_data = world
+            .query::<(&Stats, &Wealth, &Hunger, &PlayerProgress, &Actor, &Player)>()
+            .iter()
+            .next()
+            .map(|(_, (stats, wealth, hunger, progress, actor, _))| {
+                (
+                    stats.clone(),
+                    wealth.clone(),
+                    hunger.clone(),
+                    progress.clone(),
+                    actor.name.clone(),
+                )
+            });
+
+        if player_data.is_none() {
+            let text = Paragraph::new("⚠️ 未找到角色数据")
+                .style(Style::default().fg(TuiColor::Red))
+                .block(Block::default().title("角色信息").borders(Borders::ALL))
+                .alignment(ratatui::layout::Alignment::Center);
+            frame.render_widget(text, area);
+            return;
+        }
+
+        let (stats, wealth, hunger, progress, actor_name) = player_data.unwrap();
+
+        // 主布局
+        let main_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),  // 标题
+                Constraint::Min(10),    // 内容
+                Constraint::Length(2),  // 底部提示
+            ])
+            .split(area);
+
+        // 标题
+        let title = Paragraph::new(format!("👤 {} - {}", actor_name, progress.class))
+            .style(
+                Style::default()
+                    .fg(TuiColor::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Double)
+                    .border_style(Style::default().fg(TuiColor::Cyan)),
+            )
+            .alignment(ratatui::layout::Alignment::Center);
+        frame.render_widget(title, main_chunks[0]);
+
+        // 内容区域
+        let content_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(50), // 左侧：基础属性
+                Constraint::Percentage(50), // 右侧：战斗属性
+            ])
+            .split(main_chunks[1]);
+
+        // 左侧：基础属性
+        let basic_info = vec![
             Line::from(""),
-            Line::from("这里将显示详细的角色属性和成长数据"),
-            Line::from("按 Esc 返回游戏"),
+            Line::from(vec![
+                Span::styled("等级: ", Style::default().fg(TuiColor::Gray)),
+                Span::styled(
+                    format!("{}", stats.level),
+                    Style::default().fg(TuiColor::Yellow).add_modifier(Modifier::BOLD),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("经验: ", Style::default().fg(TuiColor::Gray)),
+                Span::styled(
+                    format!("{}/{}", stats.experience, stats.level * 100),
+                    Style::default().fg(TuiColor::Magenta),
+                ),
+            ]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("生命值: ", Style::default().fg(TuiColor::Gray)),
+                Span::styled(
+                    format!("{}/{}", stats.hp, stats.max_hp),
+                    Style::default().fg(TuiColor::Red),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("力量: ", Style::default().fg(TuiColor::Gray)),
+                Span::styled(
+                    format!("{}", progress.strength),
+                    Style::default().fg(TuiColor::Green),
+                ),
+            ]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("金币: ", Style::default().fg(TuiColor::Gray)),
+                Span::styled(
+                    format!("💰 {}", wealth.gold),
+                    Style::default().fg(TuiColor::Yellow),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("饱食度: ", Style::default().fg(TuiColor::Gray)),
+                Span::styled(
+                    format!("🍖 {}/10", hunger.satiety),
+                    Style::default().fg(if hunger.is_hungry() {
+                        TuiColor::Red
+                    } else {
+                        TuiColor::Green
+                    }),
+                ),
+            ]),
         ];
 
-        let paragraph = Paragraph::new(text)
+        let basic_paragraph = Paragraph::new(basic_info)
             .style(Style::default().fg(TuiColor::White))
-            .block(Block::default().title("角色信息").borders(Borders::ALL))
-            .wrap(ratatui::widgets::Wrap { trim: true });
+            .block(
+                Block::default()
+                    .title("═══ 基础属性 ═══")
+                    .title_alignment(ratatui::layout::Alignment::Center)
+                    .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_style(Style::default().fg(TuiColor::Green)),
+            );
+        frame.render_widget(basic_paragraph, content_chunks[0]);
 
-        frame.render_widget(paragraph, area);
+        // 右侧：战斗属性
+        let combat_info = vec![
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("攻击力: ", Style::default().fg(TuiColor::Gray)),
+                Span::styled(
+                    format!("{}", stats.attack),
+                    Style::default().fg(TuiColor::Red).add_modifier(Modifier::BOLD),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("防御力: ", Style::default().fg(TuiColor::Gray)),
+                Span::styled(
+                    format!("{}", stats.defense),
+                    Style::default().fg(TuiColor::Blue).add_modifier(Modifier::BOLD),
+                ),
+            ]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("命中率: ", Style::default().fg(TuiColor::Gray)),
+                Span::styled(
+                    format!("{}", stats.accuracy),
+                    Style::default().fg(TuiColor::Yellow),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("闪避率: ", Style::default().fg(TuiColor::Gray)),
+                Span::styled(
+                    format!("{}", stats.evasion),
+                    Style::default().fg(TuiColor::Cyan),
+                ),
+            ]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("职业: ", Style::default().fg(TuiColor::Gray)),
+                Span::styled(
+                    progress.class.clone(),
+                    Style::default().fg(TuiColor::Magenta).add_modifier(Modifier::BOLD),
+                ),
+            ]),
+        ];
+
+        let combat_paragraph = Paragraph::new(combat_info)
+            .style(Style::default().fg(TuiColor::White))
+            .block(
+                Block::default()
+                    .title("═══ 战斗属性 ═══")
+                    .title_alignment(ratatui::layout::Alignment::Center)
+                    .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_style(Style::default().fg(TuiColor::Red)),
+            );
+        frame.render_widget(combat_paragraph, content_chunks[1]);
+
+        // 底部提示
+        let hint = Paragraph::new("按 Esc 返回游戏")
+            .style(Style::default().fg(TuiColor::Gray))
+            .alignment(ratatui::layout::Alignment::Center);
+        frame.render_widget(hint, main_chunks[2]);
     }
 
     /// 渲染消息日志（改进版）

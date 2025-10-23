@@ -69,8 +69,10 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
     pub fn initialize(&mut self) -> anyhow::Result<()> {
         self.renderer.init()?;
 
-        // 设置初始状态为主菜单
-        self.ecs_world.resources.game_state.game_state = GameStatus::MainMenu;
+        // 设置初始状态为主菜单，默认选中第一项
+        self.ecs_world.resources.game_state.game_state = GameStatus::MainMenu {
+            selected_option: 0,
+        };
 
         // 初始化基础实体（确保世界非空，便于测试与渲染）
         self.initialize_entities();
@@ -486,8 +488,8 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
         // Running ↔ 菜单/特殊状态
         let was_menu = matches!(
             prev,
-            GameStatus::MainMenu
-                | GameStatus::Paused
+            GameStatus::MainMenu { .. }
+                | GameStatus::Paused { .. }
                 | GameStatus::Options { .. }
                 | GameStatus::Inventory { .. }
                 | GameStatus::Help
@@ -496,8 +498,8 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
         );
         let is_menu = matches!(
             curr,
-            GameStatus::MainMenu
-                | GameStatus::Paused
+            GameStatus::MainMenu { .. }
+                | GameStatus::Paused { .. }
                 | GameStatus::Options { .. }
                 | GameStatus::Inventory { .. }
                 | GameStatus::Help
@@ -703,8 +705,8 @@ fn key_event_to_player_action_from_internal(
 ) -> Option<PlayerAction> {
     // 根据游戏状态决定如何解释按键（复用 input.rs 的语义）
     match game_state {
-        GameStatus::MainMenu
-        | GameStatus::Paused
+        GameStatus::MainMenu { .. }
+        | GameStatus::Paused { .. }
         | GameStatus::Options { .. }
         | GameStatus::Inventory { .. }
         | GameStatus::Help
