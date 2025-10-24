@@ -1726,8 +1726,9 @@ impl DungeonSystem {
                         evasion: 10,
                         level: enemy.attack_range as u32,
                         experience: enemy.exp_value,
+                        class: None,
                     },
-                    Energy {
+
                         current: 100,
                         max: 100,
                         regeneration_rate: 1,
@@ -1886,6 +1887,7 @@ impl DungeonSystem {
                     evasion: 10,
                     level: level as u32,
                     experience: 10 + (level as u32 * 5),
+                    class: None,
                 },
                 Energy {
                     current: 100,

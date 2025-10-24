@@ -64,6 +64,7 @@ impl EntityFactory {
                 evasion: 20,
                 level: 1,
                 experience: 0,
+                class: Some(class.clone()),
             },
             Energy {
                 current: 100,
@@ -83,7 +84,7 @@ impl EntityFactory {
             },
             crate::ecs::Hunger::new(5), // 初始饱食度为5（半饱）
             crate::ecs::Wealth::new(0), // 初始金币为0
-            crate::ecs::PlayerProgress::new(10, class.to_string()), // 使用选中的职业
+            crate::ecs::PlayerProgress::new(10, class.clone(), hero::class::SkillState::default()), // 使用选中的职业
             crate::ecs::Player, // Player marker component
         ))
     }
@@ -118,6 +119,7 @@ impl EntityFactory {
                 evasion: 10,
                 level: 1,
                 experience: 10,
+                class: None,
             },
             Energy {
                 current: 100,

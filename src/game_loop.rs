@@ -120,6 +120,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                 evasion: 20,
                 level: 1,
                 experience: 0,
+                class: Some(hero::class::Class::Warrior),
             },
             Inventory {
                 items: vec![],
@@ -128,7 +129,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
             // ========== 新增：玩家专属组件 ==========
             crate::ecs::Hunger::new(5), // 初始饱食度为5（半饱）
             crate::ecs::Wealth::new(0), // 初始金币为0
-            crate::ecs::PlayerProgress::new(10, "Warrior".to_string()), // 初始力量10，战士职业
+            crate::ecs::PlayerProgress::new(10, hero::class::Class::Warrior, hero::class::SkillState::default()), // 初始力量10，战士职业
             Viewshed {
                 range: 8,
                 visible_tiles: vec![],
@@ -166,6 +167,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                 evasion: 10,
                 level: 1,
                 experience: 10,
+                class: None,
             },
             AI {
                 ai_type: AIType::Aggressive,
@@ -723,6 +725,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                 evasion: 10,
                 level: 1,
                 experience: 10,
+                class: None,
             },
             Energy {
                 current: 100,
