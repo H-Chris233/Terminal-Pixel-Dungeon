@@ -17,6 +17,32 @@ impl EntityFactory {
 
     /// 创建玩家实体
     pub fn create_player(&self, world: &mut World, x: i32, y: i32, class: Class) -> Entity {
+        // 使用职业特定的基础属性
+        let base_hp = class.base_hp();
+        let attack_mod = class.attack_mod();
+        let defense_mod = class.defense_mod();
+        
+        // 基础攻击和防御值
+        let base_attack = 10;
+        let base_defense = 5;
+        
+        // 应用职业修正
+        let attack = (base_attack as f32 * attack_mod) as u32;
+        let defense = (base_defense as f32 * defense_mod) as u32;
+        
+        // 创建包含初始装备的物品栏
+        let starting_kit = class.starting_kit();
+        let mut inventory_items = Vec::new();
+        
+        for item in starting_kit {
+            if let Ok(ecs_item) = crate::ecs::ECSItem::from_items_item(&item) {
+                inventory_items.push(crate::ecs::ItemSlot {
+                    item: Some(ecs_item),
+                    quantity: item.quantity,
+                });
+            }
+        }
+        
         world.spawn((
             Position { x, y, z: 0 },
             Renderable {
@@ -26,16 +52,16 @@ impl EntityFactory {
                 order: 10,
             },
             Actor {
-                name: "Player".to_string(),
+                name: format!("{} ({})", "Player", class),
                 faction: Faction::Player,
             },
             Stats {
-                hp: 100,
-                max_hp: 100,
-                attack: 10,
-                defense: 5,
-                accuracy: 10,
-                evasion: 10,
+                hp: base_hp,
+                max_hp: base_hp,
+                attack,
+                defense,
+                accuracy: 80,
+                evasion: 20,
                 level: 1,
                 experience: 0,
             },
@@ -52,9 +78,13 @@ impl EntityFactory {
                 algorithm: crate::ecs::FovAlgorithm::default(),
             },
             Inventory {
-                items: vec![],
+                items: inventory_items,
                 max_slots: 20, // 玩家背包容量为20
             },
+            crate::ecs::Hunger::new(5), // 初始饱食度为5（半饱）
+            crate::ecs::Wealth::new(0), // 初始金币为0
+            crate::ecs::PlayerProgress::new(10, class.to_string()), // 使用选中的职业
+            crate::ecs::Player, // Player marker component
         ))
     }
 

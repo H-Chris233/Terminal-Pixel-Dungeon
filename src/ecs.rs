@@ -385,6 +385,7 @@ pub struct GameState {
     pub terminal_width: u16,
     pub terminal_height: u16,
     pub frame_count: u64, // 渲染帧计数器，用于动画和缓存管理
+    pub selected_class: Option<String>, // 临时存储选中的职业，用于初始化游戏
 }
 
 #[derive(Default, Clone, Copy, PartialEq, Debug)]
@@ -400,6 +401,9 @@ pub enum GameStatus {
     Victory,
     MainMenu {
         selected_option: usize,
+    },
+    ClassSelection {
+        cursor: usize,
     },
     Inventory {
         selected_item: usize,
