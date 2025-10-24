@@ -3,6 +3,7 @@
 use anyhow::{Context, Result};
 use bincode::{Decode, Encode, config};
 use error::GameError;
+use hero::class::{Class, SkillState};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use std::{
@@ -18,7 +19,7 @@ pub struct SaveMetadata {
     pub timestamp: SystemTime,
     pub dungeon_depth: usize,
     pub hero_name: String,
-    pub hero_class: String,
+    pub hero_class: Class,
     pub play_time: f64, // 游戏时长(秒)
 }
 
@@ -26,6 +27,9 @@ pub struct SaveMetadata {
 #[derive(Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct SaveData {
     pub metadata: SaveMetadata,
+    #[serde(default)]
+    #[bincode(default)]
+    pub hero_skill_state: SkillState,
     pub hero: hero::Hero,
     pub dungeon: dungeon::Dungeon,
     pub game_seed: u64,
@@ -232,5 +236,52 @@ impl AutoSave {
     /// 设置新的自动保存间隔
     pub fn set_save_interval(&mut self, interval: Duration) {
         self.interval = interval;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bincode::config;
+    use hero::class::Class;
+    use hero::Hero;
+
+    #[test]
+    fn save_data_roundtrip_preserves_class_and_skills() {
+        let mut hero = Hero::with_seed(Class::Mage, 99);
+        hero.name = "Archivist".to_string();
+        hero.class_skills
+            .unlocked_talents
+            .push("arcane_focus".to_string());
+        hero.class_skills.active_skill = Some("fireball".to_string());
+
+        let metadata = SaveMetadata {
+            timestamp: SystemTime::now(),
+            dungeon_depth: 3,
+            hero_name: hero.name.clone(),
+            hero_class: hero.class.clone(),
+            play_time: 128.5,
+        };
+
+        let hero_skill_state = hero.class_skills.clone();
+        let dungeon = dungeon::Dungeon::generate(1, 4242).expect("generate dungeon");
+
+        let save_data = SaveData {
+            metadata,
+            hero_skill_state: hero_skill_state.clone(),
+            hero,
+            dungeon,
+            game_seed: 4242,
+        };
+
+        let cfg = config::standard();
+        let encoded = bincode::encode_to_vec(&save_data, cfg).expect("serialize save data");
+        let (decoded, _) = bincode::decode_from_slice::<SaveData, _>(&encoded, cfg)
+            .expect("deserialize save data");
+
+        assert_eq!(decoded.metadata.hero_class, Class::Mage);
+        assert_eq!(decoded.hero.class, Class::Mage);
+        assert_eq!(decoded.hero_skill_state, hero_skill_state);
+        assert_eq!(decoded.hero.class_skills, hero_skill_state);
     }
 }

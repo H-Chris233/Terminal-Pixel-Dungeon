@@ -3,7 +3,7 @@ use crate::bag::Bag;
 use crate::bag::BagError;
 
 use crate::{
-    class::Class,
+    class::{Class, SkillState},
     effects::{EffectManager, EffectType},
     rng::HeroRng,
 };
@@ -63,6 +63,9 @@ pub struct Hero {
     pub effects: EffectManager,
     pub rng: HeroRng,
     pub bag: Bag,
+    #[serde(default)]
+    #[bincode(default)]
+    pub class_skills: SkillState,
 
     // 用于事件总线的ID
     pub entity_id: Option<u32>,
@@ -93,6 +96,7 @@ impl Hero {
             effects: EffectManager::new(),
             rng: HeroRng::new(seed),
             bag: Bag::new(),
+            class_skills: SkillState::default(),
             entity_id: None,
         };
 

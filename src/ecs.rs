@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use crate::event_bus::{EventBus, EventHandler, GameEvent, LogLevel, Priority};
 use achievements::AchievementsManager;
 use error::GameError;
-use hero::{Bag, Hero};
+use hero::{class::{Class, SkillState}, Bag, Hero};
 use items as game_items;
 use save::SaveData;
 use std::sync::{Arc, Mutex};
@@ -437,7 +437,7 @@ pub struct GameState {
     pub terminal_width: u16,
     pub terminal_height: u16,
     pub frame_count: u64, // 渲染帧计数器，用于动画和缓存管理
-    pub selected_class: Option<String>, // 临时存储选中的职业，用于初始化游戏
+    pub selected_class: Option<Class>, // 临时存储选中的职业，用于初始化游戏
 }
 
 #[derive(Default, Clone, Copy, PartialEq, Debug)]
@@ -657,6 +657,9 @@ pub struct Stats {
     pub evasion: u32,
     pub level: u32,
     pub experience: u32,
+    #[serde(default)]
+    #[bincode(default)]
+    pub class: Option<Class>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -992,7 +995,10 @@ impl Wealth {
 pub struct PlayerProgress {
     pub turns: u32,    // 游戏总回合数
     pub strength: u8,  // 力量值（影响装备需求）
-    pub class: String, // 职业类型（存储为字符串以避免循环依赖）
+    pub class: Class,  // 职业类型
+    #[serde(default)]
+    #[bincode(default)]
+    pub skill_state: SkillState, // 职业技能状态
 }
 
 impl Default for PlayerProgress {
@@ -1000,17 +1006,19 @@ impl Default for PlayerProgress {
         Self {
             turns: 0,
             strength: 10,
-            class: "Warrior".to_string(),
+            class: Class::default(),
+            skill_state: SkillState::default(),
         }
     }
 }
 
 impl PlayerProgress {
-    pub fn new(strength: u8, class: String) -> Self {
+    pub fn new(strength: u8, class: Class, skill_state: SkillState) -> Self {
         Self {
             turns: 0,
             strength,
             class,
+            skill_state,
         }
     }
 
@@ -1069,7 +1077,8 @@ pub enum EffectType {
 // Functions to convert between ECS components and hero module structures
 impl From<&Stats> for Hero {
     fn from(stats: &Stats) -> Self {
-        let mut hero = Hero::with_seed(hero::class::Class::Warrior, 12345);
+        let class = stats.class.clone().unwrap_or_default();
+        let mut hero = Hero::with_seed(class, 12345);
         hero.hp = stats.hp;
         hero.max_hp = stats.max_hp;
         hero.base_attack = stats.attack;
@@ -1091,6 +1100,7 @@ impl From<&Hero> for Stats {
             evasion: 20,  // Default evasion
             level: hero.level,
             experience: hero.experience,
+            class: Some(hero.class.clone()),
         }
     }
 }
@@ -1117,7 +1127,8 @@ impl From<&Hero> for PlayerProgress {
         Self {
             turns: hero.turns,
             strength: hero.strength,
-            class: format!("{:?}", hero.class),
+            class: hero.class.clone(),
+            skill_state: hero.class_skills.clone(),
         }
     }
 }
@@ -1164,8 +1175,8 @@ impl ECSWorld {
             if let Ok(progress) = self.world.get::<&PlayerProgress>(entity) {
                 new_hero.turns = progress.turns;
                 new_hero.strength = progress.strength;
-                // class 从 progress.class 字符串恢复（需要解析）
-                // 暂时保持原有的 class
+                new_hero.class = progress.class.clone();
+                new_hero.class_skills = progress.skill_state.clone();
             }
 
             hero = Some(new_hero);
@@ -1175,20 +1186,21 @@ impl ECSWorld {
         // Extract dungeon data
         let dungeon = get_dungeon_clone(&self.world).ok_or_else(|| GameError::InvalidLevelData)?;
 
+        let hero = hero.ok_or_else(|| GameError::InvalidHeroData)?;
+        let hero_class = hero.class.clone();
+        let hero_skill_state = hero.class_skills.clone();
+
         // Create save data
         let save_data = SaveData {
             metadata: save::SaveMetadata {
                 timestamp: std::time::SystemTime::now(),
                 dungeon_depth: self.resources.game_state.depth,
-                hero_name: hero
-                    .as_ref()
-                    .map_or("Unknown".to_string(), |h| h.name.clone()),
-                hero_class: hero
-                    .as_ref()
-                    .map_or("Unknown".to_string(), |h| format!("{:?}", h.class)),
+                hero_name: hero.name.clone(),
+                hero_class,
                 play_time: self.resources.clock.elapsed_time.as_secs_f64(),
             },
-            hero: hero.ok_or_else(|| GameError::InvalidHeroData)?,
+            hero_skill_state,
+            hero,
             dungeon,
             game_seed: 0, // 需要保存实际的种子值
         };
@@ -1207,7 +1219,10 @@ impl ECSWorld {
         set_dungeon_instance(&mut self.world, save_data.dungeon);
 
         // Convert hero to ECS components and spawn player entity
-        let hero = save_data.hero;
+        let mut hero = save_data.hero;
+        hero.class = save_data.metadata.hero_class.clone();
+        hero.class_skills = save_data.hero_skill_state.clone();
+
         let stats: Stats = (&hero).into();
         let inventory: Inventory = (&hero.bag).into();
 
@@ -1544,8 +1559,9 @@ mod tests {
                 evasion: 20,
                 level: 1,
                 experience: 0,
+                class: Some(Class::Warrior),
             },
-        ));
+
 
         let enemy = world.world.spawn((
             Position::new(1, 0, 0),
@@ -1562,8 +1578,9 @@ mod tests {
                 evasion: 10,
                 level: 1,
                 experience: 0,
+                class: None,
             },
-        ));
+
 
         // 发布战斗开始事件
         world.publish_event(GameEvent::CombatStarted {

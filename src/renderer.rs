@@ -341,7 +341,7 @@ impl RatatuiRenderer {
             Line::from(vec![
                 Span::styled("职业: ", Style::default().fg(TuiColor::Gray)),
                 Span::styled(
-                    progress.class.clone(),
+                    format!("{}", progress.class),
                     Style::default().fg(TuiColor::Magenta).add_modifier(Modifier::BOLD),
                 ),
             ]),

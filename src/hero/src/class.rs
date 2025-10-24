@@ -17,6 +17,25 @@ use items::{
     weapon::{Weapon, WeaponKind},
 };
 
+/// 表示职业技能的持久化状态（技能解锁、正在激活的技能等）
+#[derive(
+    Default,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    Encode,
+    Decode,
+    Serialize,
+    Deserialize,
+)]
+pub struct SkillState {
+    /// 已解锁的职业技能标识列表（用于未来的职业技能树）
+    pub unlocked_talents: Vec<String>,
+    /// 当前激活的职业技能（如果有）
+    pub active_skill: Option<String>,
+}
+
 /// 英雄职业枚举（SPD核心四职业）
 #[derive(
     Default,
