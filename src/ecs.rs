@@ -967,6 +967,30 @@ impl PlayerProgress {
     }
 }
 
+// ========== Boss 相关组件 ==========
+
+/// Boss 标记组件
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BossComponent {
+    pub boss_type: combat::boss::BossType,
+    pub current_phase: combat::boss::BossPhase,
+    pub shield: u32,
+}
+
+/// Boss 技能冷却组件
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BossSkillComponent {
+    pub cooldowns: combat::boss::SkillCooldowns,
+    pub available_skills: Vec<combat::boss::BossSkill>,
+}
+
+/// Boss 击败记录组件（记录玩家击败的 Boss）
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+pub struct BossDefeatRecord {
+    pub defeated_bosses: Vec<combat::boss::BossType>,
+    pub first_kill_rewards_claimed: Vec<combat::boss::BossType>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ActiveEffect {
     pub effect_type: EffectType,

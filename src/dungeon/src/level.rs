@@ -12,8 +12,10 @@ pub mod rooms;
 pub mod tiles;
 
 use crate::TrapEffect;
+use crate::boss_room::{BossRoom};
 use crate::level::tiles::{DoorState, StairDirection, TerrainType, Tile, TileInfo};
 use crate::trap::{Trap, TrapKind};
+use combat::boss::{Boss, BossType};
 use combat::enemy::{Enemy, EnemyKind};
 use items::{
     Armor, Food, Herb, Item, ItemKind, MiscItem, Potion, Ring, Scroll, Seed, Stone, Throwable,
@@ -33,12 +35,19 @@ pub struct Level {
     pub height: i32,
     pub visible_tiles: HashSet<(i32, i32)>,
     pub explored_tiles: HashSet<(i32, i32)>,
+    pub boss_room: Option<BossRoom>,
+    pub depth: usize,
 }
 
 impl Level {
-    /// 生成一个新的地牢层级
+    /// 生成一个新的地牢层级（向后兼容）
     pub fn generate(seed: u64) -> anyhow::Result<Self> {
-        let mut rng = Pcg32::seed_from_u64(seed);
+        Self::generate_with_depth(seed, 1, false)
+    }
+
+    /// 生成指定深度的地牢层级，支持 Boss 房间
+    pub fn generate_with_depth(seed: u64, depth: usize, is_boss_level: bool) -> anyhow::Result<Self> {
+        let mut rng = Pcg32::seed_from_u64(seed.wrapping_add(depth as u64));
         let width = rng.random_range(50..100);
         let height = rng.random_range(50..100);
 
@@ -68,8 +77,26 @@ impl Level {
             .map(|r| r.center())
             .unwrap_or((width - 2, height - 2));
 
-        // 放置敌人和物品
-        let (enemies, items) = Self::place_entities(&mut rng, &rooms);
+        // Boss 房间生成
+        let boss_room = if is_boss_level {
+            if let Some(boss_type) = BossType::for_depth(depth) {
+                // 在地图中心生成 Boss 房间
+                let center_x = width / 2;
+                let center_y = height / 2;
+                Some(BossRoom::new(boss_type, center_x, center_y, &mut rng))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        // 放置敌人和物品（如果不是 Boss 层）
+        let (enemies, items) = if is_boss_level {
+            (Vec::new(), Vec::new()) // Boss 层只有 Boss，暂时不放置其他敌人
+        } else {
+            Self::place_entities(&mut rng, &rooms)
+        };
 
         // 创建地牢实例
         let mut level = Self {
@@ -84,10 +111,17 @@ impl Level {
             height,
             visible_tiles: HashSet::new(),
             explored_tiles: HashSet::new(),
+            boss_room,
+            depth,
         };
 
         // 应用生成的布局到瓦片
         level.apply_layout_to_tiles(&mut rng);
+
+        // 如果有 Boss 房间，生成竞技场
+        if let Some(ref boss_room) = level.boss_room {
+            level.generate_boss_arena(&boss_room.clone());
+        }
 
         Ok(level)
     }
@@ -460,6 +494,64 @@ impl Level {
             None
         }
     }
+
+    /// 生成 Boss 竞技场
+    fn generate_boss_arena(&mut self, boss_room: &BossRoom) {
+        let (min_x, min_y, max_x, max_y) = boss_room.get_arena_bounds();
+
+        // 清空竞技场区域，将其设为地板
+        for y in min_y..=max_y {
+            for x in min_x..=max_x {
+                if boss_room.is_in_arena(x, y) {
+                    if let Some(tile) = self.get_tile_mut(x, y) {
+                        tile.info = TileInfo::new(true, false, TerrainType::Floor);
+                    }
+                }
+            }
+        }
+
+        // 添加竞技场边界墙
+        for y in min_y..=max_y {
+            for x in min_x..=max_x {
+                let dx = (x - boss_room.arena_center.0) as f32;
+                let dy = (y - boss_room.arena_center.1) as f32;
+                let distance = (dx * dx + dy * dy).sqrt();
+                
+                // 在竞技场边缘放置墙壁
+                if distance >= (boss_room.arena_radius - 1) as f32 
+                    && distance <= (boss_room.arena_radius + 1) as f32 {
+                    if let Some(tile) = self.get_tile_mut(x, y) {
+                        tile.info = TileInfo::new(false, true, TerrainType::Wall);
+                    }
+                }
+            }
+        }
+
+        // 放置掩体
+        for &(ox, oy) in &boss_room.obstacles {
+            if let Some(tile) = self.get_tile_mut(ox, oy) {
+                tile.info = TileInfo::new(false, true, TerrainType::Wall);
+            }
+        }
+
+        // 创建入口
+        let entrance_x = boss_room.entrance_x;
+        let entrance_y = boss_room.entrance_y;
+        if let Some(tile) = self.get_tile_mut(entrance_x, entrance_y) {
+            tile.info = TileInfo::new(true, false, TerrainType::Floor);
+        }
+
+        // 创建从入口到竞技场的走廊
+        let corridor_tiles = Corridor::create_corridor_tiles(
+            (entrance_x, entrance_y),
+            boss_room.arena_center,
+        );
+        for (x, y) in corridor_tiles {
+            if let Some(tile) = self.get_tile_mut(x, y) {
+                tile.info = TileInfo::new(true, false, TerrainType::Floor);
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
@@ -535,7 +627,7 @@ impl Corridor {
     }
 
     /// 创建连接两个点的走廊瓦片
-    fn create_corridor_tiles(start: (i32, i32), end: (i32, i32)) -> Vec<(i32, i32)> {
+    pub fn create_corridor_tiles(start: (i32, i32), end: (i32, i32)) -> Vec<(i32, i32)> {
         let mut tiles = Vec::new();
         let (mut x, mut y) = start;
         let (end_x, end_y) = end;
