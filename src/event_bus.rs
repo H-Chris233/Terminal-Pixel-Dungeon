@@ -121,11 +121,20 @@ pub enum GameEvent {
     StarvationDamage { entity: u32, damage: u32 },
 
     // ===== 游戏状态事件 =====
-    /// 回合结束
+    /// 回合结束（AI 结算完成并且状态重新切换到玩家）
+    ///
+    /// 由 `game_loop::GameLoop::emit_turn_state_events` 在 `TurnState::AITurn →
+    /// TurnState::PlayerTurn` 转换时触发，`turn` 对应当前 `GameClock.turn_count`。
     TurnEnded { turn: u32 },
-    /// 玩家回合开始
+    /// 玩家回合开始（UI 可以刷新提示并允许输入）
+    ///
+    /// 在 turn scheduler 从 AI 阶段切回玩家阶段时触发，由
+    /// `GameLoop::emit_turn_state_events` 自动发布。
     PlayerTurnStarted,
-    /// AI 回合开始
+    /// AI 回合开始（玩家能量不足或动作已消耗完毕）
+    ///
+    /// 在 turn scheduler 将状态从玩家切到 AI 时触发，由
+    /// `GameLoop::emit_turn_state_events` 自动发布，用于驱动 AI HUD、日志等扩展。
     AITurnStarted,
     /// 游戏结束
     GameOver { reason: String },

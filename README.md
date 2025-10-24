@@ -62,6 +62,8 @@ Systems contain the game logic and operate on entities with specific component c
 - `TimeSystem`: Manages game time progression
 - `DungeonSystem`: Manages dungeon generation and level management
 
+For a detailed breakdown of the energy-driven turn scheduler, phase order, and extension points, see [docs/turn_system.md](docs/turn_system.md).
+
 ## Installation
 
 ### Prerequisites

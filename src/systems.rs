@@ -16,6 +16,12 @@ pub enum SystemResult {
     Error(String),
 }
 
+/// A deterministic phase that participates in the turn pipeline.
+///
+/// Systems are executed in the order defined by `game_loop::GameLoop::systems`;
+/// earlier systems have the opportunity to consume actions before later ones
+/// inspect the buffers. When adding new systems, keep the documentation in
+/// `docs/turn_system.md` up to date.
 pub trait System: Send {
     fn name(&self) -> &str;
     fn run(&mut self, world: &mut World, resources: &mut Resources) -> SystemResult;
@@ -53,6 +59,8 @@ impl System for TimeSystem {
     }
 }
 
+/// Resolves `PlayerAction::Move` entries and flags successful steps so the
+/// turn scheduler can deduct energy exactly once.
 pub struct MovementSystem;
 
 impl System for MovementSystem {
@@ -173,6 +181,9 @@ fn find_player_entity(world: &World) -> Option<Entity> {
     None
 }
 
+/// Applies AI decision making each frame. Any movement or attack performed
+/// here must spend energy inside `TurnSystem::process_ai_turns` (default 100 per
+/// step).
 pub struct AISystem;
 
 impl System for AISystem {
@@ -267,6 +278,8 @@ impl AISystem {
     }
 }
 
+/// Bridges `PlayerAction::Attack` into combat resolution and emits events via
+/// `CombatSystem::run_with_events` so UI/logging layers stay in sync.
 pub struct CombatSystem;
 
 impl System for CombatSystem {
@@ -834,6 +847,9 @@ impl System for EffectSystem {
     }
 }
 
+/// Legacy energy refill system kept for backwards compatibility with older
+/// pipelines. The interactive loop skips it because `TurnSystem` now manages
+/// regeneration explicitly.
 pub struct EnergySystem;
 
 impl System for EnergySystem {
