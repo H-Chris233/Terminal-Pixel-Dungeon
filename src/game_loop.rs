@@ -336,6 +336,14 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
 
     /// Update game state by running all systems for a turn
     fn update_turn(&mut self) -> anyhow::Result<()> {
+        // 检查是否需要初始化新游戏（从职业选择进入游戏）
+        if let GameStatus::Running = self.ecs_world.resources.game_state.game_state {
+            if let Some(class_name) = self.ecs_world.resources.game_state.selected_class.take() {
+                // 清理旧的游戏世界
+                self.reinitialize_with_class(&class_name)?;
+            }
+        }
+
         // 记录状态以便桥接事件（UIAction → GameEvent）
         let prev_status = self.ecs_world.resources.game_state.game_state;
 
@@ -589,6 +597,105 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
         }
         Ok(())
     }
+
+    /// 使用选定的职业重新初始化游戏世界
+    fn reinitialize_with_class(&mut self, class_name: &str) -> anyhow::Result<()> {
+        use hero::class::Class;
+        use std::str::FromStr;
+        
+        // 解析职业
+        let class = Class::from_str(class_name).unwrap_or(Class::Warrior);
+        
+        // 清空当前世界
+        self.ecs_world.world.clear();
+        
+        // 重新生成地牢
+        self.ecs_world.generate_and_set_dungeon(10, 12345)?;
+        
+        // 获取起始位置
+        let (start_x, start_y, _start_z) =
+            if let Some(dungeon) = crate::ecs::get_dungeon_clone(&self.ecs_world.world) {
+                let lvl = dungeon.current_level();
+                (lvl.stair_up.0, lvl.stair_up.1, dungeon.depth as i32 - 1)
+            } else {
+                (10, 10, 0)
+            };
+        
+        // 使用 EntityFactory 创建玩家实体
+        let factory = crate::core::EntityFactory::new();
+        let _player_entity = factory.create_player(
+            &mut self.ecs_world.world,
+            start_x,
+            start_y,
+            class,
+        );
+        
+        // 添加一些测试敌人
+        self.ecs_world.world.spawn((
+            Position::new(15, 10, 0),
+            Actor {
+                name: "Goblin".to_string(),
+                faction: Faction::Enemy,
+            },
+            Renderable {
+                symbol: 'g',
+                fg_color: Color::Green,
+                bg_color: Some(Color::Black),
+                order: 5,
+            },
+            Stats {
+                hp: 30,
+                max_hp: 30,
+                attack: 8,
+                defense: 2,
+                accuracy: 70,
+                evasion: 10,
+                level: 1,
+                experience: 10,
+            },
+            Energy {
+                current: 100,
+                max: 100,
+                regeneration_rate: 1,
+            },
+        ));
+        
+        // 添加基础地牢地砖
+        for x in 5..25 {
+            for y in 5..25 {
+                self.ecs_world.world.spawn((
+                    Position::new(x, y, 0),
+                    Tile {
+                        terrain_type: if x == 5 || x == 24 || y == 5 || y == 24 {
+                            TerrainType::Wall
+                        } else {
+                            TerrainType::Floor
+                        },
+                        is_passable: x != 5 && x != 24 && y != 5 && y != 24,
+                        blocks_sight: x == 5 || x == 24 || y == 5 || y == 24,
+                        has_items: false,
+                        has_monster: false,
+                    },
+                    Renderable {
+                        symbol: if x == 5 || x == 24 || y == 5 || y == 24 {
+                            '#'
+                        } else {
+                            '.'
+                        },
+                        fg_color: if x == 5 || x == 24 || y == 5 || y == 24 {
+                            Color::Gray
+                        } else {
+                            Color::White
+                        },
+                        bg_color: Some(Color::Black),
+                        order: 0,
+                    },
+                ));
+            }
+        }
+        
+        Ok(())
+    }
 }
 
 /// Headless game loop for testing purposes
@@ -711,6 +818,7 @@ fn key_event_to_player_action_from_internal(
         | GameStatus::Inventory { .. }
         | GameStatus::Help
         | GameStatus::CharacterInfo
+        | GameStatus::ClassSelection { .. }
         | GameStatus::ConfirmQuit { .. } => {
             // 菜单上下文：方向键/Enter/Esc 等（增加 WASD 支持）
             match (key_event.code, key_event.modifiers.shift) {

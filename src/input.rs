@@ -220,6 +220,7 @@ pub fn key_event_to_player_action(
         | crate::ecs::GameStatus::Inventory { .. }
         | crate::ecs::GameStatus::Help
         | crate::ecs::GameStatus::CharacterInfo
+        | crate::ecs::GameStatus::ClassSelection { .. }
         | crate::ecs::GameStatus::ConfirmQuit { .. } => {
             // 在菜单状态下，按键被解释为菜单导航
             match_key_for_menu_context(key)

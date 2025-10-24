@@ -7,10 +7,12 @@
 //! - `menu` - 菜单和界面渲染
 //! - `game_over` - 游戏结束界面渲染
 //! - `boss` - Boss 战斗 UI 渲染
+//! - `class_selection` - 职业选择界面渲染
 //!
 //! 所有渲染器直接操作 ECS World 和 Resources，确保架构统一。
 
 pub mod boss;
+pub mod class_selection;
 pub mod dungeon;
 pub mod game_over;
 pub mod hud;
@@ -18,6 +20,7 @@ pub mod inventory;
 pub mod menu;
 
 pub use boss::BossUI;
+pub use class_selection::ClassSelectionRenderer;
 pub use dungeon::DungeonRenderer;
 pub use game_over::GameOverRenderer;
 pub use hud::HudRenderer;
