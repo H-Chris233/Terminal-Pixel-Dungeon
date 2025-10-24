@@ -3,6 +3,7 @@
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
+pub mod boss_room;
 pub mod level;
 pub mod trap;
 
@@ -10,12 +11,16 @@ pub fn affect_adjacent_enemies(_x: i32, _y: i32, _f: impl Fn(&mut Enemy)) {}
 pub fn reveal_current_level(_x: i32, _y: i32) {}
 pub fn alert_nearby_enemies(_x: i32, _y: i32) {}
 
+use crate::boss_room::{BossRoom, Hazard};
 use crate::level::Level;
 pub use crate::level::tiles::{TerrainType, TileInfo};
 use crate::trap::TrapEffect;
 
+use combat::boss::{Boss, BossType};
 use combat::enemy::Enemy;
 use items::Item;
+
+pub use crate::boss_room::BossRoomLayout;
 
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct Dungeon {
@@ -28,8 +33,10 @@ pub struct Dungeon {
 impl Dungeon {
     pub fn generate(max_depth: usize, seed: u64) -> anyhow::Result<Self> {
         let mut levels = Vec::with_capacity(max_depth);
-        for _ in 1..=max_depth {
-            levels.push(Level::generate(seed)?);
+        for depth in 1..=max_depth {
+            // 检查是否是 Boss 层
+            let is_boss_level = depth % 5 == 0;
+            levels.push(Level::generate_with_depth(seed, depth, is_boss_level)?);
         }
         Ok(Self {
             depth: 1,
@@ -37,6 +44,21 @@ impl Dungeon {
             levels,
             max_depth,
         })
+    }
+
+    /// 检查当前层是否有 Boss
+    pub fn has_boss(&self) -> bool {
+        self.current_level().boss_room.is_some()
+    }
+
+    /// 获取当前层的 Boss 房间（如果有）
+    pub fn get_boss_room(&self) -> Option<&BossRoom> {
+        self.current_level().boss_room.as_ref()
+    }
+
+    /// 获取当前层的 Boss 房间（可变引用）
+    pub fn get_boss_room_mut(&mut self) -> Option<&mut BossRoom> {
+        self.current_level_mut().boss_room.as_mut()
     }
 
     pub fn current_level(&self) -> &Level {
@@ -176,6 +198,9 @@ pub enum InteractionEvent {
     StairsDown,
     DoorOpened(i32, i32),
     SecretRevealed(i32, i32),
+    BossEncounter(Boss),
+    BossRoomEntered,
+    HazardDamage { hazard_type: String, damage: u32 },
 }
 
 /// 用于UI显示的交互信息

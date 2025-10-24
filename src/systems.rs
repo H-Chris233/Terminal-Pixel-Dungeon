@@ -2317,3 +2317,82 @@ impl MenuSystem {
         }
     }
 }
+
+// ========== Boss 系统 ==========
+
+pub struct BossSystem;
+
+impl System for BossSystem {
+    fn name(&self) -> &str {
+        "BossSystem"
+    }
+
+    fn run(&mut self, world: &mut World, resources: &mut Resources) -> SystemResult {
+        use crate::ecs::{BossComponent, BossSkillComponent};
+        
+        // 收集所有 Boss 实体及其信息
+        let boss_data: Vec<(Entity, combat::boss::BossType, combat::boss::BossPhase, u32, u32)> = world
+            .query::<(&BossComponent, &Stats)>()
+            .iter()
+            .map(|(entity, (boss_comp, stats))| {
+                (
+                    entity,
+                    boss_comp.boss_type.clone(),
+                    boss_comp.current_phase.clone(),
+                    stats.hp,
+                    stats.max_hp,
+                )
+            })
+            .collect();
+
+        // 找到玩家位置
+        let player_pos = if let Some(player_entity) = find_player_entity(world) {
+            world.get::<&Position>(player_entity).ok().map(|p| p.clone())
+        } else {
+            None
+        };
+
+        // 处理每个 Boss
+        for (boss_entity, boss_type, current_phase, hp, max_hp) in boss_data {
+            // 检查阶段转换
+            let hp_percent = hp as f32 / max_hp as f32;
+            let new_phase = combat::boss::BossPhase::from_health_percent(hp_percent);
+            
+            if new_phase != current_phase {
+                // 更新阶段
+                if let Ok(mut boss_comp) = world.get::<&mut BossComponent>(boss_entity) {
+                    boss_comp.current_phase = new_phase.clone();
+                }
+                
+                resources.game_state.message_log.push(format!(
+                    "{}进入了{:?}阶段！",
+                    boss_type.name(),
+                    new_phase
+                ));
+            }
+
+            // Boss AI：选择并使用技能
+            if let Some(player_pos) = &player_pos {
+                if let Ok(boss_pos) = world.get::<&Position>(boss_entity) {
+                    let distance = ((boss_pos.x - player_pos.x).pow(2) as f32
+                        + (boss_pos.y - player_pos.y).pow(2) as f32)
+                        .sqrt();
+
+                    // 根据 Boss 逻辑决定是否使用技能
+                    // 这里简化处理，实际应该检查冷却时间等
+                    if distance <= 10.0 {
+                        // 在攻击范围内，可能使用技能
+                        // 技能逻辑将在 CombatSystem 或专门的 BossSkillSystem 中处理
+                    }
+                }
+            }
+
+            // 更新技能冷却
+            if let Ok(mut skill_comp) = world.get::<&mut BossSkillComponent>(boss_entity) {
+                skill_comp.cooldowns.tick();
+            }
+        }
+
+        SystemResult::Continue
+    }
+}
