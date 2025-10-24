@@ -829,14 +829,82 @@ fn key_event_to_player_action_from_internal(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::input::ConsoleInput;
+    use crate::input::{InputEvent, InputSource};
     use crate::renderer::GameClock;
-    use crate::renderer::RatatuiRenderer;
+    use ratatui::{
+        backend::TestBackend,
+        layout::Rect,
+        widgets::Block,
+        Frame, Terminal,
+    };
+    use std::time::Duration;
+
+    struct TestRenderer {
+        terminal: Terminal<TestBackend>,
+    }
+
+    impl TestRenderer {
+        fn new() -> anyhow::Result<Self> {
+            let backend = TestBackend::new(80, 24);
+            let terminal = Terminal::new(backend)?;
+            Ok(Self { terminal })
+        }
+    }
+
+    impl crate::renderer::Renderer for TestRenderer {
+        type Backend = TestBackend;
+
+        fn init(&mut self) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        fn draw(&mut self, _ecs_world: &mut ECSWorld) -> anyhow::Result<()> {
+            self.terminal.draw(|frame| {
+                let area = frame.size();
+                frame.render_widget(Block::default(), area);
+            })?;
+            Ok(())
+        }
+
+        fn draw_ui(&mut self, frame: &mut Frame<'_>, area: Rect) {
+            frame.render_widget(Block::default(), area);
+        }
+
+        fn resize(
+            &mut self,
+            resources: &mut Resources,
+            width: u16,
+            height: u16,
+        ) -> anyhow::Result<()> {
+            resources.game_state.terminal_width = width;
+            resources.game_state.terminal_height = height;
+            Ok(())
+        }
+
+        fn cleanup(&mut self) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[derive(Default)]
+    struct NoopInput;
+
+    impl InputSource for NoopInput {
+        type Event = InputEvent;
+
+        fn poll(&mut self, _timeout: Duration) -> anyhow::Result<Option<Self::Event>> {
+            Ok(None)
+        }
+
+        fn is_input_available(&self) -> anyhow::Result<bool> {
+            Ok(false)
+        }
+    }
 
     #[test]
     fn test_game_loop_creation() -> anyhow::Result<()> {
-        let renderer = RatatuiRenderer::new()?;
-        let input_source = ConsoleInput::new();
+        let renderer = TestRenderer::new()?;
+        let input_source = NoopInput::default();
         let clock = GameClock::new(16); // ~60 FPS
 
         let mut game_loop = GameLoop::new(renderer, input_source, clock);
