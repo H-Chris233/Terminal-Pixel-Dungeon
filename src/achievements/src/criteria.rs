@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Tracks progress toward all achievement criteria
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, bincode::Encode, bincode::Decode)]
 pub struct AchievementProgress {
     /// Total number of enemies killed
     pub kills: u32,
