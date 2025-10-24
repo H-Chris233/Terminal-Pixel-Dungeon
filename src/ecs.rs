@@ -8,6 +8,7 @@ use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 
 use crate::event_bus::{EventBus, EventHandler, GameEvent, LogLevel, Priority};
+use achievements::AchievementsManager;
 use error::GameError;
 use hero::{Bag, Hero};
 use items as game_items;
@@ -212,6 +213,52 @@ impl ECSWorld {
 
             _ => {}
         }
+
+        // Handle achievements tracking for relevant events
+        self.handle_achievement_event(event);
+    }
+
+    /// Handle achievement tracking for game events
+    fn handle_achievement_event(&mut self, event: &GameEvent) {
+        let newly_unlocked = match event {
+            GameEvent::EntityDied { .. } => {
+                // Track enemy kills
+                self.resources.achievements.on_kill()
+            }
+
+            GameEvent::LevelChanged { new_level, .. } => {
+                // Track depth reached
+                self.resources.achievements.on_level_change(*new_level)
+            }
+
+            GameEvent::ItemPickedUp { .. } => {
+                // Track items collected
+                self.resources.achievements.on_item_pickup()
+            }
+
+            GameEvent::TurnEnded { turn } => {
+                // Track turns survived
+                self.resources.achievements.on_turn_end(*turn)
+            }
+
+            GameEvent::BossDefeated { .. } => {
+                // Track boss defeats
+                self.resources.achievements.on_boss_defeat()
+            }
+
+            _ => Vec::new(),
+        };
+
+        // Publish unlock notifications
+        for achievement_id in newly_unlocked {
+            if let Some(achievement) = self.resources.achievements.get_achievement(achievement_id) {
+                let message = format!("🏆 成就解锁: {} - {}", achievement.name, achievement.description);
+                self.event_bus.publish(GameEvent::LogMessage {
+                    message,
+                    level: LogLevel::Info,
+                });
+            }
+        }
     }
 
     /// 帧结束时调用，准备处理下一帧事件
@@ -325,6 +372,9 @@ pub struct Resources {
 
     /// Dungeon state marker entity (actual dungeon stored as a component)
     pub dungeon: Option<hecs::Entity>,
+
+    /// Achievements manager
+    pub achievements: AchievementsManager,
 }
 
 impl Default for Resources {
@@ -336,6 +386,7 @@ impl Default for Resources {
             config: GameConfig::new(),
             rng: StdRng::seed_from_u64(12345), // default seed
             dungeon: None,
+            achievements: AchievementsManager::new(),
         }
     }
 }
@@ -350,6 +401,7 @@ impl Resources {
             config: GameConfig::new(),
             rng: StdRng::seed_from_u64(seed),
             dungeon: None,
+            achievements: AchievementsManager::new(),
         }
     }
 
