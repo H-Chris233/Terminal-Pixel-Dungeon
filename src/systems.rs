@@ -2472,17 +2472,20 @@ impl MenuSystem {
 
             GameStatus::ClassSelection { cursor } => {
                 // 职业选择确认
-                let class_name = match cursor {
-                    0 => "Warrior",
-                    1 => "Mage",
-                    2 => "Rogue",
-                    3 => "Huntress",
-                    _ => "Warrior",
+                let class = match cursor {
+                    0 => hero::class::Class::Warrior,
+                    1 => hero::class::Class::Mage,
+                    2 => hero::class::Class::Rogue,
+                    3 => hero::class::Class::Huntress,
+                    _ => hero::class::Class::Warrior,
                 };
                 
                 // 存储选中的职业，用于后续初始化
-                resources.game_state.selected_class = Some(class_name.to_string());
-                resources.game_state.message_log.push(format!("选择了职业：{}", class_name));
+                resources.game_state.selected_class = Some(class.clone());
+                resources
+                    .game_state
+                    .message_log
+                    .push(format!("选择了职业：{}", class));
                 
                 // 进入游戏状态（实际的初始化将在 game_loop 中处理）
                 MenuSystem::start_new_game(resources);

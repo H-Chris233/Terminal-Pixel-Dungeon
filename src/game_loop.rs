@@ -347,9 +347,9 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
     fn update_turn(&mut self) -> anyhow::Result<()> {
         // 检查是否需要初始化新游戏（从职业选择进入游戏）
         if let GameStatus::Running = self.ecs_world.resources.game_state.game_state {
-            if let Some(class_name) = self.ecs_world.resources.game_state.selected_class.take() {
+            if let Some(class) = self.ecs_world.resources.game_state.selected_class.take() {
                 // 清理旧的游戏世界
-                self.reinitialize_with_class(&class_name)?;
+                self.reinitialize_with_class(class)?;
             }
         }
 
@@ -672,19 +672,13 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
     }
 
     /// 使用选定的职业重新初始化游戏世界
-    fn reinitialize_with_class(&mut self, class_name: &str) -> anyhow::Result<()> {
-        use hero::class::Class;
-        use std::str::FromStr;
-        
-        // 解析职业
-        let class = Class::from_str(class_name).unwrap_or(Class::Warrior);
-        
+    fn reinitialize_with_class(&mut self, class: hero::class::Class) -> anyhow::Result<()> {
         // 清空当前世界
         self.ecs_world.world.clear();
-        
+
         // 重新生成地牢
         self.ecs_world.generate_and_set_dungeon(10, 12345)?;
-        
+
         // 获取起始位置
         let (start_x, start_y, _start_z) =
             if let Some(dungeon) = crate::ecs::get_dungeon_clone(&self.ecs_world.world) {
@@ -693,7 +687,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
             } else {
                 (10, 10, 0)
             };
-        
+
         // 使用 EntityFactory 创建玩家实体
         let factory = crate::core::EntityFactory::new();
         let _player_entity = factory.create_player(
@@ -702,7 +696,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
             start_y,
             class,
         );
-        
+
         // 添加一些测试敌人
         self.ecs_world.world.spawn((
             Position::new(15, 10, 0),
