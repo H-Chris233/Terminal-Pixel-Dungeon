@@ -3,11 +3,11 @@
 //! 显示玩家状态信息：生命值、等级、金币、饱食度等。
 //! 直接从 ECS World 读取 Player 实体的组件数据。
 
+use crate::ecs::Color as GameColor;
 use crate::ecs::{
     Actor, Faction, GameState, Hunger, Player, PlayerProgress, Stats, TurnHudState, TurnQueueEntry,
     Wealth,
 };
-use crate::ecs::Color as GameColor;
 use hecs::World;
 use ratatui::{
     Frame,
@@ -211,7 +211,7 @@ impl HudRenderer {
         // 计算经验值比例（简单估算：下一级需要 level * 100 经验）
         let current_exp = stats.experience;
         let next_level_exp = stats.level * 100;
-        
+
         let exp_ratio = if next_level_exp > 0 {
             (current_exp as f64 / next_level_exp as f64).min(1.0)
         } else {
@@ -219,7 +219,11 @@ impl HudRenderer {
         };
 
         let exp_gauge = Gauge::default()
-            .gauge_style(Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD))
+            .gauge_style(
+                Style::default()
+                    .fg(Color::Magenta)
+                    .add_modifier(Modifier::BOLD),
+            )
             .percent((exp_ratio * 100.0) as u16)
             .label(format!("EXP {}/{}", current_exp, next_level_exp))
             .use_unicode(true);
@@ -254,7 +258,9 @@ impl HudRenderer {
         let mut lines = Vec::new();
         lines.push(Line::from(vec![Span::styled(
             format!("回合 {}", turn_state.turn_count),
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
         )]));
 
         if let Some(active) = &turn_state.current_actor {

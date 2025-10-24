@@ -1,13 +1,13 @@
 #[cfg(test)]
 mod combat_tests {
     use super::*;
+    use crate::AttackParams;
     use crate::combat_manager::CombatManager;
     use crate::combatant::Combatant;
     use crate::effect::*;
     use crate::enemy::{Enemy, EnemyKind};
     use crate::status_effect::{StatusEffectCombatant, StatusEffectManager};
     use crate::vision::VisionSystem;
-    use crate::AttackParams;
 
     struct TestCombatant {
         name: String,
@@ -170,7 +170,10 @@ mod combat_tests {
 
         assert!(!result.logs.is_empty());
         // The defender should have taken some damage (hit guaranteed)
-        assert!(defender.hp < defender.max_hp, "Defender should have taken damage");
+        assert!(
+            defender.hp < defender.max_hp,
+            "Defender should have taken damage"
+        );
     }
 
     #[test]

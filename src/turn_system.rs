@@ -98,10 +98,7 @@ impl TurnSystem {
     }
 
     /// Process AI turns until the player's energy is full again
-    pub fn process_ai_turns(
-        &mut self,
-        ecs_world: &mut ECSWorld,
-    ) -> Result<(), anyhow::Error> {
+    pub fn process_ai_turns(&mut self, ecs_world: &mut ECSWorld) -> Result<(), anyhow::Error> {
         let world = &mut ecs_world.world;
 
         // Continue processing AI actions until player energy is refilled or no AI can act

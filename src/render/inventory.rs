@@ -48,8 +48,8 @@ impl InventoryRenderer {
         let main_chunks = Layout::default()
             .direction(ratatui::layout::Direction::Vertical)
             .constraints([
-                Constraint::Min(10),    // 主内容区
-                Constraint::Length(3),  // 底部提示
+                Constraint::Min(10),   // 主内容区
+                Constraint::Length(3), // 底部提示
             ])
             .split(area);
 
@@ -86,7 +86,10 @@ impl InventoryRenderer {
                 Line::from(""),
                 Line::from(Span::styled("🎒", Style::default().fg(Color::Gray))),
                 Line::from(""),
-                Line::from(Span::styled("背包空空如也", Style::default().fg(Color::DarkGray))),
+                Line::from(Span::styled(
+                    "背包空空如也",
+                    Style::default().fg(Color::DarkGray),
+                )),
             ])
             .alignment(Alignment::Center);
             frame.render_widget(empty_text, inner_area);
@@ -133,10 +136,7 @@ impl InventoryRenderer {
             .map(|(slot, icon, color)| {
                 Line::from(vec![
                     Span::styled(format!("{} ", icon), Style::default().fg(*color)),
-                    Span::styled(
-                        format!("{}: ", slot),
-                        Style::default().fg(Color::Gray),
-                    ),
+                    Span::styled(format!("{}: ", slot), Style::default().fg(Color::Gray)),
                     Span::styled("空", Style::default().fg(Color::DarkGray)),
                 ])
             })
@@ -181,10 +181,7 @@ impl InventoryRenderer {
                         format!("[{}] ", index + 1),
                         Style::default().fg(Color::Gray),
                     ),
-                    Span::styled(
-                        format!("{} ", icon),
-                        Style::default().fg(color),
-                    ),
+                    Span::styled(format!("{} ", icon), Style::default().fg(color)),
                     Span::styled(
                         name,
                         Style::default().fg(color).add_modifier(Modifier::BOLD),

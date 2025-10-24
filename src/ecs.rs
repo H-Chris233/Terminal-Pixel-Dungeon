@@ -298,7 +298,12 @@ impl ECSWorld {
                 .iter()
                 .find(|entry| entry.faction == focus_faction && entry.eta == 0)
                 .cloned()
-                .or_else(|| entries.iter().find(|entry| entry.faction == focus_faction).cloned());
+                .or_else(|| {
+                    entries
+                        .iter()
+                        .find(|entry| entry.faction == focus_faction)
+                        .cloned()
+                });
         }
 
         if current.is_none() {
@@ -886,12 +891,18 @@ impl ECSItem {
 
     /// 是否为可堆叠物品
     pub fn is_stackable(&self) -> bool {
-        matches!(self.item_type, ItemType::Consumable { .. } | ItemType::Throwable { .. })
+        matches!(
+            self.item_type,
+            ItemType::Consumable { .. } | ItemType::Throwable { .. }
+        )
     }
 
     /// 是否可用
     pub fn is_usable(&self) -> bool {
-        matches!(self.item_type, ItemType::Consumable { .. } | ItemType::Throwable { .. })
+        matches!(
+            self.item_type,
+            ItemType::Consumable { .. } | ItemType::Throwable { .. }
+        )
     }
 
     /// 是否可装备

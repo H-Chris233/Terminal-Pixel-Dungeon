@@ -71,9 +71,8 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
         self.renderer.init()?;
 
         // 设置初始状态为主菜单，默认选中第一项
-        self.ecs_world.resources.game_state.game_state = GameStatus::MainMenu {
-            selected_option: 0,
-        };
+        self.ecs_world.resources.game_state.game_state =
+            GameStatus::MainMenu { selected_option: 0 };
 
         // 初始化基础实体（确保世界非空，便于测试与渲染）
         self.initialize_entities();
@@ -556,7 +555,8 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                     GameOverReason::Trapped(s) => format!("死于陷阱：{}", s),
                     GameOverReason::Quit => "玩家退出".to_string(),
                 };
-                self.ecs_world.publish_event(GameEvent::GameOver { reason: msg });
+                self.ecs_world
+                    .publish_event(GameEvent::GameOver { reason: msg });
             }
             GameStatus::Victory => {
                 self.ecs_world.publish_event(GameEvent::Victory);
@@ -747,18 +747,18 @@ fn key_event_to_player_action_from_internal(
         | GameStatus::ConfirmQuit { .. } => {
             // 菜单上下文：方向键/Enter/Esc 等（增加 WASD 支持）
             match (key_event.code, key_event.modifiers.shift) {
-                (KeyCode::Up, _)
-                | (KeyCode::Char('k'), _)
-                | (KeyCode::Char('w'), _) => Some(PlayerAction::MenuNavigate(NavigateDirection::Up)),
-                (KeyCode::Down, _)
-                | (KeyCode::Char('j'), _)
-                | (KeyCode::Char('s'), _) => Some(PlayerAction::MenuNavigate(NavigateDirection::Down)),
-                (KeyCode::Left, _)
-                | (KeyCode::Char('h'), _)
-                | (KeyCode::Char('a'), _) => Some(PlayerAction::MenuNavigate(NavigateDirection::Left)),
-                (KeyCode::Right, _)
-                | (KeyCode::Char('l'), _)
-                | (KeyCode::Char('d'), _) => Some(PlayerAction::MenuNavigate(NavigateDirection::Right)),
+                (KeyCode::Up, _) | (KeyCode::Char('k'), _) | (KeyCode::Char('w'), _) => {
+                    Some(PlayerAction::MenuNavigate(NavigateDirection::Up))
+                }
+                (KeyCode::Down, _) | (KeyCode::Char('j'), _) | (KeyCode::Char('s'), _) => {
+                    Some(PlayerAction::MenuNavigate(NavigateDirection::Down))
+                }
+                (KeyCode::Left, _) | (KeyCode::Char('h'), _) | (KeyCode::Char('a'), _) => {
+                    Some(PlayerAction::MenuNavigate(NavigateDirection::Left))
+                }
+                (KeyCode::Right, _) | (KeyCode::Char('l'), _) | (KeyCode::Char('d'), _) => {
+                    Some(PlayerAction::MenuNavigate(NavigateDirection::Right))
+                }
                 (KeyCode::Enter, _) => Some(PlayerAction::MenuSelect),
                 (KeyCode::Esc, _) | (KeyCode::Backspace, _) => Some(PlayerAction::CloseMenu),
                 (KeyCode::Char('q'), _) => Some(PlayerAction::Quit),
@@ -768,10 +768,18 @@ fn key_event_to_player_action_from_internal(
         _ => {
             match (key_event.code, key_event.modifiers.shift) {
                 // Movement keys（仅支持方向键、vi-keys，避免与 'd' 丢弃冲突）
-                (KeyCode::Char('k'), _) | (KeyCode::Up, _) => Some(PlayerAction::Move(Direction::North)),
-                (KeyCode::Char('j'), _) | (KeyCode::Down, _) => Some(PlayerAction::Move(Direction::South)),
-                (KeyCode::Char('h'), _) | (KeyCode::Left, _) => Some(PlayerAction::Move(Direction::West)),
-                (KeyCode::Char('l'), _) | (KeyCode::Right, _) => Some(PlayerAction::Move(Direction::East)),
+                (KeyCode::Char('k'), _) | (KeyCode::Up, _) => {
+                    Some(PlayerAction::Move(Direction::North))
+                }
+                (KeyCode::Char('j'), _) | (KeyCode::Down, _) => {
+                    Some(PlayerAction::Move(Direction::South))
+                }
+                (KeyCode::Char('h'), _) | (KeyCode::Left, _) => {
+                    Some(PlayerAction::Move(Direction::West))
+                }
+                (KeyCode::Char('l'), _) | (KeyCode::Right, _) => {
+                    Some(PlayerAction::Move(Direction::East))
+                }
                 (KeyCode::Char('y'), _) => Some(PlayerAction::Move(Direction::NorthWest)),
                 (KeyCode::Char('u'), _) => Some(PlayerAction::Move(Direction::NorthEast)),
                 (KeyCode::Char('b'), _) => Some(PlayerAction::Move(Direction::SouthWest)),
@@ -785,14 +793,30 @@ fn key_event_to_player_action_from_internal(
                 (KeyCode::Char('<'), _) => Some(PlayerAction::Ascend),
 
                 // Attack via direction（放宽 SHIFT 要求）
-                (KeyCode::Char('K'), _) => Some(PlayerAction::Attack(Position { x: 0, y: -1, z: 0 })),
-                (KeyCode::Char('J'), _) => Some(PlayerAction::Attack(Position { x: 0, y: 1, z: 0 })),
-                (KeyCode::Char('H'), _) => Some(PlayerAction::Attack(Position { x: -1, y: 0, z: 0 })),
-                (KeyCode::Char('L'), _) => Some(PlayerAction::Attack(Position { x: 1, y: 0, z: 0 })),
-                (KeyCode::Char('Y'), _) => Some(PlayerAction::Attack(Position { x: -1, y: -1, z: 0 })),
-                (KeyCode::Char('U'), _) => Some(PlayerAction::Attack(Position { x: 1, y: -1, z: 0 })),
-                (KeyCode::Char('B'), _) => Some(PlayerAction::Attack(Position { x: -1, y: 1, z: 0 })),
-                (KeyCode::Char('N'), _) => Some(PlayerAction::Attack(Position { x: 1, y: 1, z: 0 })),
+                (KeyCode::Char('K'), _) => {
+                    Some(PlayerAction::Attack(Position { x: 0, y: -1, z: 0 }))
+                }
+                (KeyCode::Char('J'), _) => {
+                    Some(PlayerAction::Attack(Position { x: 0, y: 1, z: 0 }))
+                }
+                (KeyCode::Char('H'), _) => {
+                    Some(PlayerAction::Attack(Position { x: -1, y: 0, z: 0 }))
+                }
+                (KeyCode::Char('L'), _) => {
+                    Some(PlayerAction::Attack(Position { x: 1, y: 0, z: 0 }))
+                }
+                (KeyCode::Char('Y'), _) => {
+                    Some(PlayerAction::Attack(Position { x: -1, y: -1, z: 0 }))
+                }
+                (KeyCode::Char('U'), _) => {
+                    Some(PlayerAction::Attack(Position { x: 1, y: -1, z: 0 }))
+                }
+                (KeyCode::Char('B'), _) => {
+                    Some(PlayerAction::Attack(Position { x: -1, y: 1, z: 0 }))
+                }
+                (KeyCode::Char('N'), _) => {
+                    Some(PlayerAction::Attack(Position { x: 1, y: 1, z: 0 }))
+                }
 
                 // Game control
                 (KeyCode::Char('q'), _) => Some(PlayerAction::Quit),

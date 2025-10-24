@@ -37,7 +37,7 @@ impl DungeonRenderer {
     pub fn render(&self, frame: &mut Frame, area: Rect, world: &World) {
         // 获取地牢深度信息
         let depth = self.get_dungeon_depth(world);
-        
+
         let block = Block::default()
             .title(format!("🗺️  地牢探索 - 第 {} 层  🗺️", depth))
             .title_alignment(ratatui::layout::Alignment::Center)

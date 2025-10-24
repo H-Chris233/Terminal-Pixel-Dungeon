@@ -1,4 +1,4 @@
-use ratatui::{backend::TestBackend, Terminal};
+use ratatui::{Terminal, backend::TestBackend};
 use terminal_pixel_dungeon::ecs::{
     Actor, Color, ECSWorld, Energy, Faction, Hunger, Player, PlayerProgress, Stats,
     StatusFeedEntry, TurnHudState, TurnQueueEntry, Wealth,
@@ -89,7 +89,12 @@ fn hud_turn_overlay_snapshot() {
     terminal
         .draw(|frame| {
             let area = frame.area();
-            hud.render(frame, area, &ecs_world.world, &ecs_world.resources.game_state);
+            hud.render(
+                frame,
+                area,
+                &ecs_world.world,
+                &ecs_world.resources.game_state,
+            );
         })
         .expect("render failure");
 
@@ -126,15 +131,11 @@ fn hud_turn_overlay_snapshot() {
         "energy bar for active actor missing"
     );
     assert!(
-        lines
-            .iter()
-            .any(|line| line.contains("▶ Player")),
+        lines.iter().any(|line| line.contains("▶ Player")),
         "queue marker for player missing"
     );
     assert!(
-        lines
-            .iter()
-            .any(|line| line.contains("eta 8")),
+        lines.iter().any(|line| line.contains("eta 8")),
         "enemy eta annotation missing"
     );
     assert!(

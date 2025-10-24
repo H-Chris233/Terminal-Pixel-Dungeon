@@ -171,7 +171,8 @@ impl Hero {
                     self.notify("月影叶让你融入了阴影。");
                 }
                 HerbKind::Nightshade => {
-                    self.effects.add(Effect::new(EffectType::Poison, 4 + potency));
+                    self.effects
+                        .add(Effect::new(EffectType::Poison, 4 + potency));
                     self.notify("夜影花的毒素在你的血液中流淌！");
                 }
                 HerbKind::SpiritMoss => {
@@ -186,7 +187,8 @@ impl Hero {
                     self.notify("龙棘草让你的动作变得更加迅捷。");
                 }
                 HerbKind::Glowcap => {
-                    self.effects.add(Effect::new(EffectType::Light, 12 + potency));
+                    self.effects
+                        .add(Effect::new(EffectType::Light, 12 + potency));
                     self.notify("萤帽菌的微光照亮了前方道路。");
                 }
             }
@@ -213,7 +215,10 @@ impl Hero {
             self.effects
                 .add(Effect::new(EffectType::Haste, haste_turns));
             self.satiety = self.satiety.saturating_sub(1);
-            self.notify(&format!("你熟练地练习投掷{}，身手更加敏捷。", throwable.name()));
+            self.notify(&format!(
+                "你熟练地练习投掷{}，身手更加敏捷。",
+                throwable.name()
+            ));
             Ok(())
         } else {
             Err(HeroError::ActionFailed)

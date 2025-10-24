@@ -356,15 +356,15 @@ impl CombatSystem {
                                     // 构建阻挡检测闭包（基于地图Tile）
                                     let z = player_pos.z;
                                     let mut blocked_set = std::collections::HashSet::new();
-                                    for (_, (pos, tile)) in world.world.query::<(&Position, &Tile)>().iter() {
+                                    for (_, (pos, tile)) in
+                                        world.world.query::<(&Position, &Tile)>().iter()
+                                    {
                                         if pos.z == z && tile.blocks_sight {
                                             blocked_set.insert((pos.x, pos.y));
                                         }
                                     }
-                                    let is_blocked = |x: i32, y: i32| -> bool {
-                                        blocked_set.contains(&(x, y))
-                                    };
-
+                                    let is_blocked =
+                                        |x: i32, y: i32| -> bool { blocked_set.contains(&(x, y)) };
 
                                     // 获取攻击者FOV范围
                                     let attacker_fov_range = world
@@ -388,21 +388,35 @@ impl CombatSystem {
                                     };
 
                                     // 执行战斗（包含潜行与反击）
-                                    let result = ::combat::Combat::perform_attack_with_ambush(&mut params);
+                                    let result =
+                                        ::combat::Combat::perform_attack_with_ambush(&mut params);
                                     Some((temp_player.hp, temp_target.hp, result))
                                 } else {
                                     None
                                 }
                             };
 
-                            if let Some((new_player_hp, new_target_hp, combat_result)) = combat_result {
+                            if let Some((new_player_hp, new_target_hp, combat_result)) =
+                                combat_result
+                            {
                                 // 将 CombatResult 事件映射到游戏事件总线
                                 for ev in &combat_result.events {
                                     match ev {
-                                        ::combat::CombatEvent::CombatStarted { attacker, defender } => {
-                                            world.publish_event(GameEvent::CombatStarted { attacker: *attacker, defender: *defender });
+                                        ::combat::CombatEvent::CombatStarted {
+                                            attacker,
+                                            defender,
+                                        } => {
+                                            world.publish_event(GameEvent::CombatStarted {
+                                                attacker: *attacker,
+                                                defender: *defender,
+                                            });
                                         }
-                                        ::combat::CombatEvent::DamageDealt { attacker, victim, damage, is_critical } => {
+                                        ::combat::CombatEvent::DamageDealt {
+                                            attacker,
+                                            victim,
+                                            damage,
+                                            is_critical,
+                                        } => {
                                             world.publish_event(GameEvent::DamageDealt {
                                                 attacker: *attacker,
                                                 victim: *victim,
@@ -410,12 +424,24 @@ impl CombatSystem {
                                                 is_critical: *is_critical,
                                             });
                                         }
-                                        ::combat::CombatEvent::EntityDied { entity, entity_name } => {
-                                            world.publish_event(GameEvent::EntityDied { entity: *entity, entity_name: entity_name.clone() });
+                                        ::combat::CombatEvent::EntityDied {
+                                            entity,
+                                            entity_name,
+                                        } => {
+                                            world.publish_event(GameEvent::EntityDied {
+                                                entity: *entity,
+                                                entity_name: entity_name.clone(),
+                                            });
                                         }
-                                        ::combat::CombatEvent::Ambush { attacker: _, defender: _ } => {
+                                        ::combat::CombatEvent::Ambush {
+                                            attacker: _,
+                                            defender: _,
+                                        } => {
                                             world.publish_event(GameEvent::LogMessage {
-                                                message: format!("伏击！{} -> {}", player_name, target_name),
+                                                message: format!(
+                                                    "伏击！{} -> {}",
+                                                    player_name, target_name
+                                                ),
                                                 level: LogLevel::Info,
                                             });
                                         }
@@ -423,7 +449,8 @@ impl CombatSystem {
                                 }
 
                                 // 应用实际伤害（更新HP）
-                                if let Ok(mut stats) = world.world.get::<&mut Stats>(player_entity) {
+                                if let Ok(mut stats) = world.world.get::<&mut Stats>(player_entity)
+                                {
                                     stats.hp = new_player_hp;
                                 }
                                 if let Ok(mut stats) = world.world.get::<&mut Stats>(target) {
@@ -451,7 +478,9 @@ impl CombatSystem {
                                 }
 
                                 // 消耗能量
-                                if let Ok(mut energy) = world.world.get::<&mut Energy>(player_entity) {
+                                if let Ok(mut energy) =
+                                    world.world.get::<&mut Energy>(player_entity)
+                                {
                                     energy.current = energy.current.saturating_sub(100);
                                 }
                             }
@@ -1982,9 +2011,9 @@ impl System for MenuSystem {
                             // 在确认退出对话框中按 Esc/Backspace 返回到原状态
                             resources.game_state.game_state = match return_to {
                                 crate::ecs::ReturnTo::Running => GameStatus::Running,
-                                crate::ecs::ReturnTo::MainMenu => GameStatus::MainMenu {
-                                    selected_option: 0,
-                                },
+                                crate::ecs::ReturnTo::MainMenu => {
+                                    GameStatus::MainMenu { selected_option: 0 }
+                                }
                             };
                         }
                         GameStatus::MainMenu { .. } => {
@@ -1997,9 +2026,8 @@ impl System for MenuSystem {
                         }
                         GameStatus::Running => {
                             // 游戏中按 Esc 打开暂停菜单
-                            resources.game_state.game_state = GameStatus::Paused {
-                                selected_option: 0,
-                            };
+                            resources.game_state.game_state =
+                                GameStatus::Paused { selected_option: 0 };
                         }
                         _ => {
                             // 在其他菜单状态，返回游戏或上一级菜单
@@ -2118,7 +2146,10 @@ impl MenuSystem {
                 }
             }
 
-            GameStatus::ConfirmQuit { ref mut selected_option, .. } => {
+            GameStatus::ConfirmQuit {
+                ref mut selected_option,
+                ..
+            } => {
                 // 确认退出对话框的导航：在 0(是)/1(否) 之间切换
                 match direction {
                     NavigateDirection::Left | NavigateDirection::Up => {
@@ -2155,9 +2186,8 @@ impl MenuSystem {
                     }
                     2 => {
                         // 游戏设置
-                        resources.game_state.game_state = GameStatus::Options {
-                            selected_option: 0,
-                        };
+                        resources.game_state.game_state =
+                            GameStatus::Options { selected_option: 0 };
                     }
                     3 => {
                         // 帮助说明
@@ -2183,9 +2213,8 @@ impl MenuSystem {
                     }
                     1 => {
                         // 物品栏
-                        resources.game_state.game_state = GameStatus::Inventory {
-                            selected_item: 0,
-                        };
+                        resources.game_state.game_state =
+                            GameStatus::Inventory { selected_item: 0 };
                     }
                     2 => {
                         // 角色信息
@@ -2193,9 +2222,8 @@ impl MenuSystem {
                     }
                     3 => {
                         // 游戏设置
-                        resources.game_state.game_state = GameStatus::Options {
-                            selected_option: 0,
-                        };
+                        resources.game_state.game_state =
+                            GameStatus::Options { selected_option: 0 };
                     }
                     4 => {
                         // 帮助说明
@@ -2262,7 +2290,10 @@ impl MenuSystem {
                 ));
             }
 
-            GameStatus::ConfirmQuit { return_to, selected_option } => {
+            GameStatus::ConfirmQuit {
+                return_to,
+                selected_option,
+            } => {
                 // 确认退出：0=是，1=否
                 if selected_option == 0 {
                     // 退出到 GameOver
@@ -2273,9 +2304,9 @@ impl MenuSystem {
                     // 返回原状态
                     resources.game_state.game_state = match return_to {
                         crate::ecs::ReturnTo::Running => GameStatus::Running,
-                        crate::ecs::ReturnTo::MainMenu => GameStatus::MainMenu {
-                            selected_option: 0,
-                        },
+                        crate::ecs::ReturnTo::MainMenu => {
+                            GameStatus::MainMenu { selected_option: 0 }
+                        }
                     };
                 }
             }
