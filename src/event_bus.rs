@@ -43,6 +43,34 @@ pub enum GameEvent {
     },
     /// 状态效果移除
     StatusRemoved { entity: u32, status: String },
+    
+    // ===== Boss 事件 =====
+    /// Boss 遭遇
+    BossEncountered { boss_type: String, boss_entity: u32 },
+    /// Boss 房间已进入
+    BossRoomEntered { boss_type: String },
+    /// Boss 阶段转换
+    BossPhaseChanged {
+        boss_entity: u32,
+        old_phase: String,
+        new_phase: String,
+    },
+    /// Boss 使用技能
+    BossSkillUsed {
+        boss_entity: u32,
+        skill_name: String,
+    },
+    /// Boss 被击败
+    BossDefeated {
+        boss_entity: u32,
+        boss_type: String,
+        is_first_kill: bool,
+    },
+    /// Boss 召唤小怪
+    BossSummonedMinions {
+        boss_entity: u32,
+        minion_count: u32,
+    },
 
     // ===== AI 事件 =====
     /// AI 做出决策
@@ -474,6 +502,12 @@ impl GameEvent {
             GameEvent::PlayerHungry { .. } => "PlayerHungry",
             GameEvent::PlayerStarving { .. } => "PlayerStarving",
             GameEvent::StarvationDamage { .. } => "StarvationDamage",
+            GameEvent::BossEncountered { .. } => "BossEncountered",
+            GameEvent::BossRoomEntered { .. } => "BossRoomEntered",
+            GameEvent::BossPhaseChanged { .. } => "BossPhaseChanged",
+            GameEvent::BossSkillUsed { .. } => "BossSkillUsed",
+            GameEvent::BossDefeated { .. } => "BossDefeated",
+            GameEvent::BossSummonedMinions { .. } => "BossSummonedMinions",
         }
     }
 }

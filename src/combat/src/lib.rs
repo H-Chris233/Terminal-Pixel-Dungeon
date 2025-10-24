@@ -2,6 +2,7 @@
 
 use rand::Rng; // 添加这个导入以修复 random_bool 和 random_range 错误
 
+pub mod boss;
 pub mod combat_manager;
 pub mod combatant;
 pub mod effect;
@@ -11,6 +12,7 @@ pub mod status_effect;
 mod tests;
 pub mod vision;
 
+pub use crate::boss::{Boss, BossLoot, BossPhase, BossSkill, BossType, SkillCooldowns};
 pub use crate::combatant::Combatant;
 pub use crate::effect::*;
 pub use crate::enemy::Enemy;
