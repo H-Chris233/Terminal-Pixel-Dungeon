@@ -6,6 +6,9 @@
 pub mod achievement;
 pub mod criteria;
 
+#[cfg(test)]
+mod tests;
+
 pub use achievement::{Achievement, AchievementCriteria, AchievementId, all_achievements};
 pub use criteria::AchievementProgress;
 
@@ -13,14 +16,15 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// The main achievements manager that tracks progress and unlocks
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub struct AchievementsManager {
     /// All achievement definitions
     achievements: HashMap<AchievementId, Achievement>,
     /// Current progress toward all achievements
     progress: AchievementProgress,
     /// Newly unlocked achievements this session (for notifications)
-    #[serde(skip)]
+    #[serde(default, skip_serializing)]
+    #[bincode(with_serde)]
     newly_unlocked: Vec<AchievementId>,
 }
 
@@ -168,228 +172,5 @@ impl AchievementsManager {
 impl Default for AchievementsManager {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_new_manager() {
-        let manager = AchievementsManager::new();
-        assert!(manager.achievements.len() > 0);
-        assert_eq!(manager.progress.kills, 0);
-        assert_eq!(manager.newly_unlocked.len(), 0);
-    }
-
-    #[test]
-    fn test_first_blood_achievement() {
-        let mut manager = AchievementsManager::new();
-        
-        // First Blood should not be unlocked
-        assert!(!manager.is_unlocked(AchievementId::FirstBlood));
-        
-        // Kill one enemy
-        let unlocked = manager.on_kill();
-        
-        // First Blood should now be unlocked
-        assert!(manager.is_unlocked(AchievementId::FirstBlood));
-        assert_eq!(unlocked.len(), 1);
-        assert_eq!(unlocked[0], AchievementId::FirstBlood);
-    }
-
-    #[test]
-    fn test_slayer_progression() {
-        let mut manager = AchievementsManager::new();
-        
-        // Kill 10 enemies
-        for _ in 0..10 {
-            manager.on_kill();
-        }
-        
-        // FirstBlood and SlayerI should be unlocked
-        assert!(manager.is_unlocked(AchievementId::FirstBlood));
-        assert!(manager.is_unlocked(AchievementId::SlayerI));
-        assert!(!manager.is_unlocked(AchievementId::SlayerII));
-    }
-
-    #[test]
-    fn test_depth_achievements() {
-        let mut manager = AchievementsManager::new();
-        
-        // Reach depth 5
-        let unlocked = manager.on_level_change(5);
-        
-        assert!(manager.is_unlocked(AchievementId::DeepDiver));
-        assert!(!manager.is_unlocked(AchievementId::Spelunker));
-        assert!(unlocked.contains(&AchievementId::DeepDiver));
-    }
-
-    #[test]
-    fn test_item_collection() {
-        let mut manager = AchievementsManager::new();
-        
-        // Collect 10 items
-        for _ in 0..10 {
-            manager.on_item_pickup();
-        }
-        
-        assert!(manager.is_unlocked(AchievementId::Hoarder));
-        assert!(!manager.is_unlocked(AchievementId::Collector));
-    }
-
-    #[test]
-    fn test_newly_unlocked() {
-        let mut manager = AchievementsManager::new();
-        
-        // Kill one enemy
-        manager.on_kill();
-        
-        // Should have one newly unlocked
-        assert_eq!(manager.peek_newly_unlocked().len(), 1);
-        
-        // Drain should return and clear
-        let unlocked = manager.drain_newly_unlocked();
-        assert_eq!(unlocked.len(), 1);
-        assert_eq!(manager.peek_newly_unlocked().len(), 0);
-    }
-
-    #[test]
-    fn test_unlock_percentage() {
-        let mut manager = AchievementsManager::new();
-        let total = manager.achievements.len();
-        
-        // No achievements unlocked
-        assert_eq!(manager.unlock_percentage(), 0.0);
-        
-        // Unlock one achievement
-        manager.on_kill();
-        let expected = 1.0 / total as f32;
-        assert!((manager.unlock_percentage() - expected).abs() < 0.01);
-    }
-
-    #[test]
-    fn test_reset() {
-        let mut manager = AchievementsManager::new();
-        
-        // Unlock some achievements
-        for _ in 0..10 {
-            manager.on_kill();
-        }
-        manager.on_level_change(5);
-        
-        assert!(manager.unlock_percentage() > 0.0);
-        
-        // Reset
-        manager.reset();
-        
-        assert_eq!(manager.unlock_percentage(), 0.0);
-        assert_eq!(manager.progress.kills, 0);
-        assert_eq!(manager.progress.max_depth, 0);
-    }
-
-    #[test]
-    fn test_boss_defeat() {
-        let mut manager = AchievementsManager::new();
-        
-        assert!(!manager.is_unlocked(AchievementId::BossSlayer));
-        
-        let unlocked = manager.on_boss_defeat();
-        
-        assert!(manager.is_unlocked(AchievementId::BossSlayer));
-        assert!(unlocked.contains(&AchievementId::BossSlayer));
-    }
-
-    #[test]
-    fn test_turn_survival() {
-        let mut manager = AchievementsManager::new();
-        
-        // Survive 100 turns
-        let unlocked = manager.on_turn_end(100);
-        
-        assert!(manager.is_unlocked(AchievementId::Survivor));
-        assert!(!manager.is_unlocked(AchievementId::Veteran));
-        assert!(unlocked.contains(&AchievementId::Survivor));
-    }
-
-    #[test]
-    fn test_event_sequence_unlocks_multiple_achievements() {
-        let mut manager = AchievementsManager::new();
-
-        // Simulate a game session
-        // Player kills 10 enemies (should unlock FirstBlood and SlayerI)
-        for _ in 0..10 {
-            manager.on_kill();
-        }
-
-        assert!(manager.is_unlocked(AchievementId::FirstBlood));
-        assert!(manager.is_unlocked(AchievementId::SlayerI));
-        assert!(!manager.is_unlocked(AchievementId::SlayerII));
-
-        // Player reaches level 5 (should unlock DeepDiver)
-        manager.on_level_change(5);
-        assert!(manager.is_unlocked(AchievementId::DeepDiver));
-        assert!(!manager.is_unlocked(AchievementId::Spelunker));
-
-        // Player collects 10 items (should unlock Hoarder)
-        for _ in 0..10 {
-            manager.on_item_pickup();
-        }
-        assert!(manager.is_unlocked(AchievementId::Hoarder));
-
-        // Player survives 100 turns (should unlock Survivor)
-        manager.on_turn_end(100);
-        assert!(manager.is_unlocked(AchievementId::Survivor));
-
-        // Verify unlock percentage
-        let total_unlocked = manager.unlocked_achievements().len();
-        assert_eq!(total_unlocked, 5); // FirstBlood, SlayerI, DeepDiver, Hoarder, Survivor
-    }
-
-    #[test]
-    fn test_level_progression() {
-        let mut manager = AchievementsManager::new();
-
-        // Level 5 -> unlock DeepDiver
-        manager.on_level_change(5);
-        assert!(manager.is_unlocked(AchievementId::DeepDiver));
-
-        // Level 10 -> unlock Spelunker
-        manager.on_level_change(10);
-        assert!(manager.is_unlocked(AchievementId::Spelunker));
-
-        // Level 20 -> unlock MasterExplorer
-        manager.on_level_change(20);
-        assert!(manager.is_unlocked(AchievementId::MasterExplorer));
-
-        // All depth achievements should be unlocked
-        assert!(manager.is_unlocked(AchievementId::DeepDiver));
-        assert!(manager.is_unlocked(AchievementId::Spelunker));
-        assert!(manager.is_unlocked(AchievementId::MasterExplorer));
-    }
-
-    #[test]
-    fn test_notification_queue() {
-        let mut manager = AchievementsManager::new();
-
-        // Unlock first achievement
-        manager.on_kill();
-        let newly_unlocked = manager.peek_newly_unlocked();
-        assert_eq!(newly_unlocked.len(), 1);
-        assert_eq!(newly_unlocked[0], AchievementId::FirstBlood);
-
-        // Drain should clear the queue
-        let drained = manager.drain_newly_unlocked();
-        assert_eq!(drained.len(), 1);
-        assert_eq!(manager.peek_newly_unlocked().len(), 0);
-
-        // Unlock multiple achievements at once
-        for _ in 0..9 {
-            manager.on_kill();
-        }
-        let newly_unlocked = manager.peek_newly_unlocked();
-        assert_eq!(newly_unlocked.len(), 1); // SlayerI
-        assert_eq!(newly_unlocked[0], AchievementId::SlayerI);
     }
 }

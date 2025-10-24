@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Unique identifier for an achievement
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub enum AchievementId {
     // Kill-based achievements
     FirstBlood,        // Kill your first enemy
@@ -33,7 +33,7 @@ pub enum AchievementId {
 }
 
 /// Criteria required to unlock an achievement
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub enum AchievementCriteria {
     /// Kill a certain number of enemies
     KillCount(u32),
@@ -50,7 +50,7 @@ pub enum AchievementCriteria {
 }
 
 /// An achievement definition
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub struct Achievement {
     pub id: AchievementId,
     pub name: String,
