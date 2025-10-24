@@ -2,6 +2,10 @@
 
 此目录包含 Terminal Pixel Dungeon 项目的文档。
 
+## 回合系统
+
+* [Turn System Architecture](turn_system.md) - 能量驱动的回合调度、阶段管线与扩展指南
+
 ## 事件总线文档
 
 * [事件总线指南](EVENT_BUS_GUIDE.md) - 事件总线的完整使用指南
