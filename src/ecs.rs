@@ -658,7 +658,6 @@ pub struct Stats {
     pub level: u32,
     pub experience: u32,
     #[serde(default)]
-    #[bincode(default)]
     pub class: Option<Class>,
 }
 
@@ -997,7 +996,6 @@ pub struct PlayerProgress {
     pub strength: u8,  // 力量值（影响装备需求）
     pub class: Class,  // 职业类型
     #[serde(default)]
-    #[bincode(default)]
     pub skill_state: SkillState, // 职业技能状态
 }
 
@@ -1561,7 +1559,7 @@ mod tests {
                 experience: 0,
                 class: Some(Class::Warrior),
             },
-
+        ));
 
         let enemy = world.world.spawn((
             Position::new(1, 0, 0),
@@ -1580,7 +1578,7 @@ mod tests {
                 experience: 0,
                 class: None,
             },
-
+        ));
 
         // 发布战斗开始事件
         world.publish_event(GameEvent::CombatStarted {

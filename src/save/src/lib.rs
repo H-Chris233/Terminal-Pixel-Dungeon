@@ -28,7 +28,6 @@ pub struct SaveMetadata {
 pub struct SaveData {
     pub metadata: SaveMetadata,
     #[serde(default)]
-    #[bincode(default)]
     pub hero_skill_state: SkillState,
     pub hero: hero::Hero,
     pub dungeon: dungeon::Dungeon,

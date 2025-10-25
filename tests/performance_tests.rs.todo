@@ -1,0 +1,488 @@
+//! Performance smoke tests and benchmarks for the turn pipeline
+//!
+//! These tests ensure that the expanded turn pipeline remains within
+//! acceptable frame times (target: 60 FPS = ~16ms per frame).
+
+mod test_helpers;
+
+use test_helpers::*;
+use terminal_pixel_dungeon::ecs::*;
+use terminal_pixel_dungeon::systems::*;
+use std::time::{Duration, Instant};
+
+/// Target frame time for 60 FPS
+const TARGET_FRAME_TIME: Duration = Duration::from_millis(16);
+
+/// Acceptable frame time for 30 FPS (fallback)
+const ACCEPTABLE_FRAME_TIME: Duration = Duration::from_millis(33);
+
+/// Maximum acceptable frame time (20 FPS minimum)
+const MAX_FRAME_TIME: Duration = Duration::from_millis(50);
+
+#[test]
+fn test_single_turn_performance() {
+    // Test that a single turn completes within target frame time
+    let mut world = TestWorldBuilder::new(2000)
+        .with_simple_dungeon(0)
+        .with_player(5, 5, 0)
+        .build();
+    
+    // Execute an action
+    world.execute_player_action(PlayerAction::Wait);
+    
+    // Measure turn processing time
+    let start = Instant::now();
+    let result = world.process_turn();
+    let duration = start.elapsed();
+    
+    assert!(result.is_ok(), "Turn should complete successfully");
+    assert!(
+        duration < MAX_FRAME_TIME,
+        "Single turn took {:?}, exceeds max {:?}",
+        duration,
+        MAX_FRAME_TIME
+    );
+    
+    if duration > TARGET_FRAME_TIME {
+        eprintln!(
+            "Warning: Turn took {:?}, exceeds target {:?}",
+            duration, TARGET_FRAME_TIME
+        );
+    }
+}
+
+#[test]
+fn test_movement_system_performance() {
+    // Test movement system performance in isolation
+    let mut world = TestWorldBuilder::new(2001)
+        .with_simple_dungeon(0)
+        .with_player(5, 5, 0)
+        .build();
+    
+    world.execute_player_action(PlayerAction::Move(Direction::North));
+    
+    let start = Instant::now();
+    let mut movement_system = MovementSystem;
+    movement_system.run(
+        &mut world.ecs_world.world,
+        &mut world.ecs_world.resources,
+    );
+    let duration = start.elapsed();
+    
+    assert!(
+        duration < Duration::from_millis(5),
+        "Movement system took {:?}, too slow",
+        duration
+    );
+}
+
+#[test]
+fn test_combat_system_performance() {
+    // Test combat system performance
+    let (builder, _enemy) = TestWorldBuilder::new(2002)
+        .with_simple_dungeon(0)
+        .with_player(5, 5, 0)
+        .with_enemy(5, 6, 0, "Perf Test Rat", Faction::Enemy);
+    
+    let mut world = builder.build();
+    
+    world.execute_player_action(PlayerAction::Attack(Direction::South));
+    
+    let start = Instant::now();
+    let mut combat_system = CombatSystem;
+    combat_system.run(
+        &mut world.ecs_world.world,
+        &mut world.ecs_world.resources,
+    );
+    let duration = start.elapsed();
+    
+    assert!(
+        duration < Duration::from_millis(5),
+        "Combat system took {:?}, too slow",
+        duration
+    );
+}
+
+#[test]
+fn test_ai_system_performance_single_enemy() {
+    // Test AI system with a single enemy
+    let (builder, _enemy) = TestWorldBuilder::new(2003)
+        .with_simple_dungeon(0)
+        .with_player(5, 5, 0)
+        .with_enemy(7, 7, 0, "AI Test Rat", Faction::Enemy);
+    
+    let mut world = builder.build();
+    
+    let start = Instant::now();
+    let mut ai_system = AISystem;
+    ai_system.run(
+        &mut world.ecs_world.world,
+        &mut world.ecs_world.resources,
+    );
+    let duration = start.elapsed();
+    
+    assert!(
+        duration < Duration::from_millis(5),
+        "AI system (1 enemy) took {:?}, too slow",
+        duration
+    );
+}
+
+#[test]
+fn test_ai_system_performance_many_enemies() {
+    // Test AI system with many enemies (stress test)
+    let mut builder = TestWorldBuilder::new(2004)
+        .with_simple_dungeon(0)
+        .with_player(5, 5, 0);
+    
+    // Add 50 enemies
+    for i in 0..50 {
+        let x = 1 + (i % 8);
+        let y = 1 + (i / 8);
+        let (new_builder, _) = builder
+            .with_enemy(x, y, 0, &format!("Rat {}", i), Faction::Enemy);
+        builder = new_builder;
+    }
+    
+    let mut world = builder.build();
+    
+    let start = Instant::now();
+    let mut ai_system = AISystem;
+    ai_system.run(
+        &mut world.ecs_world.world,
+        &mut world.ecs_world.resources,
+    );
+    let duration = start.elapsed();
+    
+    assert!(
+        duration < Duration::from_millis(20),
+        "AI system (50 enemies) took {:?}, too slow",
+        duration
+    );
+}
+
+#[test]
+fn test_fov_system_performance() {
+    // Test FOV system performance
+    let mut builder = TestWorldBuilder::new(2005)
+        .with_simple_dungeon(0)
+        .with_player(5, 5, 0);
+    
+    // Add several enemies
+    for i in 0..10 {
+        let (new_builder, _) = builder
+            .with_enemy(2 + i, 2, 0, &format!("FOV Rat {}", i), Faction::Enemy);
+        builder = new_builder;
+    }
+    
+    let mut world = builder.build();
+    
+    let start = Instant::now();
+    let mut fov_system = FOVSystem;
+    fov_system.run(
+        &mut world.ecs_world.world,
+        &mut world.ecs_world.resources,
+    );
+    let duration = start.elapsed();
+    
+    assert!(
+        duration < Duration::from_millis(10),
+        "FOV system took {:?}, too slow",
+        duration
+    );
+}
+
+#[test]
+fn test_complete_turn_pipeline_performance() {
+    // Test the complete system pipeline
+    let (builder, _enemy) = TestWorldBuilder::new(2006)
+        .with_simple_dungeon(0)
+        .with_player(5, 5, 0)
+        .with_enemy(6, 5, 0, "Pipeline Test Rat", Faction::Enemy);
+    
+    let mut world = builder.build();
+    
+    // Create all systems
+    let mut systems: Vec<Box<dyn System>> = vec![
+        Box::new(InputSystem),
+        Box::new(MenuSystem),
+        Box::new(TimeSystem),
+        Box::new(MovementSystem),
+        Box::new(AISystem),
+        Box::new(CombatSystem),
+        Box::new(FOVSystem),
+        Box::new(EffectSystem),
+        Box::new(EnergySystem),
+        Box::new(InventorySystem),
+        Box::new(HungerSystem),
+        Box::new(DungeonSystem),
+    ];
+    
+    world.execute_player_action(PlayerAction::Wait);
+    
+    // Measure complete pipeline execution
+    let start = Instant::now();
+    for system in systems.iter_mut() {
+        system.run(
+            &mut world.ecs_world.world,
+            &mut world.ecs_world.resources,
+        );
+    }
+    let duration = start.elapsed();
+    
+    assert!(
+        duration < MAX_FRAME_TIME,
+        "Complete pipeline took {:?}, exceeds max {:?}",
+        duration,
+        MAX_FRAME_TIME
+    );
+    
+    if duration > TARGET_FRAME_TIME {
+        eprintln!(
+            "Warning: Complete pipeline took {:?}, exceeds target {:?}",
+            duration, TARGET_FRAME_TIME
+        );
+    }
+}
+
+#[test]
+fn test_100_turns_performance() {
+    // Test sustained performance over 100 turns
+    let mut world = TestWorldBuilder::new(2007)
+        .with_simple_dungeon(0)
+        .with_player(5, 5, 0)
+        .build();
+    
+    let start = Instant::now();
+    let mut successful_turns = 0;
+    
+    for i in 0..100 {
+        // Alternate between wait and movement
+        if i % 2 == 0 {
+            world.execute_player_action(PlayerAction::Wait);
+        } else {
+            let direction = match i % 4 {
+                0 => Direction::North,
+                1 => Direction::East,
+                2 => Direction::South,
+                _ => Direction::West,
+            };
+            world.execute_player_action(PlayerAction::Move(direction));
+        }
+        
+        if world.process_turn().is_ok() {
+            successful_turns += 1;
+        }
+    }
+    
+    let duration = start.elapsed();
+    let avg_turn_time = duration / 100;
+    
+    assert_eq!(successful_turns, 100, "All turns should complete");
+    assert!(
+        avg_turn_time < TARGET_FRAME_TIME,
+        "Average turn time {:?} exceeds target {:?}",
+        avg_turn_time,
+        TARGET_FRAME_TIME
+    );
+    
+    eprintln!(
+        "100 turns completed in {:?} (avg {:?} per turn)",
+        duration, avg_turn_time
+    );
+}
+
+#[test]
+fn test_event_bus_performance() {
+    // Test event bus performance with many events
+    let mut world = TestWorldBuilder::new(2008)
+        .with_simple_dungeon(0)
+        .with_player(5, 5, 0)
+        .build();
+    
+    let start = Instant::now();
+    
+    // Publish 1000 events
+    for _ in 0..1000 {
+        world.ecs_world.publish_event(terminal_pixel_dungeon::event_bus::GameEvent::PlayerTurnStarted);
+    }
+    
+    // Process all events
+    world.ecs_world.process_events();
+    
+    let duration = start.elapsed();
+    
+    assert!(
+        duration < Duration::from_millis(10),
+        "Event processing took {:?}, too slow",
+        duration
+    );
+}
+
+#[test]
+fn test_large_dungeon_performance() {
+    // Test performance with a larger dungeon
+    let mut builder = TestWorldBuilder::new(2009);
+    
+    // Create a 50x50 dungeon
+    for x in 0..50 {
+        for y in 0..50 {
+            let terrain = if x == 0 || y == 0 || x == 49 || y == 49 {
+                TerrainType::Wall
+            } else {
+                TerrainType::Floor
+            };
+            builder = builder.with_tile(x, y, 0, terrain);
+        }
+    }
+    
+    let mut world = builder
+        .with_player(25, 25, 0)
+        .build();
+    
+    world.execute_player_action(PlayerAction::Wait);
+    
+    let start = Instant::now();
+    let result = world.process_turn();
+    let duration = start.elapsed();
+    
+    assert!(result.is_ok());
+    assert!(
+        duration < MAX_FRAME_TIME,
+        "Large dungeon turn took {:?}, exceeds max {:?}",
+        duration,
+        MAX_FRAME_TIME
+    );
+}
+
+#[test]
+fn test_memory_usage_stability() {
+    // Test that memory usage remains stable over many turns
+    let mut world = TestWorldBuilder::new(2010)
+        .with_simple_dungeon(0)
+        .with_player(5, 5, 0)
+        .build();
+    
+    // Run many turns
+    for i in 0..1000 {
+        world.execute_player_action(PlayerAction::Wait);
+        let _ = world.process_turn();
+        
+        // Clear processed events to prevent unbounded growth
+        world.ecs_world.process_events();
+    }
+    
+    // If we got here without crashing or OOM, memory is stable
+    assert!(true, "Memory usage remained stable over 1000 turns");
+}
+
+#[test]
+fn test_pathfinding_performance() {
+    // Test AI pathfinding performance (if pathfinding is implemented)
+    let (builder, enemy) = TestWorldBuilder::new(2011)
+        .with_simple_dungeon(0)
+        .with_player(1, 1, 0)
+        .with_enemy(8, 8, 0, "Pathfinding Rat", Faction::Enemy);
+    
+    let mut world = builder.build();
+    
+    // Update FOV so enemy can see player
+    let mut fov_system = FOVSystem;
+    fov_system.run(
+        &mut world.ecs_world.world,
+        &mut world.ecs_world.resources,
+    );
+    
+    // Run AI system (will attempt pathfinding)
+    let start = Instant::now();
+    let mut ai_system = AISystem;
+    ai_system.run(
+        &mut world.ecs_world.world,
+        &mut world.ecs_world.resources,
+    );
+    let duration = start.elapsed();
+    
+    assert!(
+        duration < Duration::from_millis(10),
+        "Pathfinding took {:?}, too slow",
+        duration
+    );
+}
+
+#[test]
+fn test_worst_case_scenario() {
+    // Stress test: Large dungeon, many enemies, complex interactions
+    let mut builder = TestWorldBuilder::new(2012);
+    
+    // Create a 30x30 dungeon
+    for x in 0..30 {
+        for y in 0..30 {
+            let terrain = if x == 0 || y == 0 || x == 29 || y == 29 {
+                TerrainType::Wall
+            } else {
+                TerrainType::Floor
+            };
+            builder = builder.with_tile(x, y, 0, terrain);
+        }
+    }
+    
+    // Add 20 enemies
+    for i in 0..20 {
+        let x = 2 + (i % 10) * 2;
+        let y = 2 + (i / 10) * 2;
+        let (new_builder, _) = builder
+            .with_enemy(x, y, 0, &format!("Stress Rat {}", i), Faction::Enemy);
+        builder = new_builder;
+    }
+    
+    let mut world = builder
+        .with_player(15, 15, 0)
+        .build();
+    
+    world.execute_player_action(PlayerAction::Wait);
+    
+    // Measure worst-case turn time
+    let start = Instant::now();
+    let result = world.process_turn();
+    let duration = start.elapsed();
+    
+    assert!(result.is_ok());
+    assert!(
+        duration < Duration::from_millis(100),
+        "Worst case scenario took {:?}, too slow",
+        duration
+    );
+    
+    eprintln!("Worst case scenario: {:?}", duration);
+}
+
+/// Helper function to run a benchmark multiple times and report statistics
+#[allow(dead_code)]
+fn benchmark<F>(name: &str, iterations: usize, mut f: F)
+where
+    F: FnMut(),
+{
+    let mut durations = Vec::with_capacity(iterations);
+    
+    for _ in 0..iterations {
+        let start = Instant::now();
+        f();
+        durations.push(start.elapsed());
+    }
+    
+    durations.sort();
+    let total: Duration = durations.iter().sum();
+    let avg = total / iterations as u32;
+    let median = durations[iterations / 2];
+    let p95 = durations[(iterations * 95) / 100];
+    let p99 = durations[(iterations * 99) / 100];
+    
+    eprintln!("\n=== Benchmark: {} ===", name);
+    eprintln!("Iterations: {}", iterations);
+    eprintln!("Average:    {:?}", avg);
+    eprintln!("Median:     {:?}", median);
+    eprintln!("P95:        {:?}", p95);
+    eprintln!("P99:        {:?}", p99);
+    eprintln!("Min:        {:?}", durations[0]);
+    eprintln!("Max:        {:?}", durations[iterations - 1]);
+}

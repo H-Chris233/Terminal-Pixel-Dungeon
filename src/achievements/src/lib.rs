@@ -24,7 +24,6 @@ pub struct AchievementsManager {
     progress: AchievementProgress,
     /// Newly unlocked achievements this session (for notifications)
     #[serde(default, skip_serializing)]
-    #[bincode(with_serde)]
     newly_unlocked: Vec<AchievementId>,
 }
 

@@ -1728,7 +1728,7 @@ impl DungeonSystem {
                         experience: enemy.exp_value,
                         class: None,
                     },
-
+                    Energy {
                         current: 100,
                         max: 100,
                         regeneration_rate: 1,
