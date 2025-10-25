@@ -1468,6 +1468,183 @@ impl System for DungeonSystem {
 }
 
 impl DungeonSystem {
+    /// Run dungeon system with event bus access for LevelChanged events
+    pub fn run_with_events(ecs_world: &mut ECSWorld) -> SystemResult {
+        use crate::event_bus::GameEvent;
+
+        // Process pending player actions for dungeon navigation
+        let actions_to_process = std::mem::take(&mut ecs_world.resources.input_buffer.pending_actions);
+        let mut new_actions = Vec::new();
+
+        for action in actions_to_process {
+            match action {
+                PlayerAction::Descend => {
+                    if let Some(player_entity) = find_player_entity(&ecs_world.world) {
+                        // Get player position as owned values
+                        let player_pos_x;
+                        let player_pos_y;
+                        let player_pos_z;
+                        
+                        match ecs_world.world.get::<&Position>(player_entity) {
+                            Ok(pos) => {
+                                player_pos_x = pos.x;
+                                player_pos_y = pos.y;
+                                player_pos_z = pos.z;
+                            }
+                            Err(_) => {
+                                new_actions.push(action);
+                                continue;
+                            }
+                        }
+
+                        // Check if there's a stairs down tile at player's position
+                        let mut on_stairs_down = false;
+                        for (_, (pos, tile)) in ecs_world.world.query::<(&Position, &Tile)>().iter() {
+                            if pos.x == player_pos_x
+                                && pos.y == player_pos_y
+                                && pos.z == player_pos_z
+                            {
+                                if matches!(tile.terrain_type, TerrainType::StairsDown) {
+                                    on_stairs_down = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if on_stairs_down {
+                            let old_level = player_pos_z as usize;
+                            let new_level = (player_pos_z + 1) as usize;
+
+                            ecs_world.resources.game_state.depth = new_level;
+
+                            // Move player to new level
+                            if let Ok(mut pos) = ecs_world.world.get::<&mut Position>(player_entity) {
+                                pos.z += 1;
+                                pos.x = 10;
+                                pos.y = 10;
+                            }
+
+                            // Publish LevelChanged event
+                            ecs_world.publish_event(GameEvent::LevelChanged {
+                                old_level,
+                                new_level,
+                            });
+
+                                // Add message to game state log
+                                ecs_world.resources
+                                    .game_state
+                                    .message_log
+                                    .push("You descend to the next level...".to_string());
+                                if ecs_world.resources.game_state.message_log.len() > 10 {
+                                    ecs_world.resources.game_state.message_log.remove(0);
+                                }
+                        } else {
+                            ecs_world.resources
+                                .game_state
+                                .message_log
+                                .push("You need to stand on stairs to descend.".to_string());
+                            if ecs_world.resources.game_state.message_log.len() > 10 {
+                                ecs_world.resources.game_state.message_log.remove(0);
+                            }
+                            new_actions.push(action);
+                        }
+                    } else {
+                        new_actions.push(action);
+                    }
+                }
+                PlayerAction::Ascend => {
+                    if let Some(player_entity) = find_player_entity(&ecs_world.world) {
+                        // Get player position as owned value
+                        let player_pos_x;
+                        let player_pos_y;
+                        let player_pos_z;
+                        
+                        match ecs_world.world.get::<&Position>(player_entity) {
+                            Ok(pos) => {
+                                player_pos_x = pos.x;
+                                player_pos_y = pos.y;
+                                player_pos_z = pos.z;
+                            }
+                            Err(_) => {
+                                new_actions.push(action);
+                                continue;
+                            }
+                        }
+
+                        // Check if there's a stairs up tile at player's position
+                        let mut on_stairs_up = false;
+                        for (_, (pos, tile)) in ecs_world.world.query::<(&Position, &Tile)>().iter() {
+                            if pos.x == player_pos_x
+                                && pos.y == player_pos_y
+                                && pos.z == player_pos_z
+                            {
+                                if matches!(tile.terrain_type, TerrainType::StairsUp) {
+                                    on_stairs_up = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if on_stairs_up {
+                            if player_pos_z > 0 {
+                                let old_level = player_pos_z as usize;
+                                let new_level = (player_pos_z - 1) as usize;
+
+                                // Move player to new level
+                                if let Ok(mut pos) = ecs_world.world.get::<&mut Position>(player_entity) {
+                                    pos.z -= 1;
+                                    pos.x = 10;
+                                    pos.y = 10;
+                                }
+
+                                ecs_world.resources.game_state.depth = new_level;
+
+                                // Publish LevelChanged event
+                                ecs_world.publish_event(GameEvent::LevelChanged {
+                                    old_level,
+                                    new_level,
+                                });
+
+                                // Add message to game state log
+                                ecs_world.resources.game_state.message_log.push("You ascend to the previous level...".to_string());
+                                if ecs_world.resources.game_state.message_log.len() > 10 {
+                                    ecs_world.resources.game_state.message_log.remove(0);
+                                }
+                            } else {
+                                // Player is at dungeon level 0, can't go higher
+                                let message = "You can't go up from here.".to_string();
+
+                                ecs_world.resources.game_state.message_log.push(message);
+                                if ecs_world.resources.game_state.message_log.len() > 10 {
+                                    ecs_world.resources.game_state.message_log.remove(0);
+                                }
+                            }
+                        } else {
+                            let message = "You need to stand on stairs to ascend.".to_string();
+                            new_actions.push(action);
+
+                            ecs_world.resources.game_state.message_log.push(message);
+                            if ecs_world.resources.game_state.message_log.len() > 10 {
+                                ecs_world.resources.game_state.message_log.remove(0);
+                            }
+                        }
+                    } else {
+                        new_actions.push(action);
+                    }
+                }
+                // For non-dungeon actions, add back to queue for other systems to handle
+                _ => {
+                    new_actions.push(action);
+                }
+            }
+        }
+
+        // Put unprocessed actions back in the buffer
+        ecs_world.resources.input_buffer.pending_actions = new_actions;
+
+        SystemResult::Continue
+    }
+
     /// Generate a basic dungeon level
     fn generate_level(&mut self, world: &mut World, resources: &mut Resources, level: i32) {
         // Prefer using dungeon::Dungeon if present
@@ -1549,8 +1726,9 @@ impl DungeonSystem {
                         evasion: 10,
                         level: enemy.attack_range as u32,
                         experience: enemy.exp_value,
+                        class: None,
                     },
-                    Energy {
+
                         current: 100,
                         max: 100,
                         regeneration_rate: 1,
@@ -1709,6 +1887,7 @@ impl DungeonSystem {
                     evasion: 10,
                     level: level as u32,
                     experience: 10 + (level as u32 * 5),
+                    class: None,
                 },
                 Energy {
                     current: 100,
@@ -2134,6 +2313,19 @@ impl MenuSystem {
                 }
             }
 
+            GameStatus::ClassSelection { ref mut cursor } => {
+                // 职业选择导航（4个职业：战士、法师、盗贼、女猎手）
+                match direction {
+                    NavigateDirection::Up => {
+                        *cursor = cursor.saturating_sub(1);
+                    }
+                    NavigateDirection::Down => {
+                        *cursor = (*cursor + 1).min(3);
+                    }
+                    _ => {}
+                }
+            }
+
             GameStatus::ConfirmQuit { ref mut selected_option, .. } => {
                 // 确认退出对话框的导航：在 0(是)/1(否) 之间切换
                 match direction {
@@ -2158,8 +2350,8 @@ impl MenuSystem {
                 // 主菜单选择逻辑
                 match selected_option {
                     0 => {
-                        // 开始新游戏
-                        MenuSystem::start_new_game(resources);
+                        // 开始新游戏 - 进入职业选择界面
+                        resources.game_state.game_state = GameStatus::ClassSelection { cursor: 0 };
                     }
                     1 => {
                         // 继续游戏（TODO: 实现加载存档功能）
@@ -2278,6 +2470,27 @@ impl MenuSystem {
                 ));
             }
 
+            GameStatus::ClassSelection { cursor } => {
+                // 职业选择确认
+                let class = match cursor {
+                    0 => hero::class::Class::Warrior,
+                    1 => hero::class::Class::Mage,
+                    2 => hero::class::Class::Rogue,
+                    3 => hero::class::Class::Huntress,
+                    _ => hero::class::Class::Warrior,
+                };
+                
+                // 存储选中的职业，用于后续初始化
+                resources.game_state.selected_class = Some(class.clone());
+                resources
+                    .game_state
+                    .message_log
+                    .push(format!("选择了职业：{}", class));
+                
+                // 进入游戏状态（实际的初始化将在 game_loop 中处理）
+                MenuSystem::start_new_game(resources);
+            }
+
             GameStatus::ConfirmQuit { return_to, selected_option } => {
                 // 确认退出：0=是，1=否
                 if selected_option == 0 {
@@ -2311,6 +2524,13 @@ impl MenuSystem {
             GameStatus::Options { .. } | GameStatus::Inventory { .. } => {
                 // 从选项/物品栏返回游戏
                 resources.game_state.game_state = GameStatus::Running;
+            }
+
+            GameStatus::ClassSelection { .. } => {
+                // 从职业选择返回主菜单
+                resources.game_state.game_state = GameStatus::MainMenu {
+                    selected_option: 0,
+                };
             }
 
             _ => {}

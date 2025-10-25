@@ -5,6 +5,7 @@
 
 use crate::ecs::{Actor, Hunger, Player, PlayerProgress, Stats, Wealth};
 use hecs::World;
+use hero::class::Class;
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -106,12 +107,11 @@ impl HudRenderer {
         progress: &PlayerProgress,
         _name: &str,
     ) {
-        let class_icon = match progress.class.as_str() {
-            "Warrior" => "⚔",
-            "Mage" => "🔮",
-            "Rogue" => "🗡",
-            "Huntress" => "🏹",
-            _ => "👤",
+        let class_icon = match progress.class.clone() {
+            Class::Warrior => "⚔",
+            Class::Mage => "🔮",
+            Class::Rogue => "🗡",
+            Class::Huntress => "🏹",
         };
 
         let text = Line::from(vec![

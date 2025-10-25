@@ -2,7 +2,7 @@
 
 use crate::ecs::*;
 use crate::render::{
-    DungeonRenderer, GameOverRenderer, HudRenderer, InventoryRenderer, MenuRenderer,
+    ClassSelectionRenderer, DungeonRenderer, GameOverRenderer, HudRenderer, InventoryRenderer, MenuRenderer,
 };
 use anyhow;
 
@@ -64,6 +64,7 @@ pub struct RatatuiRenderer {
     inventory_renderer: InventoryRenderer,
     menu_renderer: MenuRenderer,
     game_over_renderer: GameOverRenderer,
+    class_selection_renderer: ClassSelectionRenderer,
 }
 
 /// Cached rendering data for optimization
@@ -87,6 +88,7 @@ impl RatatuiRenderer {
             inventory_renderer: InventoryRenderer::new(),
             menu_renderer: MenuRenderer::new(),
             game_over_renderer: GameOverRenderer::new(),
+            class_selection_renderer: ClassSelectionRenderer::new(),
         })
     }
 
@@ -119,6 +121,11 @@ impl RatatuiRenderer {
                 GameStatus::CharacterInfo => {
                     // 渲染角色信息界面
                     Self::render_character_info(f, f.area(), &ecs_world.world);
+                }
+
+                GameStatus::ClassSelection { .. } => {
+                    self.class_selection_renderer
+                        .render(f, f.area(), &ecs_world.resources);
                 }
 
                 GameStatus::Inventory { .. } => {
@@ -334,7 +341,7 @@ impl RatatuiRenderer {
             Line::from(vec![
                 Span::styled("职业: ", Style::default().fg(TuiColor::Gray)),
                 Span::styled(
-                    progress.class.clone(),
+                    format!("{}", progress.class),
                     Style::default().fg(TuiColor::Magenta).add_modifier(Modifier::BOLD),
                 ),
             ]),

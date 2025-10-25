@@ -20,13 +20,15 @@ impl HeroAdapter for Hero {
             evasion: 20,
             level: self.level,
             experience: self.experience,
+            class: Some(self.class.clone()),
         }
     }
 }
 
 impl StatsAdapter for Stats {
     fn to_hero(&self) -> Hero {
-        let mut hero = Hero::with_seed(hero::class::Class::Warrior, 12345);
+        let class = self.class.clone().unwrap_or_default();
+        let mut hero = Hero::with_seed(class, 12345);
         hero.hp = self.hp;
         hero.max_hp = self.max_hp;
         hero.base_attack = self.attack;

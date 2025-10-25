@@ -10,6 +10,7 @@ mod tests {
         let stats = hero.to_stats();
         let hero2 = stats.to_hero();
         assert_eq!(hero2.level, hero.level);
+        assert_eq!(hero2.class, hero.class);
     }
 
     #[test]
