@@ -64,7 +64,6 @@ pub struct Hero {
     pub rng: HeroRng,
     pub bag: Bag,
     #[serde(default)]
-    #[bincode(default)]
     pub class_skills: SkillState,
 
     // 用于事件总线的ID
