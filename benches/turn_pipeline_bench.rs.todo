@@ -1,0 +1,273 @@
+//! Criterion benchmarks for the turn pipeline
+//!
+//! Run with: cargo bench
+
+use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use hecs::World;
+use rand::SeedableRng;
+use rand::rngs::StdRng;
+use terminal_pixel_dungeon::ecs::*;
+use terminal_pixel_dungeon::systems::*;
+use terminal_pixel_dungeon::turn_system::TurnSystem;
+
+/// Create a test world with player and enemies
+fn create_test_world(num_enemies: usize, seed: u64) -> (World, Resources) {
+    let mut world = World::new();
+    let mut resources = Resources::default();
+    resources.rng = StdRng::seed_from_u64(seed);
+    
+    // Add player
+    let player = world.spawn((
+        Position::new(25, 25, 0),
+        Actor {
+            name: "Test Player".to_string(),
+            faction: Faction::Player,
+        },
+        Player,
+        Stats {
+            hp: 100,
+            max_hp: 100,
+            attack: 10,
+            defense: 5,
+            accuracy: 80,
+            evasion: 20,
+            strength: 10,
+            dexterity: 10,
+            intelligence: 10,
+        },
+        Energy {
+            current: 100,
+            max: 100,
+            regeneration_rate: 20,
+        },
+        Inventory {
+            items: Vec::new(),
+            capacity: 20,
+        },
+        Viewshed {
+            visible_tiles: Vec::new(),
+            range: 8,
+            dirty: true,
+        },
+        Renderable {
+            glyph: '@',
+            fg: Color::Yellow,
+            bg: Color::Black,
+        },
+        Hunger {
+            current: 1000,
+            max: 1500,
+            starving_threshold: 100,
+            hungry_threshold: 300,
+        },
+    ));
+    
+    resources.player_entity = Some(player);
+    
+    // Add enemies
+    for i in 0..num_enemies {
+        let x = 10 + (i as i32 % 10) * 3;
+        let y = 10 + (i as i32 / 10) * 3;
+        
+        world.spawn((
+            Position::new(x, y, 0),
+            Actor {
+                name: format!("Enemy {}", i),
+                faction: Faction::Enemy,
+            },
+            Stats {
+                hp: 50,
+                max_hp: 50,
+                attack: 8,
+                defense: 3,
+                accuracy: 70,
+                evasion: 15,
+                strength: 8,
+                dexterity: 8,
+                intelligence: 8,
+            },
+            Energy {
+                current: 100,
+                max: 100,
+                regeneration_rate: 20,
+            },
+            AI {
+                ai_type: AIType::Hostile,
+                target: None,
+                path: Vec::new(),
+            },
+            Viewshed {
+                visible_tiles: Vec::new(),
+                range: 6,
+                dirty: true,
+            },
+            Renderable {
+                glyph: 'r',
+                fg: Color::Red,
+                bg: Color::Black,
+            },
+        ));
+    }
+    
+    // Add dungeon tiles
+    for x in 0..50 {
+        for y in 0..50 {
+            let terrain = if x == 0 || y == 0 || x == 49 || y == 49 {
+                TerrainType::Wall
+            } else {
+                TerrainType::Floor
+            };
+            
+            world.spawn((
+                Position::new(x, y, 0),
+                Tile {
+                    terrain,
+                    is_passable: matches!(terrain, TerrainType::Floor),
+                    blocks_vision: matches!(terrain, TerrainType::Wall),
+                },
+            ));
+        }
+    }
+    
+    (world, resources)
+}
+
+fn bench_movement_system(c: &mut Criterion) {
+    c.bench_function("movement_system", |b| {
+        b.iter(|| {
+            let (mut world, mut resources) = create_test_world(0, 42);
+            resources.input_buffer.pending_actions.push(PlayerAction::Move(Direction::North));
+            
+            let mut system = MovementSystem;
+            black_box(system.run(&mut world, &mut resources));
+        });
+    });
+}
+
+fn bench_ai_system(c: &mut Criterion) {
+    let mut group = c.benchmark_group("ai_system");
+    
+    for num_enemies in [1, 5, 10, 25, 50].iter() {
+        group.bench_with_input(
+            BenchmarkId::from_parameter(num_enemies),
+            num_enemies,
+            |b, &num_enemies| {
+                b.iter(|| {
+                    let (mut world, mut resources) = create_test_world(num_enemies, 42);
+                    
+                    let mut system = AISystem;
+                    black_box(system.run(&mut world, &mut resources));
+                });
+            },
+        );
+    }
+    
+    group.finish();
+}
+
+fn bench_combat_system(c: &mut Criterion) {
+    c.bench_function("combat_system", |b| {
+        b.iter(|| {
+            let (mut world, mut resources) = create_test_world(5, 42);
+            
+            let mut system = CombatSystem;
+            black_box(system.run(&mut world, &mut resources));
+        });
+    });
+}
+
+fn bench_fov_system(c: &mut Criterion) {
+    let mut group = c.benchmark_group("fov_system");
+    
+    for num_enemies in [0, 5, 10, 25].iter() {
+        group.bench_with_input(
+            BenchmarkId::from_parameter(num_enemies),
+            num_enemies,
+            |b, &num_enemies| {
+                b.iter(|| {
+                    let (mut world, mut resources) = create_test_world(num_enemies, 42);
+                    
+                    let mut system = FOVSystem;
+                    black_box(system.run(&mut world, &mut resources));
+                });
+            },
+        );
+    }
+    
+    group.finish();
+}
+
+fn bench_energy_system(c: &mut Criterion) {
+    c.bench_function("energy_system", |b| {
+        b.iter(|| {
+            let (mut world, mut resources) = create_test_world(10, 42);
+            
+            let mut system = EnergySystem;
+            black_box(system.run(&mut world, &mut resources));
+        });
+    });
+}
+
+fn bench_complete_turn_pipeline(c: &mut Criterion) {
+    let mut group = c.benchmark_group("complete_turn_pipeline");
+    
+    for num_enemies in [0, 5, 10, 20].iter() {
+        group.bench_with_input(
+            BenchmarkId::from_parameter(num_enemies),
+            num_enemies,
+            |b, &num_enemies| {
+                b.iter(|| {
+                    let (mut world, mut resources) = create_test_world(num_enemies, 42);
+                    resources.input_buffer.pending_actions.push(PlayerAction::Wait);
+                    
+                    // Run all systems in order
+                    let mut systems: Vec<Box<dyn System>> = vec![
+                        Box::new(InputSystem),
+                        Box::new(MenuSystem),
+                        Box::new(TimeSystem),
+                        Box::new(MovementSystem),
+                        Box::new(AISystem),
+                        Box::new(CombatSystem),
+                        Box::new(FOVSystem),
+                        Box::new(EffectSystem),
+                        Box::new(EnergySystem),
+                        Box::new(InventorySystem),
+                        Box::new(HungerSystem),
+                        Box::new(DungeonSystem),
+                    ];
+                    
+                    for system in systems.iter_mut() {
+                        black_box(system.run(&mut world, &mut resources));
+                    }
+                });
+            },
+        );
+    }
+    
+    group.finish();
+}
+
+fn bench_turn_system_cycle(c: &mut Criterion) {
+    c.bench_function("turn_system_cycle", |b| {
+        b.iter(|| {
+            let (mut world, mut resources) = create_test_world(5, 42);
+            resources.input_buffer.completed_actions.push(PlayerAction::Wait);
+            
+            let mut turn_system = TurnSystem::new();
+            black_box(turn_system.process_turn_cycle(&mut world, &mut resources));
+        });
+    });
+}
+
+criterion_group!(
+    benches,
+    bench_movement_system,
+    bench_ai_system,
+    bench_combat_system,
+    bench_fov_system,
+    bench_energy_system,
+    bench_complete_turn_pipeline,
+    bench_turn_system_cycle,
+);
+
+criterion_main!(benches);

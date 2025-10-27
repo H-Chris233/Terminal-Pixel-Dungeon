@@ -11,7 +11,6 @@ use combat::Combatant;
 /// 英雄效果管理系统
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Encode, Decode)]
 pub struct EffectManager {
-    #[bincode(with_serde)]
     effects: HashMap<EffectType, Effect>,
 }
 

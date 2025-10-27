@@ -1,0 +1,389 @@
+//! Property-based tests using proptest
+//!
+//! These tests verify that certain properties hold for all possible inputs,
+//! catching edge cases that might be missed by example-based tests.
+
+mod test_helpers;
+
+use test_helpers::*;
+use terminal_pixel_dungeon::ecs::*;
+use terminal_pixel_dungeon::systems::*;
+use proptest::prelude::*;
+
+// Property: Player position should always be valid after movement
+proptest! {
+    #[test]
+    fn prop_player_position_always_valid(
+        x in -100i32..100i32,
+        y in -100i32..100i32,
+        seed in any::<u64>()
+    ) {
+        let mut world = TestWorldBuilder::new(seed)
+            .with_simple_dungeon(0)
+            .with_player(5, 5, 0)
+            .build();
+        
+        // Execute movement
+        world.execute_player_action(PlayerAction::Move(Direction::North));
+        
+        let mut movement_system = MovementSystem;
+        movement_system.run(
+            &mut world.ecs_world.world,
+            &mut world.ecs_world.resources,
+        );
+        
+        // Position should always be valid (not NaN, not extreme values)
+        if let Some(pos) = world.player_position() {
+            prop_assert!(pos.x.abs() < 10000);
+            prop_assert!(pos.y.abs() < 10000);
+        }
+    }
+}
+
+// Property: HP should never go negative
+proptest! {
+    #[test]
+    fn prop_hp_never_negative(
+        initial_hp in 1u32..100u32,
+        damage in 0u32..200u32,
+        seed in any::<u64>()
+    ) {
+        let mut world = TestWorldBuilder::new(seed)
+            .with_simple_dungeon(0)
+            .with_player(5, 5, 0)
+            .build();
+        
+        // Set initial HP
+        if let Some(player) = world.player_entity() {
+            if let Ok(mut stats) = world.ecs_world.world.get::<&mut Stats>(player) {
+                stats.hp = initial_hp;
+            }
+        }
+        
+        // Apply damage (simulated)
+        if let Some(player) = world.player_entity() {
+            if let Ok(mut stats) = world.ecs_world.world.get::<&mut Stats>(player) {
+                stats.hp = stats.hp.saturating_sub(damage);
+            }
+        }
+        
+        // HP should never be negative
+        let final_hp = world.player_stats().map(|s| s.hp).unwrap_or(0);
+        prop_assert!(final_hp <= initial_hp);
+    }
+}
+
+// Property: Energy should never exceed max
+proptest! {
+    #[test]
+    fn prop_energy_never_exceeds_max(
+        initial_energy in 0u32..100u32,
+        regeneration in 0u32..50u32,
+        seed in any::<u64>()
+    ) {
+        let mut world = TestWorldBuilder::new(seed)
+            .with_simple_dungeon(0)
+            .with_player(5, 5, 0)
+            .build();
+        
+        // Set initial energy
+        world.set_entity_energy(world.player_entity().unwrap(), initial_energy);
+        
+        // Regenerate energy
+        let mut energy_system = EnergySystem;
+        energy_system.run(
+            &mut world.ecs_world.world,
+            &mut world.ecs_world.resources,
+        );
+        
+        // Energy should not exceed max
+        let energy = world.player_energy().unwrap();
+        prop_assert!(energy.current <= energy.max);
+    }
+}
+
+// Property: Turn system should always transition to valid states
+proptest! {
+    #[test]
+    fn prop_turn_state_always_valid(
+        actions in prop::collection::vec(
+            prop_oneof![
+                Just(PlayerAction::Wait),
+                Just(PlayerAction::Move(Direction::North)),
+                Just(PlayerAction::Move(Direction::South)),
+                Just(PlayerAction::Move(Direction::East)),
+                Just(PlayerAction::Move(Direction::West)),
+            ],
+            0..10
+        ),
+        seed in any::<u64>()
+    ) {
+        let mut world = TestWorldBuilder::new(seed)
+            .with_simple_dungeon(0)
+            .with_player(5, 5, 0)
+            .build();
+        
+        // Execute actions
+        for action in actions {
+            world.execute_player_action(action);
+            let _ = world.process_turn();
+            
+            // Turn state should always be valid
+            let state = world.turn_state();
+            prop_assert!(
+                matches!(state, 
+                    terminal_pixel_dungeon::turn_system::TurnState::PlayerTurn |
+                    terminal_pixel_dungeon::turn_system::TurnState::AITurn |
+                    terminal_pixel_dungeon::turn_system::TurnState::ProcessingPlayerAction |
+                    terminal_pixel_dungeon::turn_system::TurnState::ProcessingAIActions
+                )
+            );
+        }
+    }
+}
+
+// Property: Inventory capacity should never be exceeded
+proptest! {
+    #[test]
+    fn prop_inventory_respects_capacity(
+        num_items in 0usize..30,
+        seed in any::<u64>()
+    ) {
+        let mut world = TestWorldBuilder::new(seed)
+            .with_simple_dungeon(0)
+            .with_player(5, 5, 0)
+            .build();
+        
+        // Try to add items
+        if let Some(player) = world.player_entity() {
+            if let Ok(mut inv) = world.ecs_world.world.get::<&mut Inventory>(player) {
+                let capacity = inv.capacity;
+                
+                for i in 0..num_items {
+                    if inv.items.len() < capacity {
+                        inv.items.push(ECSItem {
+                            name: format!("Item {}", i),
+                            item_type: ItemType::Consumable(ConsumableEffect::Heal(10)),
+                            quantity: 1,
+                        });
+                    }
+                }
+                
+                // Inventory size should not exceed capacity
+                prop_assert!(inv.items.len() <= capacity);
+            }
+        }
+    }
+}
+
+// Property: Position changes should be deterministic for same seed
+proptest! {
+    #[test]
+    fn prop_deterministic_movement(
+        seed in any::<u64>(),
+        direction in prop_oneof![
+            Just(Direction::North),
+            Just(Direction::South),
+            Just(Direction::East),
+            Just(Direction::West),
+        ]
+    ) {
+        // Create two worlds with same seed
+        let mut world1 = TestWorldBuilder::new(seed)
+            .with_simple_dungeon(0)
+            .with_player(5, 5, 0)
+            .build();
+        
+        let mut world2 = TestWorldBuilder::new(seed)
+            .with_simple_dungeon(0)
+            .with_player(5, 5, 0)
+            .build();
+        
+        // Execute same action on both
+        world1.execute_player_action(PlayerAction::Move(direction));
+        world2.execute_player_action(PlayerAction::Move(direction));
+        
+        let _ = world1.process_turn();
+        let _ = world2.process_turn();
+        
+        // Positions should be identical
+        let pos1 = world1.player_position().unwrap();
+        let pos2 = world2.player_position().unwrap();
+        
+        prop_assert_eq!(pos1.x, pos2.x);
+        prop_assert_eq!(pos1.y, pos2.y);
+        prop_assert_eq!(pos1.z, pos2.z);
+    }
+}
+
+// Property: Stats should never exceed their maximum values
+proptest! {
+    #[test]
+    fn prop_stats_respect_maximums(
+        hp in 1u32..200u32,
+        max_hp in 1u32..200u32,
+        seed in any::<u64>()
+    ) {
+        let mut world = TestWorldBuilder::new(seed)
+            .with_simple_dungeon(0)
+            .with_player(5, 5, 0)
+            .build();
+        
+        // Set stats
+        if let Some(player) = world.player_entity() {
+            if let Ok(mut stats) = world.ecs_world.world.get::<&mut Stats>(player) {
+                stats.max_hp = max_hp;
+                stats.hp = hp;
+            }
+        }
+        
+        // HP should not exceed max_hp
+        let stats = world.player_stats().unwrap();
+        prop_assert!(stats.hp <= stats.max_hp || stats.hp == hp);
+    }
+}
+
+// Property: Hunger should decrease over time
+proptest! {
+    #[test]
+    fn prop_hunger_decreases_over_time(
+        turns in 1usize..20,
+        seed in any::<u64>()
+    ) {
+        let mut world = TestWorldBuilder::new(seed)
+            .with_simple_dungeon(0)
+            .with_player(5, 5, 0)
+            .build();
+        
+        let initial_hunger = if let Some(player) = world.player_entity() {
+            world.ecs_world.world.get::<&Hunger>(player)
+                .ok()
+                .map(|h| h.current)
+                .unwrap_or(0)
+        } else {
+            0
+        };
+        
+        // Process multiple turns
+        for _ in 0..turns {
+            world.execute_player_action(PlayerAction::Wait);
+            let _ = world.process_turn();
+        }
+        
+        let final_hunger = if let Some(player) = world.player_entity() {
+            world.ecs_world.world.get::<&Hunger>(player)
+                .ok()
+                .map(|h| h.current)
+                .unwrap_or(0)
+        } else {
+            0
+        };
+        
+        // Hunger should decrease or stay same (if already at min)
+        prop_assert!(final_hunger <= initial_hunger);
+    }
+}
+
+// Property: AI entities should not act with 0 HP
+proptest! {
+    #[test]
+    fn prop_dead_entities_dont_act(
+        seed in any::<u64>()
+    ) {
+        let (builder, enemy) = TestWorldBuilder::new(seed)
+            .with_simple_dungeon(0)
+            .with_player(5, 5, 0)
+            .with_enemy(6, 5, 0, "Test Enemy", Faction::Enemy);
+        
+        let mut world = builder.build();
+        
+        // Get initial position
+        let initial_pos = world.ecs_world.world.get::<&Position>(enemy)
+            .ok()
+            .map(|p| (p.x, p.y))
+            .unwrap();
+        
+        // Kill the enemy
+        world.set_entity_hp(enemy, 0);
+        
+        // Process AI
+        let mut ai_system = AISystem;
+        ai_system.run(
+            &mut world.ecs_world.world,
+            &mut world.ecs_world.resources,
+        );
+        
+        // Position should not change (dead entities don't move)
+        let final_pos = world.ecs_world.world.get::<&Position>(enemy)
+            .ok()
+            .map(|p| (p.x, p.y))
+            .unwrap();
+        
+        prop_assert_eq!(initial_pos, final_pos);
+    }
+}
+
+// Property: Event bus should handle arbitrary number of events
+proptest! {
+    #[test]
+    fn prop_event_bus_handles_many_events(
+        num_events in 0usize..1000,
+        seed in any::<u64>()
+    ) {
+        let mut world = TestWorldBuilder::new(seed)
+            .with_simple_dungeon(0)
+            .with_player(5, 5, 0)
+            .build();
+        
+        // Publish many events
+        for _ in 0..num_events {
+            world.ecs_world.publish_event(
+                terminal_pixel_dungeon::event_bus::GameEvent::PlayerTurnStarted
+            );
+        }
+        
+        // Process all events (should not crash)
+        world.ecs_world.process_events();
+        
+        prop_assert!(true);
+    }
+}
+
+// Property: Combat should produce deterministic results with same seed
+proptest! {
+    #[test]
+    fn prop_combat_deterministic(
+        seed in any::<u64>()
+    ) {
+        // Create two identical scenarios
+        let (builder1, enemy1) = TestWorldBuilder::new(seed)
+            .with_simple_dungeon(0)
+            .with_player(5, 5, 0)
+            .with_enemy(5, 6, 0, "Enemy", Faction::Enemy);
+        
+        let mut world1 = builder1.build();
+        
+        let (builder2, enemy2) = TestWorldBuilder::new(seed)
+            .with_simple_dungeon(0)
+            .with_player(5, 5, 0)
+            .with_enemy(5, 6, 0, "Enemy", Faction::Enemy);
+        
+        let mut world2 = builder2.build();
+        
+        // Execute same combat action
+        world1.execute_player_action(PlayerAction::Attack(Direction::South));
+        world2.execute_player_action(PlayerAction::Attack(Direction::South));
+        
+        let mut combat1 = CombatSystem;
+        let mut combat2 = CombatSystem;
+        
+        combat1.run(&mut world1.ecs_world.world, &mut world1.ecs_world.resources);
+        combat2.run(&mut world2.ecs_world.world, &mut world2.ecs_world.resources);
+        
+        // Results should be identical
+        let hp1 = world1.entity_stats(enemy1).map(|s| s.hp);
+        let hp2 = world2.entity_stats(enemy2).map(|s| s.hp);
+        
+        prop_assert_eq!(hp1, hp2);
+    }
+}

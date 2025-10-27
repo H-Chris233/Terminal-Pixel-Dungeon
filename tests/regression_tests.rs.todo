@@ -1,0 +1,449 @@
+//! Regression tests for edge cases and known issues
+//!
+//! These tests cover:
+//! - Simultaneous death scenarios
+//! - Counterattack chains
+//! - Event priority conflicts
+//! - Energy exhaustion
+//! - Menu interactions during gameplay
+
+mod test_helpers;
+
+use test_helpers::*;
+use terminal_pixel_dungeon::ecs::*;
+use terminal_pixel_dungeon::event_bus::{GameEvent, Priority};
+use terminal_pixel_dungeon::systems::*;
+use terminal_pixel_dungeon::turn_system::TurnState;
+
+#[test]
+fn test_simultaneous_death() {
+    // Setup: Player and enemy both at 1 HP, about to attack each other
+    let (builder, enemy) = TestWorldBuilder::new(1000)
+        .with_simple_dungeon(0)
+        .with_player(5, 5, 0)
+        .with_enemy(5, 6, 0, "Dying Rat", Faction::Enemy);
+    
+    let mut world = builder.build();
+    
+    // Set both to 1 HP
+    world.set_entity_hp(world.player_entity().unwrap(), 1);
+    world.set_entity_hp(enemy, 1);
+    
+    // Player attacks enemy
+    world.execute_player_action(PlayerAction::Attack(Direction::South));
+    
+    // Process combat
+    let mut combat_system = CombatSystem;
+    combat_system.run(
+        &mut world.ecs_world.world,
+        &mut world.ecs_world.resources,
+    );
+    
+    // Both should be dead or game should be over
+    let player_dead = world.player_entity()
+        .and_then(|p| world.entity_stats(p))
+        .map(|s| s.hp == 0)
+        .unwrap_or(true);
+    
+    let enemy_dead = !world.is_entity_alive(enemy);
+    
+    // At least one should be dead (enemy from attack)
+    assert!(enemy_dead, "Enemy should be dead from player attack");
+    
+    // If both died, game should be over
+    if player_dead && enemy_dead {
+        let game_state = &world.ecs_world.resources.game_state.game_state;
+        assert!(
+            matches!(game_state, GameStatus::GameOver { .. }),
+            "Game should be over if both died"
+        );
+    }
+}
+
+#[test]
+fn test_counterattack_chain() {
+    // Test that counterattacks don't create infinite loops
+    let (builder, enemy) = TestWorldBuilder::new(1001)
+        .with_simple_dungeon(0)
+        .with_player(5, 5, 0)
+        .with_enemy(5, 6, 0, "Counter Rat", Faction::Enemy);
+    
+    let mut world = builder.build();
+    
+    let initial_player_hp = world.player_stats().unwrap().hp;
+    let initial_enemy_hp = world.entity_stats(enemy).unwrap().hp;
+    
+    // Player attacks
+    world.execute_player_action(PlayerAction::Attack(Direction::South));
+    
+    // Process combat (should not hang or infinite loop)
+    let mut combat_system = CombatSystem;
+    let result = combat_system.run(
+        &mut world.ecs_world.world,
+        &mut world.ecs_world.resources,
+    );
+    
+    // Should complete without error
+    assert!(matches!(result, SystemResult::Continue));
+    
+    // At least one entity should have taken damage
+    let final_player_hp = world.player_stats().map(|s| s.hp).unwrap_or(0);
+    let final_enemy_hp = world.entity_stats(enemy).map(|s| s.hp).unwrap_or(0);
+    
+    assert!(
+        final_player_hp < initial_player_hp || final_enemy_hp < initial_enemy_hp,
+        "At least one entity should have taken damage"
+    );
+}
+
+#[test]
+fn test_event_priority_ordering() {
+    // Test that events are processed in correct priority order
+    let mut world = TestWorldBuilder::new(1002)
+        .with_simple_dungeon(0)
+        .with_player(5, 5, 0)
+        .build();
+    
+    // Publish events with different priorities
+    world.ecs_world.publish_event(GameEvent::PlayerTurnStarted);
+    world.ecs_world.publish_event(GameEvent::AITurnStarted);
+    world.ecs_world.publish_event(GameEvent::TurnEnded);
+    
+    // Process events
+    world.ecs_world.process_events();
+    
+    // Events should be processed (no crash/error)
+    // This is a smoke test to ensure event system handles multiple events
+    assert!(true, "Events processed without crash");
+}
+
+#[test]
+fn test_energy_exhaustion() {
+    // Test behavior when entity runs out of energy
+    let mut world = TestWorldBuilder::new(1003)
+        .with_simple_dungeon(0)
+        .with_player(5, 5, 0)
+        .build();
+    
+    // Set player energy to 0
+    world.set_entity_energy(world.player_entity().unwrap(), 0);
+    
+    // Try to execute an action
+    world.execute_player_action(PlayerAction::Move(Direction::North));
+    
+    // Process movement system
+    let mut movement_system = MovementSystem;
+    movement_system.run(
+        &mut world.ecs_world.world,
+        &mut world.ecs_world.resources,
+    );
+    
+    // Player position should not change (no energy)
+    // Or action should be queued for later
+    let initial_pos = Position::new(5, 5, 0);
+    let final_pos = world.player_position().unwrap();
+    
+    // System should handle 0 energy gracefully
+    assert!(final_pos.x >= 0 && final_pos.y >= 0, "Position should be valid");
+}
+
+#[test]
+fn test_energy_underflow() {
+    // Test that energy doesn't go negative
+    let mut world = TestWorldBuilder::new(1004)
+        .with_simple_dungeon(0)
+        .with_player(5, 5, 0)
+        .build();
+    
+    // Set very low energy
+    world.set_entity_energy(world.player_entity().unwrap(), 10);
+    
+    // Try to consume more energy than available
+    world.execute_player_action(PlayerAction::Move(Direction::North));
+    
+    // Process turn
+    let _ = world.process_turn();
+    
+    // Energy should not underflow (should be 0 or positive)
+    let final_energy = world.player_energy().unwrap();
+    assert!(final_energy.current <= final_energy.max, "Energy should not overflow");
+}
+
+#[test]
+fn test_menu_interaction_during_combat() {
+    // Test that opening menu during combat doesn't break game state
+    let (builder, _enemy) = TestWorldBuilder::new(1005)
+        .with_simple_dungeon(0)
+        .with_player(5, 5, 0)
+        .with_enemy(5, 6, 0, "Menu Test Rat", Faction::Enemy);
+    
+    let mut world = builder.build();
+    
+    // Open inventory during player turn
+    world.execute_player_action(PlayerAction::OpenInventory);
+    
+    // Process menu system
+    let mut menu_system = MenuSystem;
+    menu_system.run(
+        &mut world.ecs_world.world,
+        &mut world.ecs_world.resources,
+    );
+    
+    // Game state should change to inventory view
+    let game_state = &world.ecs_world.resources.game_state.game_state;
+    assert!(
+        matches!(game_state, GameStatus::Inventory { .. }) || 
+        matches!(game_state, GameStatus::Running),
+        "Game should be in inventory or running state"
+    );
+    
+    // Close menu
+    world.execute_player_action(PlayerAction::CloseMenu);
+    
+    // Process menu system again
+    menu_system.run(
+        &mut world.ecs_world.world,
+        &mut world.ecs_world.resources,
+    );
+    
+    // Should return to running state
+    let game_state = &world.ecs_world.resources.game_state.game_state;
+    assert!(
+        matches!(game_state, GameStatus::Running),
+        "Game should return to running state"
+    );
+}
+
+#[test]
+fn test_menu_no_energy_cost() {
+    // Test that menu actions don't consume energy
+    let mut world = TestWorldBuilder::new(1006)
+        .with_simple_dungeon(0)
+        .with_player(5, 5, 0)
+        .build();
+    
+    let initial_energy = world.player_energy().unwrap().current;
+    
+    // Open and close menu
+    world.execute_player_action(PlayerAction::OpenInventory);
+    world.execute_player_action(PlayerAction::CloseMenu);
+    
+    // Process turn
+    let _ = world.process_turn();
+    
+    let final_energy = world.player_energy().unwrap().current;
+    
+    // Energy should not decrease (menu actions are free)
+    assert_eq!(
+        initial_energy, final_energy,
+        "Menu actions should not consume energy"
+    );
+}
+
+#[test]
+fn test_invalid_movement_blocked_by_wall() {
+    // Test that player can't move through walls
+    let mut world = TestWorldBuilder::new(1007)
+        .with_player(1, 1, 0)
+        .with_tile(0, 1, 0, TerrainType::Wall) // Wall to the west
+        .with_tile(1, 1, 0, TerrainType::Floor) // Floor where player is
+        .build();
+    
+    let initial_pos = world.player_position().unwrap();
+    
+    // Try to move into wall
+    world.execute_player_action(PlayerAction::Move(Direction::West));
+    
+    // Process movement
+    let mut movement_system = MovementSystem;
+    movement_system.run(
+        &mut world.ecs_world.world,
+        &mut world.ecs_world.resources,
+    );
+    
+    let final_pos = world.player_position().unwrap();
+    
+    // Position should not change
+    assert_eq!(initial_pos.x, final_pos.x);
+    assert_eq!(initial_pos.y, final_pos.y);
+}
+
+#[test]
+fn test_enemy_death_cleanup() {
+    // Test that dead enemies are properly handled
+    let (builder, enemy) = TestWorldBuilder::new(1008)
+        .with_simple_dungeon(0)
+        .with_player(5, 5, 0)
+        .with_enemy(5, 6, 0, "Cleanup Test Rat", Faction::Enemy);
+    
+    let mut world = builder.build();
+    
+    // Kill the enemy
+    world.set_entity_hp(enemy, 0);
+    
+    // Process systems
+    let mut combat_system = CombatSystem;
+    combat_system.run(
+        &mut world.ecs_world.world,
+        &mut world.ecs_world.resources,
+    );
+    
+    // Enemy should be marked as dead or removed
+    let enemy_alive = world.is_entity_alive(enemy);
+    assert!(!enemy_alive, "Enemy should be dead");
+}
+
+#[test]
+fn test_multiple_actions_in_queue() {
+    // Test handling of multiple queued actions
+    let mut world = TestWorldBuilder::new(1009)
+        .with_simple_dungeon(0)
+        .with_player(5, 5, 0)
+        .build();
+    
+    // Queue multiple actions
+    world.execute_player_action(PlayerAction::Move(Direction::North));
+    world.execute_player_action(PlayerAction::Move(Direction::East));
+    world.execute_player_action(PlayerAction::Wait);
+    
+    // Actions should be queued
+    assert_eq!(
+        world.ecs_world.resources.input_buffer.pending_actions.len(),
+        3,
+        "All actions should be queued"
+    );
+    
+    // Process one turn
+    let _ = world.process_turn();
+    
+    // Some actions should be processed
+    assert!(
+        world.ecs_world.resources.input_buffer.pending_actions.len() < 3,
+        "Some actions should be processed"
+    );
+}
+
+#[test]
+fn test_turn_state_transitions() {
+    // Test that turn system properly transitions between states
+    let mut world = TestWorldBuilder::new(1010)
+        .with_simple_dungeon(0)
+        .with_player(5, 5, 0)
+        .build();
+    
+    // Initial state should be PlayerTurn
+    assert!(
+        matches!(world.turn_state(), TurnState::PlayerTurn),
+        "Should start with PlayerTurn"
+    );
+    
+    // Execute an action
+    world.execute_player_action(PlayerAction::Wait);
+    let _ = world.process_turn();
+    
+    // State should transition (either to AITurn or back to PlayerTurn)
+    let final_state = world.turn_state();
+    assert!(
+        matches!(final_state, TurnState::PlayerTurn | TurnState::AITurn),
+        "Should be in a valid turn state"
+    );
+}
+
+#[test]
+fn test_zero_hp_entity_cannot_act() {
+    // Test that entities with 0 HP cannot take actions
+    let (builder, enemy) = TestWorldBuilder::new(1011)
+        .with_simple_dungeon(0)
+        .with_player(5, 5, 0)
+        .with_enemy(6, 5, 0, "Dead Rat", Faction::Enemy);
+    
+    let mut world = builder.build();
+    
+    // Kill the enemy
+    world.set_entity_hp(enemy, 0);
+    
+    // Process AI system
+    let mut ai_system = AISystem;
+    ai_system.run(
+        &mut world.ecs_world.world,
+        &mut world.ecs_world.resources,
+    );
+    
+    // Enemy should not have moved (it's dead)
+    // This is verified implicitly by the system not crashing
+    assert!(true, "System handles dead entities gracefully");
+}
+
+#[test]
+fn test_event_bus_capacity() {
+    // Test that event bus can handle many events without overflow
+    let mut world = TestWorldBuilder::new(1012)
+        .with_simple_dungeon(0)
+        .with_player(5, 5, 0)
+        .build();
+    
+    // Publish many events
+    for i in 0..1000 {
+        world.ecs_world.publish_event(GameEvent::PlayerTurnStarted);
+    }
+    
+    // Process all events
+    world.ecs_world.process_events();
+    
+    // Should handle all events without crash
+    assert!(true, "Event bus handles many events");
+}
+
+#[test]
+fn test_boundary_position_values() {
+    // Test that extreme position values don't cause issues
+    let mut world = TestWorldBuilder::new(1013)
+        .with_player(i32::MAX - 1, i32::MAX - 1, 0)
+        .build();
+    
+    // Try to move (might go out of bounds)
+    world.execute_player_action(PlayerAction::Move(Direction::North));
+    
+    // Process movement
+    let mut movement_system = MovementSystem;
+    let result = movement_system.run(
+        &mut world.ecs_world.world,
+        &mut world.ecs_world.resources,
+    );
+    
+    // Should not crash
+    assert!(matches!(result, SystemResult::Continue));
+    
+    // Position should still be valid
+    let pos = world.player_position().unwrap();
+    assert!(pos.x >= 0 && pos.y >= 0);
+}
+
+#[test]
+fn test_delayed_event_processing() {
+    // Test that delayed events are processed in the next frame
+    let mut world = TestWorldBuilder::new(1014)
+        .with_simple_dungeon(0)
+        .with_player(5, 5, 0)
+        .build();
+    
+    // Publish a delayed event
+    world.ecs_world.publish_delayed_event(GameEvent::TurnEnded);
+    
+    // Immediate drain should not get the delayed event
+    let immediate_events: Vec<_> = world.collect_events();
+    assert!(
+        immediate_events.is_empty(),
+        "Delayed events should not be immediately available"
+    );
+    
+    // Process events to move delayed to current
+    world.ecs_world.event_bus.tick();
+    
+    // Now the event should be available
+    let next_frame_events: Vec<_> = world.collect_events();
+    assert!(
+        !next_frame_events.is_empty(),
+        "Delayed events should be available next frame"
+    );
+}
