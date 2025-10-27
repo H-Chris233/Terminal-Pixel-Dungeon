@@ -23,16 +23,163 @@ pub struct SaveMetadata {
     pub play_time: f64, // 游戏时长(秒)
 }
 
+/// Turn scheduler state for save/load
+#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+pub struct TurnStateData {
+    /// Current turn phase (PlayerTurn, AITurn, etc.)
+    pub current_phase: TurnPhase,
+    /// Whether player has taken an action this turn
+    pub player_action_taken: bool,
+}
+
+impl Default for TurnStateData {
+    fn default() -> Self {
+        Self {
+            current_phase: TurnPhase::PlayerTurn,
+            player_action_taken: false,
+        }
+    }
+}
+
+/// Turn phase for serialization
+#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
+pub enum TurnPhase {
+    PlayerTurn,
+    ProcessingPlayerAction,
+    AITurn,
+    ProcessingAIActions,
+}
+
+impl Default for TurnPhase {
+    fn default() -> Self {
+        TurnPhase::PlayerTurn
+    }
+}
+
+/// Entity state for non-player entities (enemies, etc.)
+#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+pub struct EntityStateData {
+    pub position: (i32, i32, i32), // x, y, z
+    pub name: String,
+    pub hp: u32,
+    pub max_hp: u32,
+    pub energy_current: u32,
+    pub energy_max: u32,
+    pub energy_regen: u32,
+    pub active_effects: Vec<StatusEffectData>,
+}
+
+/// Serializable status effect data
+#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+pub struct StatusEffectData {
+    pub effect_type: String,
+    pub duration: u32,
+    pub intensity: u32,
+}
+
+/// Game clock state
+#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+pub struct ClockStateData {
+    pub turn_count: u32,
+    pub elapsed_time_secs: f64,
+}
+
+impl Default for ClockStateData {
+    fn default() -> Self {
+        Self {
+            turn_count: 0,
+            elapsed_time_secs: 0.0,
+        }
+    }
+}
+
 /// 存档数据(包含游戏完整状态)
 #[derive(Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct SaveData {
+    /// Version for backward compatibility
+    #[serde(default = "default_version")]
+    pub version: u32,
+    
     pub metadata: SaveMetadata,
+    
     #[serde(default)]
-    #[bincode(default)]
     pub hero_skill_state: SkillState,
+    
     pub hero: hero::Hero,
     pub dungeon: dungeon::Dungeon,
     pub game_seed: u64,
+    
+    /// Turn system state (v2+)
+    #[serde(default)]
+    pub turn_state: TurnStateData,
+    
+    /// Game clock state (v2+)
+    #[serde(default)]
+    pub clock_state: ClockStateData,
+    
+    /// Player energy state (v2+)
+    #[serde(default = "default_player_energy")]
+    pub player_energy: u32,
+    
+    /// Player hunger last turn (v2+)
+    #[serde(default)]
+    pub player_hunger_last_turn: u32,
+    
+    /// Non-player entity states (v2+)
+    #[serde(default)]
+    pub entities: Vec<EntityStateData>,
+}
+
+fn default_player_energy() -> u32 {
+    100 // Default to full energy for legacy saves
+}
+
+/// Current save format version
+pub const SAVE_VERSION: u32 = 2;
+
+fn default_version() -> u32 {
+    1 // Legacy saves default to version 1
+}
+
+impl SaveData {
+    /// Migrate legacy save data to current version
+    pub fn migrate(&mut self) {
+        if self.version < SAVE_VERSION {
+            match self.version {
+                1 => {
+                    // Migrate from v1 to v2: Initialize turn state and clock state
+                    // These fields already have defaults, but we ensure they're set
+                    if self.turn_state.current_phase == TurnPhase::PlayerTurn 
+                        && !self.turn_state.player_action_taken {
+                        // Already at default, no action needed
+                    }
+                    
+                    if self.clock_state.turn_count == 0 {
+                        // Initialize from hero turns if available
+                        self.clock_state.turn_count = self.hero.turns;
+                    }
+                    
+                    self.version = 2;
+                }
+                _ => {
+                    // Unknown version, skip migration
+                }
+            }
+        }
+    }
+    
+    /// Validate save data integrity
+    pub fn validate(&self) -> Result<(), anyhow::Error> {
+        if self.metadata.dungeon_depth == 0 {
+            return Err(anyhow::anyhow!("Invalid dungeon depth"));
+        }
+        
+        if self.hero.max_hp == 0 {
+            return Err(anyhow::anyhow!("Invalid hero HP"));
+        }
+        
+        Ok(())
+    }
 }
 
 /// 存档系统
@@ -130,8 +277,14 @@ impl SaveSystem {
         let mut file = fs::File::open(&path).context(format!("Save file not found: {:?}", path))?;
 
         let config = config::standard();
-        let data: SaveData = bincode::decode_from_std_read(&mut file, config)
+        let mut data: SaveData = bincode::decode_from_std_read(&mut file, config)
             .context("Failed to deserialize save data")?;
+
+        // Migrate legacy saves to current version
+        data.migrate();
+        
+        // Validate save data integrity
+        data.validate().context("Save data validation failed")?;
 
         Ok(data)
     }
@@ -267,11 +420,20 @@ mod tests {
         let dungeon = dungeon::Dungeon::generate(1, 4242).expect("generate dungeon");
 
         let save_data = SaveData {
+            version: SAVE_VERSION,
             metadata,
             hero_skill_state: hero_skill_state.clone(),
             hero,
             dungeon,
             game_seed: 4242,
+            turn_state: TurnStateData::default(),
+            clock_state: ClockStateData {
+                turn_count: 42,
+                elapsed_time_secs: 128.5,
+            },
+            player_energy: 75,
+            player_hunger_last_turn: 20,
+            entities: vec![],
         };
 
         let cfg = config::standard();
@@ -283,5 +445,10 @@ mod tests {
         assert_eq!(decoded.hero.class, Class::Mage);
         assert_eq!(decoded.hero_skill_state, hero_skill_state);
         assert_eq!(decoded.hero.class_skills, hero_skill_state);
+        assert_eq!(decoded.version, SAVE_VERSION);
+        assert_eq!(decoded.clock_state.turn_count, 42);
+        assert_eq!(decoded.clock_state.elapsed_time_secs, 128.5);
+        assert_eq!(decoded.turn_state.current_phase, TurnPhase::PlayerTurn);
+        assert_eq!(decoded.player_energy, 75);
     }
 }

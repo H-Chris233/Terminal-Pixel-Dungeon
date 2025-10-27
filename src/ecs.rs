@@ -658,7 +658,6 @@ pub struct Stats {
     pub level: u32,
     pub experience: u32,
     #[serde(default)]
-    #[bincode(default)]
     pub class: Option<Class>,
 }
 
@@ -997,7 +996,6 @@ pub struct PlayerProgress {
     pub strength: u8,  // 力量值（影响装备需求）
     pub class: Class,  // 职业类型
     #[serde(default)]
-    #[bincode(default)]
     pub skill_state: SkillState, // 职业技能状态
 }
 
@@ -1135,7 +1133,7 @@ impl From<&Hero> for PlayerProgress {
 
 impl ECSWorld {
     /// Convert ECS world to save data
-    pub fn to_save_data(&self) -> Result<SaveData, GameError> {
+    pub fn to_save_data(&self, turn_system: &crate::turn_system::TurnSystem) -> Result<SaveData, GameError> {
         // Extract hero data from ECS
         let mut hero: Option<Hero> = None;
 
@@ -1189,9 +1187,79 @@ impl ECSWorld {
         let hero = hero.ok_or_else(|| GameError::InvalidHeroData)?;
         let hero_class = hero.class.clone();
         let hero_skill_state = hero.class_skills.clone();
+        
+        // Extract player energy and hunger state
+        let mut player_energy = 100u32;
+        let mut player_hunger_last_turn = 0u32;
+        for (entity, _player_marker) in self.world.query::<&Player>().iter() {
+            if let Ok(energy) = self.world.get::<&Energy>(entity) {
+                player_energy = energy.current;
+            }
+            if let Ok(hunger) = self.world.get::<&Hunger>(entity) {
+                player_hunger_last_turn = hunger.last_hunger_turn;
+            }
+            break;
+        }
+
+        // Extract turn system state
+        let turn_state = save::TurnStateData {
+            current_phase: match turn_system.state {
+                crate::turn_system::TurnState::PlayerTurn => save::TurnPhase::PlayerTurn,
+                crate::turn_system::TurnState::ProcessingPlayerAction => save::TurnPhase::ProcessingPlayerAction,
+                crate::turn_system::TurnState::AITurn => save::TurnPhase::AITurn,
+                crate::turn_system::TurnState::ProcessingAIActions => save::TurnPhase::ProcessingAIActions,
+            },
+            player_action_taken: turn_system.player_action_taken(),
+        };
+
+        // Extract clock state
+        let clock_state = save::ClockStateData {
+            turn_count: self.resources.clock.turn_count,
+            elapsed_time_secs: self.resources.clock.elapsed_time.as_secs_f64(),
+        };
+
+        // Extract non-player entity states (enemies, NPCs, etc.)
+        let mut entities = Vec::new();
+        for (entity, (pos, actor, stats)) in self.world.query::<(&Position, &Actor, &Stats)>().iter() {
+            // Skip player entity
+            if actor.faction == Faction::Player {
+                continue;
+            }
+
+            // Get energy state
+            let (energy_current, energy_max, energy_regen) = if let Ok(energy) = self.world.get::<&Energy>(entity) {
+                (energy.current, energy.max, energy.regeneration_rate)
+            } else {
+                (100, 100, 1)
+            };
+
+            // Get active effects
+            let mut active_effects = Vec::new();
+            if let Ok(effects) = self.world.get::<&Effects>(entity) {
+                for effect in &effects.active_effects {
+                    active_effects.push(save::StatusEffectData {
+                        effect_type: format!("{:?}", effect.effect_type),
+                        duration: effect.duration,
+                        intensity: effect.intensity,
+                    });
+                }
+            }
+
+            entities.push(save::EntityStateData {
+                position: (pos.x, pos.y, pos.z),
+                name: actor.name.clone(),
+                hp: stats.hp,
+                max_hp: stats.max_hp,
+                energy_current,
+                energy_max,
+                energy_regen,
+                active_effects,
+            });
+        }
 
         // Create save data
         let save_data = SaveData {
+            version: save::SAVE_VERSION,
             metadata: save::SaveMetadata {
                 timestamp: std::time::SystemTime::now(),
                 dungeon_depth: self.resources.game_state.depth,
@@ -1203,19 +1271,30 @@ impl ECSWorld {
             hero,
             dungeon,
             game_seed: 0, // 需要保存实际的种子值
+            turn_state,
+            clock_state,
+            player_energy,
+            player_hunger_last_turn,
+            entities,
         };
 
         Ok(save_data)
     }
 
     /// Load data from save into ECS world
-    pub fn from_save_data(&mut self, save_data: SaveData) -> Result<(), GameError> {
+    /// Returns (turn_state, turn_action_taken) for restoring the turn system
+    pub fn from_save_data(&mut self, save_data: SaveData) -> Result<(crate::turn_system::TurnState, bool), GameError> {
         // Clear current world
         self.clear();
 
         // Set up resources from save data
         self.resources.rng = StdRng::seed_from_u64(save_data.game_seed);
         self.resources.game_state.depth = save_data.metadata.dungeon_depth;
+        
+        // Restore clock state
+        self.resources.clock.turn_count = save_data.clock_state.turn_count;
+        self.resources.clock.elapsed_time = Duration::from_secs_f64(save_data.clock_state.elapsed_time_secs);
+        
         set_dungeon_instance(&mut self.world, save_data.dungeon);
 
         // Convert hero to ECS components and spawn player entity
@@ -1227,7 +1306,8 @@ impl ECSWorld {
         let inventory: Inventory = (&hero.bag).into();
 
         // ========== 新增：创建新组件 ==========
-        let hunger: Hunger = (&hero).into();
+        let mut hunger: Hunger = (&hero).into();
+        hunger.last_hunger_turn = save_data.player_hunger_last_turn;
         let wealth: Wealth = (&hero).into();
         let progress: PlayerProgress = (&hero).into();
 
@@ -1257,14 +1337,27 @@ impl ECSWorld {
                 algorithm: FovAlgorithm::default(), // 使用默认算法（ShadowCasting）
             },
             Energy {
-                current: 100,
+                current: save_data.player_energy,
                 max: 100,
                 regeneration_rate: 1,
             },
             Player, // Player marker component
         ));
 
-        Ok(())
+        // Restore non-player entities (enemies, NPCs, etc.)
+        // Note: Full entity restoration would require more complex logic
+        // For now, we'll skip this and let the game regenerate enemies
+        // In a production system, you'd want to restore all entity data here
+        
+        // Convert turn state back
+        let turn_state = match save_data.turn_state.current_phase {
+            save::TurnPhase::PlayerTurn => crate::turn_system::TurnState::PlayerTurn,
+            save::TurnPhase::ProcessingPlayerAction => crate::turn_system::TurnState::ProcessingPlayerAction,
+            save::TurnPhase::AITurn => crate::turn_system::TurnState::AITurn,
+            save::TurnPhase::ProcessingAIActions => crate::turn_system::TurnState::ProcessingAIActions,
+        };
+
+        Ok((turn_state, save_data.turn_state.player_action_taken))
     }
 }
 
@@ -1561,7 +1654,7 @@ mod tests {
                 experience: 0,
                 class: Some(Class::Warrior),
             },
-
+        ));
 
         let enemy = world.world.spawn((
             Position::new(1, 0, 0),
@@ -1580,7 +1673,7 @@ mod tests {
                 experience: 0,
                 class: None,
             },
-
+        ));
 
         // 发布战斗开始事件
         world.publish_event(GameEvent::CombatStarted {

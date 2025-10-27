@@ -519,7 +519,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
 
         // Check for auto-save
         if let Some(auto_save) = &mut self.save_system {
-            if let Ok(save_data) = self.ecs_world.to_save_data() {
+            if let Ok(save_data) = self.ecs_world.to_save_data(&self.turn_system) {
                 if let Err(e) = auto_save.try_save(&save_data) {
                     eprintln!("Auto-save failed: {}", e);
                 }
@@ -631,7 +631,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
 
         // Check for auto-save
         if let Some(auto_save) = &mut self.save_system {
-            if let Ok(save_data) = self.ecs_world.to_save_data() {
+            if let Ok(save_data) = self.ecs_world.to_save_data(&self.turn_system) {
                 if let Err(e) = auto_save.try_save(&save_data) {
                     eprintln!("Auto-save failed: {}", e);
                 }
@@ -656,7 +656,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
     /// Save the current game state
     pub fn save_game(&mut self, slot: usize) -> anyhow::Result<()> {
         if let Some(auto_save) = &mut self.save_system {
-            let save_data = self.ecs_world.to_save_data()?;
+            let save_data = self.ecs_world.to_save_data(&self.turn_system)?;
             auto_save.save_system.save_game(slot, &save_data)?;
         }
         Ok(())
@@ -666,7 +666,8 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
     pub fn load_game(&mut self, slot: usize) -> anyhow::Result<()> {
         if let Some(auto_save) = &mut self.save_system {
             let save_data = auto_save.save_system.load_game(slot)?;
-            self.ecs_world.from_save_data(save_data)?;
+            let (turn_state, player_action_taken) = self.ecs_world.from_save_data(save_data)?;
+            self.turn_system.set_state(turn_state, player_action_taken);
         }
         Ok(())
     }
@@ -771,6 +772,7 @@ pub struct HeadlessGameLoop {
     pub game_engine: GameEngine,
     pub ecs_world: ECSWorld,
     pub systems: Vec<Box<dyn System>>,
+    pub turn_system: TurnSystem,
     pub is_running: bool,
     pub save_system: Option<AutoSave>,
 }
@@ -809,6 +811,7 @@ impl HeadlessGameLoop {
             game_engine,
             ecs_world,
             systems,
+            turn_system: TurnSystem::new(),
             is_running: true,
             save_system,
         }
@@ -830,7 +833,7 @@ impl HeadlessGameLoop {
     /// Save the current game state
     pub fn save_game(&mut self, slot: usize) -> anyhow::Result<()> {
         if let Some(auto_save) = &mut self.save_system {
-            let save_data = self.ecs_world.to_save_data()?;
+            let save_data = self.ecs_world.to_save_data(&self.turn_system)?;
             auto_save.save_system.save_game(slot, &save_data)?;
         }
         Ok(())
@@ -840,7 +843,8 @@ impl HeadlessGameLoop {
     pub fn load_game(&mut self, slot: usize) -> anyhow::Result<()> {
         if let Some(auto_save) = &mut self.save_system {
             let save_data = auto_save.save_system.load_game(slot)?;
-            self.ecs_world.from_save_data(save_data)?;
+            let (turn_state, player_action_taken) = self.ecs_world.from_save_data(save_data)?;
+            self.turn_system.set_state(turn_state, player_action_taken);
         }
         Ok(())
     }
@@ -863,7 +867,7 @@ impl HeadlessGameLoop {
 
         // Check for auto-save
         if let Some(auto_save) = &mut self.save_system {
-            if let Ok(save_data) = self.ecs_world.to_save_data() {
+            if let Ok(save_data) = self.ecs_world.to_save_data(&self.turn_system) {
                 if let Err(e) = auto_save.try_save(&save_data) {
                     eprintln!("Auto-save failed: {}", e);
                 }
