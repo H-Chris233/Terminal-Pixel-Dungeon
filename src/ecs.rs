@@ -177,19 +177,44 @@ impl ECSWorld {
             }
 
             GameEvent::StatusApplied {
-                status, duration, ..
+                status, duration, intensity, ..
             } => {
                 self.resources
                     .game_state
                     .message_log
-                    .push(format!("受到{}效果影响，持续{}回合", status, duration));
+                    .push(format!("受到{}效果影响，持续{}回合（强度：{}）", status, duration, intensity));
             }
 
-            GameEvent::StatusRemoved { status, .. } => {
+            GameEvent::StatusRemoved { status, reason, .. } => {
+                let msg = if reason == "expired" {
+                    format!("{}效果已消失", status)
+                } else {
+                    format!("{}效果被{}移除", status, reason)
+                };
                 self.resources
                     .game_state
                     .message_log
-                    .push(format!("{}效果已消失", status));
+                    .push(msg);
+            }
+
+            GameEvent::StatusEffectTicked {
+                status, damage, remaining_turns, ..
+            } => {
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("{}造成{}点伤害（剩余{}回合）", status, damage, remaining_turns));
+            }
+
+            GameEvent::StatusEffectConflict {
+                removed_effect,
+                new_effect,
+                ..
+            } => {
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("{}被{}覆盖", removed_effect, new_effect));
             }
 
             // 饥饿事件处理
@@ -335,10 +360,26 @@ impl EventHandler for GameStateHandler {
             }
 
             GameEvent::StatusApplied {
-                status, duration, ..
-            } => Some(format!("受到{}效果影响，持续{}回合", status, duration)),
+                status, duration, intensity, ..
+            } => Some(format!("受到{}效果影响，持续{}回合（强度：{}）", status, duration, intensity)),
 
-            GameEvent::StatusRemoved { status, .. } => Some(format!("{}效果已消失", status)),
+            GameEvent::StatusRemoved { status, reason, .. } => {
+                if reason == "expired" {
+                    Some(format!("{}效果已消失", status))
+                } else {
+                    Some(format!("{}效果被{}移除", status, reason))
+                }
+            }
+
+            GameEvent::StatusEffectTicked {
+                status, damage, remaining_turns, ..
+            } => Some(format!("{}造成{}点伤害（剩余{}回合）", status, damage, remaining_turns)),
+
+            GameEvent::StatusEffectConflict {
+                removed_effect,
+                new_effect,
+                ..
+            } => Some(format!("{}被{}覆盖", removed_effect, new_effect)),
 
             _ => None,
         };
@@ -874,6 +915,103 @@ pub struct Energy {
     pub regeneration_rate: u32,
 }
 
+/// Status effects component - stores active effects on an entity
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StatusEffects {
+    pub effects: Vec<combat::effect::Effect>,
+    pub last_tick_turn: u32, // Track when effects were last processed
+}
+
+impl StatusEffects {
+    pub fn new() -> Self {
+        Self {
+            effects: Vec::new(),
+            last_tick_turn: 0,
+        }
+    }
+
+    pub fn add_effect(&mut self, new_effect: combat::effect::Effect) {
+        use combat::effect::EffectType;
+
+        // Check for conflicts (mutually exclusive effects)
+        if self.has_conflicting_effect(new_effect.effect_type()) {
+            // Remove conflicting effects
+            self.remove_conflicting_effects(new_effect.effect_type());
+        }
+
+        // Check if effect is stackable
+        if new_effect.is_stackable() {
+            // For DoT/HoT effects, add as separate instance
+            self.effects.push(new_effect);
+        } else {
+            // For non-stackable effects, replace or extend existing
+            if let Some(existing) = self.effects.iter_mut().find(|e| e.effect_type() == new_effect.effect_type()) {
+                // Take max duration and intensity
+                let max_turns = existing.turns().max(new_effect.turns());
+                let max_intensity = existing.intensity().max(new_effect.intensity());
+                *existing = combat::effect::Effect::with_intensity(
+                    new_effect.effect_type(),
+                    max_turns,
+                    max_intensity
+                );
+            } else {
+                self.effects.push(new_effect);
+            }
+        }
+    }
+
+    pub fn has_conflicting_effect(&self, effect_type: EffectType) -> bool {
+        use combat::effect::EffectType;
+        self.effects.iter().any(|e| {
+            matches!(
+                (e.effect_type(), effect_type),
+                (EffectType::Burning, EffectType::Frost)
+                    | (EffectType::Frost, EffectType::Burning)
+                    | (EffectType::Haste, EffectType::Slow)
+                    | (EffectType::Slow, EffectType::Haste)
+                    | (EffectType::Invisibility, EffectType::Light)
+                    | (EffectType::Light, EffectType::Invisibility)
+            )
+        })
+    }
+
+    pub fn remove_conflicting_effects(&mut self, effect_type: EffectType) {
+        use combat::effect::EffectType;
+        self.effects.retain(|e| {
+            !matches!(
+                (e.effect_type(), effect_type),
+                (EffectType::Burning, EffectType::Frost)
+                    | (EffectType::Frost, EffectType::Burning)
+                    | (EffectType::Haste, EffectType::Slow)
+                    | (EffectType::Slow, EffectType::Haste)
+                    | (EffectType::Invisibility, EffectType::Light)
+                    | (EffectType::Light, EffectType::Invisibility)
+            )
+        });
+    }
+
+    pub fn has_effect(&self, effect_type: EffectType) -> bool {
+        self.effects.iter().any(|e| e.effect_type() == effect_type)
+    }
+
+    pub fn remove_effect(&mut self, effect_type: EffectType) {
+        self.effects.retain(|e| e.effect_type() != effect_type);
+    }
+
+    pub fn clear(&mut self) {
+        self.effects.clear();
+    }
+}
+
+impl Default for StatusEffects {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// Re-export EffectType for convenience
+pub use combat::effect::EffectType;
+
 #[derive(Clone, Debug)]
 pub struct AI {
     pub ai_type: AIType,
@@ -1067,21 +1205,9 @@ pub struct BossDefeatRecord {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ActiveEffect {
-    pub effect_type: EffectType,
+    pub effect_type: combat::effect::EffectType,
     pub duration: u32,
     pub intensity: u32,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum EffectType {
-    Poison,
-    Burning,
-    Paralysis,
-    Rooted,
-    Confusion,
-    Invisibility,
-    Levitation,
-    Healing,
 }
 
 // Functions to convert between ECS components and hero module structures

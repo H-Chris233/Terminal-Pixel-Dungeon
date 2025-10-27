@@ -40,9 +40,27 @@ pub enum GameEvent {
         entity: u32,
         status: String,
         duration: u32,
+        intensity: u8,
     },
     /// 状态效果移除
-    StatusRemoved { entity: u32, status: String },
+    StatusRemoved { 
+        entity: u32, 
+        status: String,
+        reason: String, // "expired", "cleansed", "death", etc
+    },
+    /// 状态效果周期性触发（DoT/HoT）
+    StatusEffectTicked {
+        entity: u32,
+        status: String,
+        damage: u32, // or heal amount
+        remaining_turns: u32,
+    },
+    /// 状态效果冲突解决
+    StatusEffectConflict {
+        entity: u32,
+        removed_effect: String,
+        new_effect: String,
+    },
 
     // ===== Boss 事件 =====
     /// Boss 遭遇
@@ -514,6 +532,8 @@ impl GameEvent {
             GameEvent::BossSkillUsed { .. } => "BossSkillUsed",
             GameEvent::BossDefeated { .. } => "BossDefeated",
             GameEvent::BossSummonedMinions { .. } => "BossSummonedMinions",
+            GameEvent::StatusEffectTicked { .. } => "StatusEffectTicked",
+            GameEvent::StatusEffectConflict { .. } => "StatusEffectConflict",
         }
     }
 }

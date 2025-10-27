@@ -10,6 +10,7 @@ use crate::ecs::*;
 use crate::input::*;
 use crate::renderer::*;
 use crate::systems::*;
+use crate::systems::EffectPhase;
 use crate::turn_system::{TurnState, TurnSystem};
 use anyhow;
 use save::{AutoSave, SaveSystem};
@@ -40,7 +41,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
             Box::new(AISystem),
             Box::new(CombatSystem),
             Box::new(FOVSystem),
-            Box::new(EffectSystem),
+            Box::new(EffectSystem::new()), // 效果系统
             Box::new(EnergySystem),
             Box::new(InventorySystem),
             Box::new(HungerSystem), // 新增：饥饿系统
@@ -384,6 +385,21 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                     }
                 }
 
+                // 特殊处理 EffectSystem，使用事件版本
+                if system.name() == "EffectSystem" {
+                    match EffectSystem::run_with_events(&mut self.ecs_world, EffectPhase::EndOfTurn) {
+                        SystemResult::Continue => continue,
+                        SystemResult::Stop => {
+                            self.is_running = false;
+                            return Ok(());
+                        }
+                        SystemResult::Error(msg) => {
+                            eprintln!("System error: {}", msg);
+                            return Err(anyhow::anyhow!(msg));
+                        }
+                    }
+                }
+
                 // 特殊处理 HungerSystem，使用事件版本
                 if system.name() == "HungerSystem" {
                     match HungerSystem::run_with_events(&mut self.ecs_world) {
@@ -445,6 +461,21 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                 // 特殊处理 CombatSystem，使用事件版本
                 if system.name() == "CombatSystem" {
                     match CombatSystem::run_with_events(&mut self.ecs_world) {
+                        SystemResult::Continue => continue,
+                        SystemResult::Stop => {
+                            self.is_running = false;
+                            return Ok(());
+                        }
+                        SystemResult::Error(msg) => {
+                            eprintln!("System error: {}", msg);
+                            return Err(anyhow::anyhow!(msg));
+                        }
+                    }
+                }
+
+                // 特殊处理 EffectSystem，使用事件版本
+                if system.name() == "EffectSystem" {
+                    match EffectSystem::run_with_events(&mut self.ecs_world, EffectPhase::EndOfTurn) {
                         SystemResult::Continue => continue,
                         SystemResult::Stop => {
                             self.is_running = false;
@@ -788,7 +819,7 @@ impl HeadlessGameLoop {
             Box::new(AISystem),
             Box::new(CombatSystem),
             Box::new(FOVSystem),
-            Box::new(EffectSystem),
+            Box::new(EffectSystem::new()),
             Box::new(EnergySystem),
             Box::new(InventorySystem),
             Box::new(HungerSystem), // 新增：饥饿系统
