@@ -72,11 +72,22 @@ To activate the test suite:
 
 ## CI Configuration
 
-The CI configuration in `.github/workflows/rust.yml` has been updated to run:
-- Unit tests
-- Integration tests
-- Performance tests
-- Benchmarks
-- Linting
+The CI configuration in `.github/workflows/rust.yml` currently runs:
 
-Once the test code is updated to match the API, CI will provide full coverage.
+### Test Job
+- ✅ Build workspace
+- ✅ Run unit tests (`cargo test --lib --workspace`)
+- ✅ Run integration tests (`cargo test --test '*'`)
+- ✅ Run doc tests
+
+### Lint Job
+- ✅ Check formatting (`cargo fmt --check`)
+- ✅ Run clippy
+
+### Future (Once .todo files are activated)
+- Performance tests in release mode
+- Benchmark compilation checks
+- Full regression test suite
+- Property-based tests
+
+All jobs run on `ubuntu-latest` with stable Rust.
