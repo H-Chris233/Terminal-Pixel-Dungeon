@@ -3,6 +3,7 @@ use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use items::ItemTrait;
 use items::{
     Item, ItemKind,
     armor::Armor,
@@ -18,7 +19,6 @@ use items::{
     wand::Wand,
     weapon::Weapon,
 };
-use items::ItemTrait;
 
 // 子模块定义
 pub mod equipment; // 装备管理
@@ -38,22 +38,22 @@ fn default_herb_inventory() -> Inventory<Herb> {
 /// 完整的背包系统（遵循破碎的像素地牢机制）
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct Bag {
-    gold: u32,                      // 金币数量
-    equipment: Equipment,           // 已装备的物品
-    weapons: Inventory<Weapon>,     // 武器库存
-    armors: Inventory<Armor>,       // 护甲库存
-    potions: Inventory<Potion>,     // 药水库存
-    scrolls: Inventory<Scroll>,     // 卷轴库存
-    wands: Inventory<Wand>,         // 法杖库存
-    rings: Inventory<Ring>,         // 戒指库存
-    seeds: Inventory<Seed>,         // 种子库存
-    stones: Inventory<Stone>,       // 宝石库存
-    food: Inventory<Food>,          // 食物库存
-    misc: Inventory<MiscItem>,      // 杂项物品
+    gold: u32,                  // 金币数量
+    equipment: Equipment,       // 已装备的物品
+    weapons: Inventory<Weapon>, // 武器库存
+    armors: Inventory<Armor>,   // 护甲库存
+    potions: Inventory<Potion>, // 药水库存
+    scrolls: Inventory<Scroll>, // 卷轴库存
+    wands: Inventory<Wand>,     // 法杖库存
+    rings: Inventory<Ring>,     // 戒指库存
+    seeds: Inventory<Seed>,     // 种子库存
+    stones: Inventory<Stone>,   // 宝石库存
+    food: Inventory<Food>,      // 食物库存
+    misc: Inventory<MiscItem>,  // 杂项物品
     #[serde(default = "default_throwable_inventory")]
     throwables: Inventory<Throwable>, // 投掷武器
     #[serde(default = "default_herb_inventory")]
-    herbs: Inventory<Herb>,         // 药草库存
+    herbs: Inventory<Herb>, // 药草库存
 }
 
 /// 背包特定的错误类型
@@ -87,21 +87,20 @@ impl Bag {
         Self {
             gold: 0,
             equipment: Equipment::new(),
-            weapons: Inventory::new(4),      // 武器容量4
-            armors: Inventory::new(3),       // 护甲容量3
-            potions: Inventory::new(8),      // 药水容量8
-            scrolls: Inventory::new(8),      // 卷轴容量8
-            wands: Inventory::new(4),        // 法杖容量4
-            rings: Inventory::new(4),        // 戒指容量4
-            seeds: Inventory::new(4),        // 种子容量4
-            stones: Inventory::new(4),       // 宝石容量4
-            food: Inventory::new(4),         // 食物容量4
-            misc: Inventory::new(4),         // 杂项容量4
-            throwables: Inventory::new(6),   // 投掷武器容量6
-            herbs: Inventory::new(6),        // 药草容量6
+            weapons: Inventory::new(4),    // 武器容量4
+            armors: Inventory::new(3),     // 护甲容量3
+            potions: Inventory::new(8),    // 药水容量8
+            scrolls: Inventory::new(8),    // 卷轴容量8
+            wands: Inventory::new(4),      // 法杖容量4
+            rings: Inventory::new(4),      // 戒指容量4
+            seeds: Inventory::new(4),      // 种子容量4
+            stones: Inventory::new(4),     // 宝石容量4
+            food: Inventory::new(4),       // 食物容量4
+            misc: Inventory::new(4),       // 杂项容量4
+            throwables: Inventory::new(6), // 投掷武器容量6
+            herbs: Inventory::new(6),      // 药草容量6
         }
     }
-
 }
 
 impl Default for Bag {
@@ -236,9 +235,7 @@ impl Bag {
                     self.scrolls.add(s)
                 }
             }
-            ItemKind::Wand(w) => self
-                .wands
-                .add_sorted(w, |a, b| b.level.cmp(&a.level)),
+            ItemKind::Wand(w) => self.wands.add_sorted(w, |a, b| b.level.cmp(&a.level)),
             ItemKind::Ring(r) => self.rings.add(r),
             ItemKind::Seed(s) => {
                 if quantity > 1 {
@@ -264,10 +261,11 @@ impl Bag {
             ItemKind::Throwable(t) => {
                 let mut result = Ok(());
                 for _ in 0..quantity {
-                    result = self.throwables.add_sorted(
-                        t.clone(),
-                        |a, b| b.range.cmp(&a.range).then_with(|| b.damage.1.cmp(&a.damage.1)),
-                    );
+                    result = self.throwables.add_sorted(t.clone(), |a, b| {
+                        b.range
+                            .cmp(&a.range)
+                            .then_with(|| b.damage.1.cmp(&a.damage.1))
+                    });
                     if result.is_err() {
                         break;
                     }
@@ -387,11 +385,7 @@ impl Bag {
         idx -= self.misc.len();
 
         if idx < self.throwables.len() {
-            return self
-                .throwables
-                .remove(idx)
-                .map(|_| ())
-                .map_err(Into::into);
+            return self.throwables.remove(idx).map(|_| ()).map_err(Into::into);
         }
         idx -= self.throwables.len();
 

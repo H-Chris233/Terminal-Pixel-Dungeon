@@ -84,19 +84,19 @@ impl HudRenderer {
         &self,
         world: &World,
     ) -> Option<(Stats, Wealth, Hunger, PlayerProgress, String)> {
-        for (_, (stats, wealth, hunger, progress, actor, _player)) in world
+        world
             .query::<(&Stats, &Wealth, &Hunger, &PlayerProgress, &Actor, &Player)>()
             .iter()
-        {
-            return Some((
-                stats.clone(),
-                wealth.clone(),
-                hunger.clone(),
-                progress.clone(),
-                actor.name.clone(),
-            ));
-        }
-        None
+            .next()
+            .map(|(_, (stats, wealth, hunger, progress, actor, _player))| {
+                (
+                    stats.clone(),
+                    wealth.clone(),
+                    hunger.clone(),
+                    progress.clone(),
+                    actor.name.clone(),
+                )
+            })
     }
 
     fn render_level(
@@ -185,7 +185,7 @@ impl HudRenderer {
         // 计算经验值比例（简单估算：下一级需要 level * 100 经验）
         let current_exp = stats.experience;
         let next_level_exp = stats.level * 100;
-        
+
         let exp_ratio = if next_level_exp > 0 {
             (current_exp as f64 / next_level_exp as f64).min(1.0)
         } else {
@@ -193,7 +193,11 @@ impl HudRenderer {
         };
 
         let exp_gauge = Gauge::default()
-            .gauge_style(Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD))
+            .gauge_style(
+                Style::default()
+                    .fg(Color::Magenta)
+                    .add_modifier(Modifier::BOLD),
+            )
             .percent((exp_ratio * 100.0) as u16)
             .label(format!("EXP {}/{}", current_exp, next_level_exp))
             .use_unicode(true);

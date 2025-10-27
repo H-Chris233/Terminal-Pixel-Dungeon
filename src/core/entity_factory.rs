@@ -21,19 +21,19 @@ impl EntityFactory {
         let base_hp = class.base_hp();
         let attack_mod = class.attack_mod();
         let defense_mod = class.defense_mod();
-        
+
         // 基础攻击和防御值
         let base_attack = 10;
         let base_defense = 5;
-        
+
         // 应用职业修正
         let attack = (base_attack as f32 * attack_mod) as u32;
         let defense = (base_defense as f32 * defense_mod) as u32;
-        
+
         // 创建包含初始装备的物品栏
         let starting_kit = class.starting_kit();
         let mut inventory_items = Vec::new();
-        
+
         for item in starting_kit {
             if let Ok(ecs_item) = crate::ecs::ECSItem::from_items_item(&item) {
                 inventory_items.push(crate::ecs::ItemSlot {
@@ -42,7 +42,7 @@ impl EntityFactory {
                 });
             }
         }
-        
+
         world.spawn((
             Position { x, y, z: 0 },
             Renderable {

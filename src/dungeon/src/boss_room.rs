@@ -23,9 +23,21 @@ pub struct BossRoom {
 /// 危险区域类型
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub enum Hazard {
-    Lava { x: i32, y: i32, damage: u32 },
-    Spike { x: i32, y: i32, damage: u32 },
-    Poison { x: i32, y: i32, damage_per_turn: u32 },
+    Lava {
+        x: i32,
+        y: i32,
+        damage: u32,
+    },
+    Spike {
+        x: i32,
+        y: i32,
+        damage: u32,
+    },
+    Poison {
+        x: i32,
+        y: i32,
+        damage_per_turn: u32,
+    },
 }
 
 impl BossRoom {
@@ -78,10 +90,10 @@ impl BossRoom {
         for _ in 0..count {
             let angle = rng.random_range(0.0..(2.0 * std::f32::consts::PI));
             let distance = rng.random_range((radius / 2) as f32..radius as f32);
-            
+
             let x = center_x + (distance * angle.cos()) as i32;
             let y = center_y + (distance * angle.sin()) as i32;
-            
+
             obstacles.push((x, y));
         }
 
@@ -109,14 +121,26 @@ impl BossRoom {
         for _ in 0..count {
             let angle = rng.random_range(0.0..(2.0 * std::f32::consts::PI));
             let distance = rng.random_range((radius / 3) as f32..radius as f32);
-            
+
             let x = center_x + (distance * angle.cos()) as i32;
             let y = center_y + (distance * angle.sin()) as i32;
 
             let hazard = match hazard_type {
-                HazardType::Lava => Hazard::Lava { x, y, damage: rng.random_range(8..15) },
-                HazardType::Spike => Hazard::Spike { x, y, damage: rng.random_range(5..10) },
-                HazardType::Poison => Hazard::Poison { x, y, damage_per_turn: rng.random_range(2..5) },
+                HazardType::Lava => Hazard::Lava {
+                    x,
+                    y,
+                    damage: rng.random_range(8..15),
+                },
+                HazardType::Spike => Hazard::Spike {
+                    x,
+                    y,
+                    damage: rng.random_range(5..10),
+                },
+                HazardType::Poison => Hazard::Poison {
+                    x,
+                    y,
+                    damage_per_turn: rng.random_range(2..5),
+                },
                 HazardType::None => continue,
             };
 
@@ -202,7 +226,9 @@ impl Hazard {
         match self {
             Self::Lava { damage, .. } => *damage,
             Self::Spike { damage, .. } => *damage,
-            Self::Poison { damage_per_turn, .. } => *damage_per_turn,
+            Self::Poison {
+                damage_per_turn, ..
+            } => *damage_per_turn,
         }
     }
 

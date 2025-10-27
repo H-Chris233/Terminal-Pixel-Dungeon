@@ -77,9 +77,8 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
         self.renderer.init()?;
 
         // 设置初始状态为主菜单，默认选中第一项
-        self.ecs_world.resources.game_state.game_state = GameStatus::MainMenu {
-            selected_option: 0,
-        };
+        self.ecs_world.resources.game_state.game_state =
+            GameStatus::MainMenu { selected_option: 0 };
 
         // 初始化基础实体（确保世界非空，便于测试与渲染）
         self.initialize_entities();
@@ -129,7 +128,11 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
             // ========== 新增：玩家专属组件 ==========
             crate::ecs::Hunger::new(5), // 初始饱食度为5（半饱）
             crate::ecs::Wealth::new(0), // 初始金币为0
-            crate::ecs::PlayerProgress::new(10, hero::class::Class::Warrior, hero::class::SkillState::default()), // 初始力量10，战士职业
+            crate::ecs::PlayerProgress::new(
+                10,
+                hero::class::Class::Warrior,
+                hero::class::SkillState::default(),
+            ), // 初始力量10，战士职业
             Viewshed {
                 range: 8,
                 visible_tiles: vec![],
@@ -519,7 +522,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
 
         // Check for auto-save
         if let Some(auto_save) = &mut self.save_system {
-            if let Ok(save_data) = self.ecs_world.to_save_data() {
+            if let Ok(save_data) = self.ecs_world.to_save_data(&self.turn_system) {
                 if let Err(e) = auto_save.try_save(&save_data) {
                     eprintln!("Auto-save failed: {}", e);
                 }
@@ -604,7 +607,8 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                     GameOverReason::Trapped(s) => format!("死于陷阱：{}", s),
                     GameOverReason::Quit => "玩家退出".to_string(),
                 };
-                self.ecs_world.publish_event(GameEvent::GameOver { reason: msg });
+                self.ecs_world
+                    .publish_event(GameEvent::GameOver { reason: msg });
             }
             GameStatus::Victory => {
                 self.ecs_world.publish_event(GameEvent::Victory);
@@ -631,7 +635,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
 
         // Check for auto-save
         if let Some(auto_save) = &mut self.save_system {
-            if let Ok(save_data) = self.ecs_world.to_save_data() {
+            if let Ok(save_data) = self.ecs_world.to_save_data(&self.turn_system) {
                 if let Err(e) = auto_save.try_save(&save_data) {
                     eprintln!("Auto-save failed: {}", e);
                 }
@@ -656,7 +660,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
     /// Save the current game state
     pub fn save_game(&mut self, slot: usize) -> anyhow::Result<()> {
         if let Some(auto_save) = &mut self.save_system {
-            let save_data = self.ecs_world.to_save_data()?;
+            let save_data = self.ecs_world.to_save_data(&self.turn_system)?;
             auto_save.save_system.save_game(slot, &save_data)?;
         }
         Ok(())
@@ -666,7 +670,8 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
     pub fn load_game(&mut self, slot: usize) -> anyhow::Result<()> {
         if let Some(auto_save) = &mut self.save_system {
             let save_data = auto_save.save_system.load_game(slot)?;
-            self.ecs_world.from_save_data(save_data)?;
+            let (turn_state, player_action_taken) = self.ecs_world.from_save_data(save_data)?;
+            self.turn_system.set_state(turn_state, player_action_taken);
         }
         Ok(())
     }
@@ -690,12 +695,8 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
 
         // 使用 EntityFactory 创建玩家实体
         let factory = crate::core::EntityFactory::new();
-        let _player_entity = factory.create_player(
-            &mut self.ecs_world.world,
-            start_x,
-            start_y,
-            class,
-        );
+        let _player_entity =
+            factory.create_player(&mut self.ecs_world.world, start_x, start_y, class);
 
         // 添加一些测试敌人
         self.ecs_world.world.spawn((
@@ -727,7 +728,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                 regeneration_rate: 1,
             },
         ));
-        
+
         // 添加基础地牢地砖
         for x in 5..25 {
             for y in 5..25 {
@@ -761,7 +762,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                 ));
             }
         }
-        
+
         Ok(())
     }
 }
@@ -771,6 +772,7 @@ pub struct HeadlessGameLoop {
     pub game_engine: GameEngine,
     pub ecs_world: ECSWorld,
     pub systems: Vec<Box<dyn System>>,
+    pub turn_system: TurnSystem,
     pub is_running: bool,
     pub save_system: Option<AutoSave>,
 }
@@ -809,6 +811,7 @@ impl HeadlessGameLoop {
             game_engine,
             ecs_world,
             systems,
+            turn_system: TurnSystem::new(),
             is_running: true,
             save_system,
         }
@@ -830,7 +833,7 @@ impl HeadlessGameLoop {
     /// Save the current game state
     pub fn save_game(&mut self, slot: usize) -> anyhow::Result<()> {
         if let Some(auto_save) = &mut self.save_system {
-            let save_data = self.ecs_world.to_save_data()?;
+            let save_data = self.ecs_world.to_save_data(&self.turn_system)?;
             auto_save.save_system.save_game(slot, &save_data)?;
         }
         Ok(())
@@ -840,7 +843,8 @@ impl HeadlessGameLoop {
     pub fn load_game(&mut self, slot: usize) -> anyhow::Result<()> {
         if let Some(auto_save) = &mut self.save_system {
             let save_data = auto_save.save_system.load_game(slot)?;
-            self.ecs_world.from_save_data(save_data)?;
+            let (turn_state, player_action_taken) = self.ecs_world.from_save_data(save_data)?;
+            self.turn_system.set_state(turn_state, player_action_taken);
         }
         Ok(())
     }
@@ -863,7 +867,7 @@ impl HeadlessGameLoop {
 
         // Check for auto-save
         if let Some(auto_save) = &mut self.save_system {
-            if let Ok(save_data) = self.ecs_world.to_save_data() {
+            if let Ok(save_data) = self.ecs_world.to_save_data(&self.turn_system) {
                 if let Err(e) = auto_save.try_save(&save_data) {
                     eprintln!("Auto-save failed: {}", e);
                 }
@@ -891,18 +895,18 @@ fn key_event_to_player_action_from_internal(
         | GameStatus::ConfirmQuit { .. } => {
             // 菜单上下文：方向键/Enter/Esc 等（增加 WASD 支持）
             match (key_event.code, key_event.modifiers.shift) {
-                (KeyCode::Up, _)
-                | (KeyCode::Char('k'), _)
-                | (KeyCode::Char('w'), _) => Some(PlayerAction::MenuNavigate(NavigateDirection::Up)),
-                (KeyCode::Down, _)
-                | (KeyCode::Char('j'), _)
-                | (KeyCode::Char('s'), _) => Some(PlayerAction::MenuNavigate(NavigateDirection::Down)),
-                (KeyCode::Left, _)
-                | (KeyCode::Char('h'), _)
-                | (KeyCode::Char('a'), _) => Some(PlayerAction::MenuNavigate(NavigateDirection::Left)),
-                (KeyCode::Right, _)
-                | (KeyCode::Char('l'), _)
-                | (KeyCode::Char('d'), _) => Some(PlayerAction::MenuNavigate(NavigateDirection::Right)),
+                (KeyCode::Up, _) | (KeyCode::Char('k'), _) | (KeyCode::Char('w'), _) => {
+                    Some(PlayerAction::MenuNavigate(NavigateDirection::Up))
+                }
+                (KeyCode::Down, _) | (KeyCode::Char('j'), _) | (KeyCode::Char('s'), _) => {
+                    Some(PlayerAction::MenuNavigate(NavigateDirection::Down))
+                }
+                (KeyCode::Left, _) | (KeyCode::Char('h'), _) | (KeyCode::Char('a'), _) => {
+                    Some(PlayerAction::MenuNavigate(NavigateDirection::Left))
+                }
+                (KeyCode::Right, _) | (KeyCode::Char('l'), _) | (KeyCode::Char('d'), _) => {
+                    Some(PlayerAction::MenuNavigate(NavigateDirection::Right))
+                }
                 (KeyCode::Enter, _) => Some(PlayerAction::MenuSelect),
                 (KeyCode::Esc, _) | (KeyCode::Backspace, _) => Some(PlayerAction::CloseMenu),
                 (KeyCode::Char('q'), _) => Some(PlayerAction::Quit),
@@ -912,10 +916,18 @@ fn key_event_to_player_action_from_internal(
         _ => {
             match (key_event.code, key_event.modifiers.shift) {
                 // Movement keys（仅支持方向键、vi-keys，避免与 'd' 丢弃冲突）
-                (KeyCode::Char('k'), _) | (KeyCode::Up, _) => Some(PlayerAction::Move(Direction::North)),
-                (KeyCode::Char('j'), _) | (KeyCode::Down, _) => Some(PlayerAction::Move(Direction::South)),
-                (KeyCode::Char('h'), _) | (KeyCode::Left, _) => Some(PlayerAction::Move(Direction::West)),
-                (KeyCode::Char('l'), _) | (KeyCode::Right, _) => Some(PlayerAction::Move(Direction::East)),
+                (KeyCode::Char('k'), _) | (KeyCode::Up, _) => {
+                    Some(PlayerAction::Move(Direction::North))
+                }
+                (KeyCode::Char('j'), _) | (KeyCode::Down, _) => {
+                    Some(PlayerAction::Move(Direction::South))
+                }
+                (KeyCode::Char('h'), _) | (KeyCode::Left, _) => {
+                    Some(PlayerAction::Move(Direction::West))
+                }
+                (KeyCode::Char('l'), _) | (KeyCode::Right, _) => {
+                    Some(PlayerAction::Move(Direction::East))
+                }
                 (KeyCode::Char('y'), _) => Some(PlayerAction::Move(Direction::NorthWest)),
                 (KeyCode::Char('u'), _) => Some(PlayerAction::Move(Direction::NorthEast)),
                 (KeyCode::Char('b'), _) => Some(PlayerAction::Move(Direction::SouthWest)),
@@ -929,14 +941,30 @@ fn key_event_to_player_action_from_internal(
                 (KeyCode::Char('<'), _) => Some(PlayerAction::Ascend),
 
                 // Attack via direction（放宽 SHIFT 要求）
-                (KeyCode::Char('K'), _) => Some(PlayerAction::Attack(Position { x: 0, y: -1, z: 0 })),
-                (KeyCode::Char('J'), _) => Some(PlayerAction::Attack(Position { x: 0, y: 1, z: 0 })),
-                (KeyCode::Char('H'), _) => Some(PlayerAction::Attack(Position { x: -1, y: 0, z: 0 })),
-                (KeyCode::Char('L'), _) => Some(PlayerAction::Attack(Position { x: 1, y: 0, z: 0 })),
-                (KeyCode::Char('Y'), _) => Some(PlayerAction::Attack(Position { x: -1, y: -1, z: 0 })),
-                (KeyCode::Char('U'), _) => Some(PlayerAction::Attack(Position { x: 1, y: -1, z: 0 })),
-                (KeyCode::Char('B'), _) => Some(PlayerAction::Attack(Position { x: -1, y: 1, z: 0 })),
-                (KeyCode::Char('N'), _) => Some(PlayerAction::Attack(Position { x: 1, y: 1, z: 0 })),
+                (KeyCode::Char('K'), _) => {
+                    Some(PlayerAction::Attack(Position { x: 0, y: -1, z: 0 }))
+                }
+                (KeyCode::Char('J'), _) => {
+                    Some(PlayerAction::Attack(Position { x: 0, y: 1, z: 0 }))
+                }
+                (KeyCode::Char('H'), _) => {
+                    Some(PlayerAction::Attack(Position { x: -1, y: 0, z: 0 }))
+                }
+                (KeyCode::Char('L'), _) => {
+                    Some(PlayerAction::Attack(Position { x: 1, y: 0, z: 0 }))
+                }
+                (KeyCode::Char('Y'), _) => {
+                    Some(PlayerAction::Attack(Position { x: -1, y: -1, z: 0 }))
+                }
+                (KeyCode::Char('U'), _) => {
+                    Some(PlayerAction::Attack(Position { x: 1, y: -1, z: 0 }))
+                }
+                (KeyCode::Char('B'), _) => {
+                    Some(PlayerAction::Attack(Position { x: -1, y: 1, z: 0 }))
+                }
+                (KeyCode::Char('N'), _) => {
+                    Some(PlayerAction::Attack(Position { x: 1, y: 1, z: 0 }))
+                }
 
                 // Game control
                 (KeyCode::Char('q'), _) => Some(PlayerAction::Quit),
@@ -966,12 +994,7 @@ mod tests {
     use super::*;
     use crate::input::{InputEvent, InputSource};
     use crate::renderer::GameClock;
-    use ratatui::{
-        backend::TestBackend,
-        layout::Rect,
-        widgets::Block,
-        Frame, Terminal,
-    };
+    use ratatui::{Frame, Terminal, backend::TestBackend, layout::Rect, widgets::Block};
     use std::time::Duration;
 
     struct TestRenderer {

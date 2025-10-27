@@ -47,18 +47,18 @@ pub struct Item {
 /// 物品类型枚举（与Shattered PD完全一致）
 #[derive(PartialEq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub enum ItemKind {
-    Weapon(Weapon),    // 近战武器
-    Armor(Armor),      // 护甲
-    Potion(Potion),    // 药水（12种）
-    Scroll(Scroll),    // 卷轴（10种）
-    Food(Food),        // 食物（3种）
-    Wand(Wand),        // 法杖（8种）
-    Ring(Ring),        // 戒指（10种）
-    Seed(Seed),        // 种子（8种）
-    Stone(Stone),      // 魔法石（6种）
-    Misc(MiscItem),    // 杂项（钥匙等）
+    Weapon(Weapon),       // 近战武器
+    Armor(Armor),         // 护甲
+    Potion(Potion),       // 药水（12种）
+    Scroll(Scroll),       // 卷轴（10种）
+    Food(Food),           // 食物（3种）
+    Wand(Wand),           // 法杖（8种）
+    Ring(Ring),           // 戒指（10种）
+    Seed(Seed),           // 种子（8种）
+    Stone(Stone),         // 魔法石（6种）
+    Misc(MiscItem),       // 杂项（钥匙等）
     Throwable(Throwable), // 投掷武器
-    Herb(Herb),        // 药草
+    Herb(Herb),           // 药草
 }
 
 impl Item {

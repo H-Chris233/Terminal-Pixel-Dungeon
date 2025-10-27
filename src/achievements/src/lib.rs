@@ -1,5 +1,5 @@
 //! Achievements tracking system
-//! 
+//!
 //! This module provides a complete achievements system that integrates with the game's
 //! event bus to track player progress and unlock achievements.
 
@@ -72,18 +72,12 @@ impl AchievementsManager {
 
     /// Get all unlocked achievements
     pub fn unlocked_achievements(&self) -> Vec<&Achievement> {
-        self.achievements
-            .values()
-            .filter(|a| a.unlocked)
-            .collect()
+        self.achievements.values().filter(|a| a.unlocked).collect()
     }
 
     /// Get all locked achievements
     pub fn locked_achievements(&self) -> Vec<&Achievement> {
-        self.achievements
-            .values()
-            .filter(|a| !a.unlocked)
-            .collect()
+        self.achievements.values().filter(|a| !a.unlocked).collect()
     }
 
     /// Get newly unlocked achievements since last check and clear the list

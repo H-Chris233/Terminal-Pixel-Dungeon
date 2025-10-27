@@ -4,8 +4,8 @@
 //! 支持中文界面和键盘导航。
 
 use crate::ecs::{GameStatus, Resources};
-use ratatui::text::Text;
 use hecs::World;
+use ratatui::text::Text;
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -61,10 +61,12 @@ impl MenuRenderer {
             Line::from("╔═══════════════════════════════════════╗"),
             Line::from(vec![
                 Span::raw("║  "),
-                Span::styled("🏰 终端像素地牢 🏰", 
+                Span::styled(
+                    "🏰 终端像素地牢 🏰",
                     Style::default()
                         .fg(Color::Yellow)
-                        .add_modifier(Modifier::BOLD)),
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::raw("  ║"),
             ]),
             Line::from("╚═══════════════════════════════════════╝"),
@@ -403,7 +405,9 @@ impl MenuRenderer {
     /// 渲染确认退出对话框
     pub fn render_confirm_quit(&self, frame: &mut Frame, area: Rect, resources: &Resources) {
         let selected = match resources.game_state.game_state {
-            GameStatus::ConfirmQuit { selected_option, .. } => selected_option,
+            GameStatus::ConfirmQuit {
+                selected_option, ..
+            } => selected_option,
             _ => 1,
         };
 

@@ -310,8 +310,7 @@ impl<T: ItemTrait + Serialize + DeserializeOwned> Inventory<T> {
         // 使用统一的排序逻辑
         self.sort_by(|a: &T, b: &T| {
             let (a, b) = (a, b);
-            a
-                .category()
+            a.category()
                 .cmp(&b.category())
                 .then_with(|| b.sort_value().cmp(&a.sort_value()))
         });

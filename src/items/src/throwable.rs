@@ -148,7 +148,10 @@ impl fmt::Display for Throwable {
         write!(
             f,
             "{} (伤害 {}-{}, 射程 {})",
-            self.name(), self.damage.0, self.damage.1, self.range
+            self.name(),
+            self.damage.0,
+            self.damage.1,
+            self.range
         )
     }
 }

@@ -37,7 +37,7 @@ impl DungeonRenderer {
     pub fn render(&self, frame: &mut Frame, area: Rect, world: &World) {
         // 获取地牢深度信息
         let depth = self.get_dungeon_depth(world);
-        
+
         let block = Block::default()
             .title(format!("🗺️  地牢探索 - 第 {} 层  🗺️", depth))
             .title_alignment(ratatui::layout::Alignment::Center)
@@ -60,10 +60,12 @@ impl DungeonRenderer {
     /// 获取当前地牢深度
     fn get_dungeon_depth(&self, world: &World) -> i32 {
         // 从玩家位置获取深度
-        for (_, (pos, _player)) in world.query::<(&Position, &Player)>().iter() {
-            return pos.z.abs();
-        }
-        1 // 默认第1层
+        world
+            .query::<(&Position, &Player)>()
+            .iter()
+            .next()
+            .map(|(_, (pos, _player))| pos.z.abs())
+            .unwrap_or(1) // 默认第1层
     }
 }
 
@@ -176,8 +178,11 @@ impl<'a> DungeonWidget<'a> {
         let mut memory_set = HashSet::new();
 
         // 查找玩家实体
-        for (_, (pos, viewshed, _player)) in
-            self.world.query::<(&Position, &Viewshed, &Player)>().iter()
+        if let Some((_, (pos, viewshed, _player))) = self
+            .world
+            .query::<(&Position, &Viewshed, &Player)>()
+            .iter()
+            .next()
         {
             player_pos = Some(pos.clone());
 
@@ -188,8 +193,6 @@ impl<'a> DungeonWidget<'a> {
             for memory_pos in &viewshed.memory {
                 memory_set.insert((memory_pos.x, memory_pos.y));
             }
-
-            break; // 只有一个玩家
         }
 
         (player_pos, visible_set, memory_set)
