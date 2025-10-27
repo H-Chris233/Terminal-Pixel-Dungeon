@@ -34,11 +34,7 @@ impl Combatant for Hero {
 
     /// 计算防御力（包含护甲加成）
     fn defense(&self) -> u32 {
-        let armor_bonus = self
-            .bag
-            .equipment()
-            .armor()
-            .map_or(0, |a| a.defense());
+        let armor_bonus = self.bag.equipment().armor().map_or(0, |a| a.defense());
 
         self.base_defense + armor_bonus
     }

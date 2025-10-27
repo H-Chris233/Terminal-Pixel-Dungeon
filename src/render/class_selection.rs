@@ -39,9 +39,9 @@ impl ClassSelectionRenderer {
         let main_layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),  // 标题
-                Constraint::Min(15),    // 内容区域
-                Constraint::Length(3),  // 底部提示
+                Constraint::Length(3), // 标题
+                Constraint::Min(15),   // 内容区域
+                Constraint::Length(3), // 底部提示
             ])
             .split(selection_area);
 
@@ -69,15 +69,16 @@ impl ClassSelectionRenderer {
 
     /// 渲染标题
     fn render_title(&self, frame: &mut Frame, area: Rect) {
-        let title_text = vec![
-            Line::from(vec![
-                Span::styled("⚔️  ", Style::default().fg(Color::Yellow)),
-                Span::styled("选择你的英雄职业", Style::default()
+        let title_text = vec![Line::from(vec![
+            Span::styled("⚔️  ", Style::default().fg(Color::Yellow)),
+            Span::styled(
+                "选择你的英雄职业",
+                Style::default()
                     .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD)),
-                Span::styled("  ⚔️", Style::default().fg(Color::Yellow)),
-            ]),
-        ];
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("  ⚔️", Style::default().fg(Color::Yellow)),
+        ])];
 
         let title = Paragraph::new(title_text)
             .block(
@@ -192,9 +193,12 @@ impl ClassSelectionRenderer {
         };
 
         let text = vec![
-            Line::from(Span::styled(title, Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD))),
+            Line::from(Span::styled(
+                title,
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )),
             Line::from(""),
             Line::from(desc),
             Line::from(""),
@@ -226,28 +230,53 @@ impl ClassSelectionRenderer {
         let stats_text = vec![
             Line::from(vec![
                 Span::styled("❤️  生命值：", Style::default().fg(Color::Red)),
-                Span::styled(format!("{} ", base_hp), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-                Span::styled(format!("(+{}/级)", hp_per_level), Style::default().fg(Color::Gray)),
+                Span::styled(
+                    format!("{} ", base_hp),
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    format!("(+{}/级)", hp_per_level),
+                    Style::default().fg(Color::Gray),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("⚔️  攻击力：", Style::default().fg(Color::Yellow)),
-                Span::styled(format!("{}x ", attack_mod), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    format!("{}x ", attack_mod),
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("基础伤害", Style::default().fg(Color::Gray)),
             ]),
             Line::from(vec![
                 Span::styled("🛡️  防御力：", Style::default().fg(Color::Blue)),
-                Span::styled(format!("{}x ", defense_mod), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    format!("{}x ", defense_mod),
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("基础防御", Style::default().fg(Color::Gray)),
             ]),
             Line::from(vec![
                 Span::styled("💥 暴击率：", Style::default().fg(Color::Magenta)),
-                Span::styled(format!("{}% ", (crit_mod * 100.0) as u32), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    format!("{}% ", (crit_mod * 100.0) as u32),
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("额外加成", Style::default().fg(Color::Gray)),
             ]),
             Line::from(""),
             Line::from(Span::styled(
                 class.description(),
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::ITALIC),
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::ITALIC),
             )),
         ];
 
@@ -268,11 +297,14 @@ impl ClassSelectionRenderer {
     /// 渲染初始装备
     fn render_starting_kit(&self, frame: &mut Frame, area: Rect, class: &Class) {
         let kit = class.starting_kit();
-        
+
         let mut kit_lines = vec![
-            Line::from(Span::styled("初始装备清单：", Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD))),
+            Line::from(Span::styled(
+                "初始装备清单：",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )),
             Line::from(""),
         ];
 

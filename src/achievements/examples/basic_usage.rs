@@ -1,15 +1,18 @@
 //! Basic usage example for the achievements system
 
-use achievements::{AchievementsManager, AchievementId};
+use achievements::{AchievementId, AchievementsManager};
 
 fn main() {
     println!("=== Terminal Pixel Dungeon Achievements Demo ===\n");
 
     // Create a new achievements manager
     let mut manager = AchievementsManager::new();
-    
+
     println!("Total achievements: {}", manager.achievements().len());
-    println!("Starting unlock percentage: {:.1}%\n", manager.unlock_percentage() * 100.0);
+    println!(
+        "Starting unlock percentage: {:.1}%\n",
+        manager.unlock_percentage() * 100.0
+    );
 
     // Simulate some gameplay events
     println!("--- Player kills their first enemy ---");
@@ -44,7 +47,7 @@ fn main() {
 
     println!("\n=== Final Statistics ===");
     display_progress(&manager);
-    
+
     println!("\n=== All Unlocked Achievements ===");
     for achievement in manager.unlocked_achievements() {
         println!("✓ {}: {}", achievement.name, achievement.description);
@@ -57,15 +60,16 @@ fn main() {
 
     // Demonstrate serialization
     println!("\n=== Testing Serialization ===");
-    let encoded = bincode::encode_to_vec(&manager, bincode::config::standard())
-        .expect("Failed to serialize");
+    let encoded =
+        bincode::encode_to_vec(&manager, bincode::config::standard()).expect("Failed to serialize");
     println!("Serialized size: {} bytes", encoded.len());
-    
-    let (loaded, _): (AchievementsManager, _) = 
+
+    let (loaded, _): (AchievementsManager, _) =
         bincode::decode_from_slice(&encoded, bincode::config::standard())
-        .expect("Failed to deserialize");
+            .expect("Failed to deserialize");
     println!("Successfully loaded from save!");
-    println!("Loaded achievements: {}/{}", 
+    println!(
+        "Loaded achievements: {}/{}",
         loaded.unlocked_achievements().len(),
         loaded.achievements().len()
     );
@@ -93,7 +97,8 @@ fn display_progress(manager: &AchievementsManager) {
     println!("  Turns survived: {}", progress.turns_survived);
     println!("  Bosses defeated: {}", progress.bosses_defeated);
     println!("  Gold collected: {}", progress.gold_collected);
-    println!("  Achievements unlocked: {}/{} ({:.1}%)", 
+    println!(
+        "  Achievements unlocked: {}/{} ({:.1}%)",
         manager.unlocked_achievements().len(),
         manager.achievements().len(),
         manager.unlock_percentage() * 100.0

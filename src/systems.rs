@@ -175,10 +175,11 @@ impl MovementSystem {
 
 /// Helper function to find the player entity
 fn find_player_entity(world: &World) -> Option<Entity> {
-    for (entity, _) in world.query::<&Player>().iter() {
-        return Some(entity);
-    }
-    None
+    world
+        .query::<&Player>()
+        .iter()
+        .next()
+        .map(|(entity, _)| entity)
 }
 
 /// Applies AI decision making each frame. Any movement or attack performed
@@ -369,15 +370,15 @@ impl CombatSystem {
                                     // 构建阻挡检测闭包（基于地图Tile）
                                     let z = player_pos.z;
                                     let mut blocked_set = std::collections::HashSet::new();
-                                    for (_, (pos, tile)) in world.world.query::<(&Position, &Tile)>().iter() {
+                                    for (_, (pos, tile)) in
+                                        world.world.query::<(&Position, &Tile)>().iter()
+                                    {
                                         if pos.z == z && tile.blocks_sight {
                                             blocked_set.insert((pos.x, pos.y));
                                         }
                                     }
-                                    let is_blocked = |x: i32, y: i32| -> bool {
-                                        blocked_set.contains(&(x, y))
-                                    };
-
+                                    let is_blocked =
+                                        |x: i32, y: i32| -> bool { blocked_set.contains(&(x, y)) };
 
                                     // 获取攻击者FOV范围
                                     let attacker_fov_range = world
@@ -401,21 +402,35 @@ impl CombatSystem {
                                     };
 
                                     // 执行战斗（包含潜行与反击）
-                                    let result = ::combat::Combat::perform_attack_with_ambush(&mut params);
+                                    let result =
+                                        ::combat::Combat::perform_attack_with_ambush(&mut params);
                                     Some((temp_player.hp, temp_target.hp, result))
                                 } else {
                                     None
                                 }
                             };
 
-                            if let Some((new_player_hp, new_target_hp, combat_result)) = combat_result {
+                            if let Some((new_player_hp, new_target_hp, combat_result)) =
+                                combat_result
+                            {
                                 // 将 CombatResult 事件映射到游戏事件总线
                                 for ev in &combat_result.events {
                                     match ev {
-                                        ::combat::CombatEvent::CombatStarted { attacker, defender } => {
-                                            world.publish_event(GameEvent::CombatStarted { attacker: *attacker, defender: *defender });
+                                        ::combat::CombatEvent::CombatStarted {
+                                            attacker,
+                                            defender,
+                                        } => {
+                                            world.publish_event(GameEvent::CombatStarted {
+                                                attacker: *attacker,
+                                                defender: *defender,
+                                            });
                                         }
-                                        ::combat::CombatEvent::DamageDealt { attacker, victim, damage, is_critical } => {
+                                        ::combat::CombatEvent::DamageDealt {
+                                            attacker,
+                                            victim,
+                                            damage,
+                                            is_critical,
+                                        } => {
                                             world.publish_event(GameEvent::DamageDealt {
                                                 attacker: *attacker,
                                                 victim: *victim,
@@ -423,12 +438,24 @@ impl CombatSystem {
                                                 is_critical: *is_critical,
                                             });
                                         }
-                                        ::combat::CombatEvent::EntityDied { entity, entity_name } => {
-                                            world.publish_event(GameEvent::EntityDied { entity: *entity, entity_name: entity_name.clone() });
+                                        ::combat::CombatEvent::EntityDied {
+                                            entity,
+                                            entity_name,
+                                        } => {
+                                            world.publish_event(GameEvent::EntityDied {
+                                                entity: *entity,
+                                                entity_name: entity_name.clone(),
+                                            });
                                         }
-                                        ::combat::CombatEvent::Ambush { attacker: _, defender: _ } => {
+                                        ::combat::CombatEvent::Ambush {
+                                            attacker: _,
+                                            defender: _,
+                                        } => {
                                             world.publish_event(GameEvent::LogMessage {
-                                                message: format!("伏击！{} -> {}", player_name, target_name),
+                                                message: format!(
+                                                    "伏击！{} -> {}",
+                                                    player_name, target_name
+                                                ),
                                                 level: LogLevel::Info,
                                             });
                                         }
@@ -436,7 +463,8 @@ impl CombatSystem {
                                 }
 
                                 // 应用实际伤害（更新HP）
-                                if let Ok(mut stats) = world.world.get::<&mut Stats>(player_entity) {
+                                if let Ok(mut stats) = world.world.get::<&mut Stats>(player_entity)
+                                {
                                     stats.hp = new_player_hp;
                                 }
                                 if let Ok(mut stats) = world.world.get::<&mut Stats>(target) {
@@ -464,7 +492,9 @@ impl CombatSystem {
                                 }
 
                                 // 消耗能量
-                                if let Ok(mut energy) = world.world.get::<&mut Energy>(player_entity) {
+                                if let Ok(mut energy) =
+                                    world.world.get::<&mut Energy>(player_entity)
+                                {
                                     energy.current = energy.current.saturating_sub(100);
                                 }
                             }
@@ -1473,7 +1503,8 @@ impl DungeonSystem {
         use crate::event_bus::GameEvent;
 
         // Process pending player actions for dungeon navigation
-        let actions_to_process = std::mem::take(&mut ecs_world.resources.input_buffer.pending_actions);
+        let actions_to_process =
+            std::mem::take(&mut ecs_world.resources.input_buffer.pending_actions);
         let mut new_actions = Vec::new();
 
         for action in actions_to_process {
@@ -1484,7 +1515,7 @@ impl DungeonSystem {
                         let player_pos_x;
                         let player_pos_y;
                         let player_pos_z;
-                        
+
                         match ecs_world.world.get::<&Position>(player_entity) {
                             Ok(pos) => {
                                 player_pos_x = pos.x;
@@ -1499,7 +1530,8 @@ impl DungeonSystem {
 
                         // Check if there's a stairs down tile at player's position
                         let mut on_stairs_down = false;
-                        for (_, (pos, tile)) in ecs_world.world.query::<(&Position, &Tile)>().iter() {
+                        for (_, (pos, tile)) in ecs_world.world.query::<(&Position, &Tile)>().iter()
+                        {
                             if pos.x == player_pos_x
                                 && pos.y == player_pos_y
                                 && pos.z == player_pos_z
@@ -1518,7 +1550,8 @@ impl DungeonSystem {
                             ecs_world.resources.game_state.depth = new_level;
 
                             // Move player to new level
-                            if let Ok(mut pos) = ecs_world.world.get::<&mut Position>(player_entity) {
+                            if let Ok(mut pos) = ecs_world.world.get::<&mut Position>(player_entity)
+                            {
                                 pos.z += 1;
                                 pos.x = 10;
                                 pos.y = 10;
@@ -1530,16 +1563,18 @@ impl DungeonSystem {
                                 new_level,
                             });
 
-                                // Add message to game state log
-                                ecs_world.resources
-                                    .game_state
-                                    .message_log
-                                    .push("You descend to the next level...".to_string());
-                                if ecs_world.resources.game_state.message_log.len() > 10 {
-                                    ecs_world.resources.game_state.message_log.remove(0);
-                                }
+                            // Add message to game state log
+                            ecs_world
+                                .resources
+                                .game_state
+                                .message_log
+                                .push("You descend to the next level...".to_string());
+                            if ecs_world.resources.game_state.message_log.len() > 10 {
+                                ecs_world.resources.game_state.message_log.remove(0);
+                            }
                         } else {
-                            ecs_world.resources
+                            ecs_world
+                                .resources
                                 .game_state
                                 .message_log
                                 .push("You need to stand on stairs to descend.".to_string());
@@ -1558,7 +1593,7 @@ impl DungeonSystem {
                         let player_pos_x;
                         let player_pos_y;
                         let player_pos_z;
-                        
+
                         match ecs_world.world.get::<&Position>(player_entity) {
                             Ok(pos) => {
                                 player_pos_x = pos.x;
@@ -1573,7 +1608,8 @@ impl DungeonSystem {
 
                         // Check if there's a stairs up tile at player's position
                         let mut on_stairs_up = false;
-                        for (_, (pos, tile)) in ecs_world.world.query::<(&Position, &Tile)>().iter() {
+                        for (_, (pos, tile)) in ecs_world.world.query::<(&Position, &Tile)>().iter()
+                        {
                             if pos.x == player_pos_x
                                 && pos.y == player_pos_y
                                 && pos.z == player_pos_z
@@ -1591,7 +1627,9 @@ impl DungeonSystem {
                                 let new_level = (player_pos_z - 1) as usize;
 
                                 // Move player to new level
-                                if let Ok(mut pos) = ecs_world.world.get::<&mut Position>(player_entity) {
+                                if let Ok(mut pos) =
+                                    ecs_world.world.get::<&mut Position>(player_entity)
+                                {
                                     pos.z -= 1;
                                     pos.x = 10;
                                     pos.y = 10;
@@ -1606,7 +1644,11 @@ impl DungeonSystem {
                                 });
 
                                 // Add message to game state log
-                                ecs_world.resources.game_state.message_log.push("You ascend to the previous level...".to_string());
+                                ecs_world
+                                    .resources
+                                    .game_state
+                                    .message_log
+                                    .push("You ascend to the previous level...".to_string());
                                 if ecs_world.resources.game_state.message_log.len() > 10 {
                                     ecs_world.resources.game_state.message_log.remove(0);
                                 }
@@ -2177,9 +2219,9 @@ impl System for MenuSystem {
                             // 在确认退出对话框中按 Esc/Backspace 返回到原状态
                             resources.game_state.game_state = match return_to {
                                 crate::ecs::ReturnTo::Running => GameStatus::Running,
-                                crate::ecs::ReturnTo::MainMenu => GameStatus::MainMenu {
-                                    selected_option: 0,
-                                },
+                                crate::ecs::ReturnTo::MainMenu => {
+                                    GameStatus::MainMenu { selected_option: 0 }
+                                }
                             };
                         }
                         GameStatus::MainMenu { .. } => {
@@ -2192,9 +2234,8 @@ impl System for MenuSystem {
                         }
                         GameStatus::Running => {
                             // 游戏中按 Esc 打开暂停菜单
-                            resources.game_state.game_state = GameStatus::Paused {
-                                selected_option: 0,
-                            };
+                            resources.game_state.game_state =
+                                GameStatus::Paused { selected_option: 0 };
                         }
                         _ => {
                             // 在其他菜单状态，返回游戏或上一级菜单
@@ -2326,7 +2367,10 @@ impl MenuSystem {
                 }
             }
 
-            GameStatus::ConfirmQuit { ref mut selected_option, .. } => {
+            GameStatus::ConfirmQuit {
+                ref mut selected_option,
+                ..
+            } => {
                 // 确认退出对话框的导航：在 0(是)/1(否) 之间切换
                 match direction {
                     NavigateDirection::Left | NavigateDirection::Up => {
@@ -2363,9 +2407,8 @@ impl MenuSystem {
                     }
                     2 => {
                         // 游戏设置
-                        resources.game_state.game_state = GameStatus::Options {
-                            selected_option: 0,
-                        };
+                        resources.game_state.game_state =
+                            GameStatus::Options { selected_option: 0 };
                     }
                     3 => {
                         // 帮助说明
@@ -2391,9 +2434,8 @@ impl MenuSystem {
                     }
                     1 => {
                         // 物品栏
-                        resources.game_state.game_state = GameStatus::Inventory {
-                            selected_item: 0,
-                        };
+                        resources.game_state.game_state =
+                            GameStatus::Inventory { selected_item: 0 };
                     }
                     2 => {
                         // 角色信息
@@ -2401,9 +2443,8 @@ impl MenuSystem {
                     }
                     3 => {
                         // 游戏设置
-                        resources.game_state.game_state = GameStatus::Options {
-                            selected_option: 0,
-                        };
+                        resources.game_state.game_state =
+                            GameStatus::Options { selected_option: 0 };
                     }
                     4 => {
                         // 帮助说明
@@ -2479,19 +2520,22 @@ impl MenuSystem {
                     3 => hero::class::Class::Huntress,
                     _ => hero::class::Class::Warrior,
                 };
-                
+
                 // 存储选中的职业，用于后续初始化
                 resources.game_state.selected_class = Some(class.clone());
                 resources
                     .game_state
                     .message_log
                     .push(format!("选择了职业：{}", class));
-                
+
                 // 进入游戏状态（实际的初始化将在 game_loop 中处理）
                 MenuSystem::start_new_game(resources);
             }
 
-            GameStatus::ConfirmQuit { return_to, selected_option } => {
+            GameStatus::ConfirmQuit {
+                return_to,
+                selected_option,
+            } => {
                 // 确认退出：0=是，1=否
                 if selected_option == 0 {
                     // 退出到 GameOver
@@ -2502,9 +2546,9 @@ impl MenuSystem {
                     // 返回原状态
                     resources.game_state.game_state = match return_to {
                         crate::ecs::ReturnTo::Running => GameStatus::Running,
-                        crate::ecs::ReturnTo::MainMenu => GameStatus::MainMenu {
-                            selected_option: 0,
-                        },
+                        crate::ecs::ReturnTo::MainMenu => {
+                            GameStatus::MainMenu { selected_option: 0 }
+                        }
                     };
                 }
             }
@@ -2528,9 +2572,7 @@ impl MenuSystem {
 
             GameStatus::ClassSelection { .. } => {
                 // 从职业选择返回主菜单
-                resources.game_state.game_state = GameStatus::MainMenu {
-                    selected_option: 0,
-                };
+                resources.game_state.game_state = GameStatus::MainMenu { selected_option: 0 };
             }
 
             _ => {}
@@ -2549,9 +2591,15 @@ impl System for BossSystem {
 
     fn run(&mut self, world: &mut World, resources: &mut Resources) -> SystemResult {
         use crate::ecs::{BossComponent, BossSkillComponent};
-        
+
         // 收集所有 Boss 实体及其信息
-        let boss_data: Vec<(Entity, combat::boss::BossType, combat::boss::BossPhase, u32, u32)> = world
+        let boss_data: Vec<(
+            Entity,
+            combat::boss::BossType,
+            combat::boss::BossPhase,
+            u32,
+            u32,
+        )> = world
             .query::<(&BossComponent, &Stats)>()
             .iter()
             .map(|(entity, (boss_comp, stats))| {
@@ -2567,7 +2615,10 @@ impl System for BossSystem {
 
         // 找到玩家位置
         let player_pos = if let Some(player_entity) = find_player_entity(world) {
-            world.get::<&Position>(player_entity).ok().map(|p| p.clone())
+            world
+                .get::<&Position>(player_entity)
+                .ok()
+                .map(|p| p.clone())
         } else {
             None
         };
@@ -2577,13 +2628,13 @@ impl System for BossSystem {
             // 检查阶段转换
             let hp_percent = hp as f32 / max_hp as f32;
             let new_phase = combat::boss::BossPhase::from_health_percent(hp_percent);
-            
+
             if new_phase != current_phase {
                 // 更新阶段
                 if let Ok(mut boss_comp) = world.get::<&mut BossComponent>(boss_entity) {
                     boss_comp.current_phase = new_phase.clone();
                 }
-                
+
                 resources.game_state.message_log.push(format!(
                     "{}进入了{:?}阶段！",
                     boss_type.name(),

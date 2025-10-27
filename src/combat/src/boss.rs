@@ -62,11 +62,11 @@ impl BossType {
     /// 获取 Boss 颜色 (RGB)
     pub fn color(&self) -> (u8, u8, u8) {
         match self {
-            Self::GiantOgre => (255, 100, 50),      // 橙红色
-            Self::ShadowMage => (100, 50, 200),     // 紫色
-            Self::VenomLord => (50, 255, 100),      // 毒绿色
+            Self::GiantOgre => (255, 100, 50),           // 橙红色
+            Self::ShadowMage => (100, 50, 200),          // 紫色
+            Self::VenomLord => (50, 255, 100),           // 毒绿色
             Self::MechanicalGuardian => (200, 200, 200), // 银灰色
-            Self::AbyssalLord => (150, 0, 0),       // 暗红色
+            Self::AbyssalLord => (150, 0, 0),            // 暗红色
         }
     }
 }
@@ -215,13 +215,13 @@ pub struct Boss {
     pub resistances: HashMap<EffectType, f32>, // 抗性百分比
     pub entity_id: Option<u32>,
     pub first_kill_bonus: bool, // 是否已获得首杀奖励
-    pub summon_count: u32, // 已召唤的小怪数量
+    pub summon_count: u32,      // 已召唤的小怪数量
 }
 
 impl Boss {
     /// 创建新的 Boss 实例
     pub fn new(boss_type: BossType, x: i32, y: i32) -> Self {
-        let (hp, attack, defense, exp_value, skills, immunities, resistances) = 
+        let (hp, attack, defense, exp_value, skills, immunities, resistances) =
             Self::get_boss_stats(&boss_type);
 
         Self {
@@ -247,11 +247,16 @@ impl Boss {
     }
 
     /// 获取 Boss 基础属性和技能
-    fn get_boss_stats(boss_type: &BossType) -> (
-        u32, u32, u32, u32, 
-        Vec<BossSkill>, 
-        Vec<EffectType>, 
-        HashMap<EffectType, f32>
+    fn get_boss_stats(
+        boss_type: &BossType,
+    ) -> (
+        u32,
+        u32,
+        u32,
+        u32,
+        Vec<BossSkill>,
+        Vec<EffectType>,
+        HashMap<EffectType, f32>,
     ) {
         match boss_type {
             BossType::GiantOgre => (
@@ -260,8 +265,14 @@ impl Boss {
                 15,  // 防御
                 100, // 经验值
                 vec![
-                    BossSkill::AreaAttack { radius: 2, damage_multiplier: 1.5 },
-                    BossSkill::Berserk { attack_boost: 1.5, speed_boost: 1.3 },
+                    BossSkill::AreaAttack {
+                        radius: 2,
+                        damage_multiplier: 1.5,
+                    },
+                    BossSkill::Berserk {
+                        attack_boost: 1.5,
+                        speed_boost: 1.3,
+                    },
                 ],
                 vec![EffectType::Paralysis], // 免疫眩晕
                 [(EffectType::Slow, 0.5)].iter().cloned().collect(), // 50% 减速抗性
@@ -272,11 +283,13 @@ impl Boss {
                 10,
                 150,
                 vec![
-                    BossSkill::ShadowBolt { damage_multiplier: 1.8 },
+                    BossSkill::ShadowBolt {
+                        damage_multiplier: 1.8,
+                    },
                     BossSkill::Teleport,
-                    BossSkill::ApplyStatus { 
-                        status: EffectType::Darkness, 
-                        duration: 3 
+                    BossSkill::ApplyStatus {
+                        status: EffectType::Darkness,
+                        duration: 3,
                     },
                 ],
                 vec![EffectType::Darkness], // 免疫致盲
@@ -288,11 +301,17 @@ impl Boss {
                 12,
                 200,
                 vec![
-                    BossSkill::VenomSpit { damage_per_turn: 5, duration: 5 },
-                    BossSkill::AreaAttack { radius: 3, damage_multiplier: 1.2 },
-                    BossSkill::ApplyStatus { 
-                        status: EffectType::Poison, 
-                        duration: 8 
+                    BossSkill::VenomSpit {
+                        damage_per_turn: 5,
+                        duration: 5,
+                    },
+                    BossSkill::AreaAttack {
+                        radius: 3,
+                        damage_multiplier: 1.2,
+                    },
+                    BossSkill::ApplyStatus {
+                        status: EffectType::Poison,
+                        duration: 8,
                     },
                 ],
                 vec![EffectType::Poison], // 免疫中毒
@@ -309,10 +328,10 @@ impl Boss {
                     BossSkill::Shield { amount: 80 },
                 ],
                 vec![EffectType::Poison, EffectType::Bleeding], // 免疫生物状态
-                [
-                    (EffectType::Burning, 0.7),
-                    (EffectType::Frost, 0.5),
-                ].iter().cloned().collect(),
+                [(EffectType::Burning, 0.7), (EffectType::Frost, 0.5)]
+                    .iter()
+                    .cloned()
+                    .collect(),
             ),
             BossType::AbyssalLord => (
                 300,
@@ -320,11 +339,20 @@ impl Boss {
                 18,
                 500,
                 vec![
-                    BossSkill::VoidRift { damage: 25, duration: 4 },
+                    BossSkill::VoidRift {
+                        damage: 25,
+                        duration: 4,
+                    },
                     BossSkill::SummonMinions { count: 5 },
                     BossSkill::SelfHeal { percent: 0.15 },
-                    BossSkill::AreaAttack { radius: 4, damage_multiplier: 2.0 },
-                    BossSkill::Berserk { attack_boost: 2.0, speed_boost: 1.5 },
+                    BossSkill::AreaAttack {
+                        radius: 4,
+                        damage_multiplier: 2.0,
+                    },
+                    BossSkill::Berserk {
+                        attack_boost: 2.0,
+                        speed_boost: 1.5,
+                    },
                 ],
                 vec![EffectType::Paralysis, EffectType::Rooted],
                 [
@@ -332,7 +360,10 @@ impl Boss {
                     (EffectType::Frost, 0.5),
                     (EffectType::Poison, 0.5),
                     (EffectType::Bleeding, 0.5),
-                ].iter().cloned().collect(),
+                ]
+                .iter()
+                .cloned()
+                .collect(),
             ),
         }
     }
@@ -387,7 +418,9 @@ impl Boss {
 
     /// 选择要使用的技能（AI 决策）
     pub fn choose_skill(&self, player_distance: f32, hp_percent: f32) -> Option<BossSkill> {
-        let available_skills: Vec<BossSkill> = self.skills.iter()
+        let available_skills: Vec<BossSkill> = self
+            .skills
+            .iter()
             .filter(|skill| self.cooldowns.is_available(skill))
             .cloned()
             .collect();
@@ -401,24 +434,36 @@ impl Boss {
 
         // 低血量优先治疗或护盾
         if hp_percent < 0.3 {
-            if let Some(skill) = available_skills.iter().find(|s| matches!(s, BossSkill::SelfHeal { .. })) {
+            if let Some(skill) = available_skills
+                .iter()
+                .find(|s| matches!(s, BossSkill::SelfHeal { .. }))
+            {
                 return Some(skill.clone());
             }
-            if let Some(skill) = available_skills.iter().find(|s| matches!(s, BossSkill::Shield { .. })) {
+            if let Some(skill) = available_skills
+                .iter()
+                .find(|s| matches!(s, BossSkill::Shield { .. }))
+            {
                 return Some(skill.clone());
             }
         }
 
         // 玩家距离较远时使用远程技能或传送
         if player_distance > 5.0 {
-            if let Some(skill) = available_skills.iter().find(|s| matches!(s, BossSkill::ShadowBolt { .. })) {
+            if let Some(skill) = available_skills
+                .iter()
+                .find(|s| matches!(s, BossSkill::ShadowBolt { .. }))
+            {
                 return Some(skill.clone());
             }
         }
 
         // 玩家距离很近时使用 AOE
         if player_distance <= 3.0 {
-            if let Some(skill) = available_skills.iter().find(|s| matches!(s, BossSkill::AreaAttack { .. })) {
+            if let Some(skill) = available_skills
+                .iter()
+                .find(|s| matches!(s, BossSkill::AreaAttack { .. }))
+            {
                 if rng.random_bool(0.6) {
                     return Some(skill.clone());
                 }
@@ -471,7 +516,7 @@ impl Boss {
     /// 生成 Boss 掉落物品
     pub fn generate_loot(&self) -> BossLoot {
         let mut rng = rand::rng();
-        
+
         // 基础金币掉落
         let gold = match self.boss_type {
             BossType::GiantOgre => rng.random_range(100..200),

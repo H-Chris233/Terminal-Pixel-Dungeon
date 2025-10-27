@@ -99,32 +99,32 @@ pub struct SaveData {
     /// Version for backward compatibility
     #[serde(default = "default_version")]
     pub version: u32,
-    
+
     pub metadata: SaveMetadata,
-    
+
     #[serde(default)]
     pub hero_skill_state: SkillState,
-    
+
     pub hero: hero::Hero,
     pub dungeon: dungeon::Dungeon,
     pub game_seed: u64,
-    
+
     /// Turn system state (v2+)
     #[serde(default)]
     pub turn_state: TurnStateData,
-    
+
     /// Game clock state (v2+)
     #[serde(default)]
     pub clock_state: ClockStateData,
-    
+
     /// Player energy state (v2+)
     #[serde(default = "default_player_energy")]
     pub player_energy: u32,
-    
+
     /// Player hunger last turn (v2+)
     #[serde(default)]
     pub player_hunger_last_turn: u32,
-    
+
     /// Non-player entity states (v2+)
     #[serde(default)]
     pub entities: Vec<EntityStateData>,
@@ -149,16 +149,17 @@ impl SaveData {
                 1 => {
                     // Migrate from v1 to v2: Initialize turn state and clock state
                     // These fields already have defaults, but we ensure they're set
-                    if self.turn_state.current_phase == TurnPhase::PlayerTurn 
-                        && !self.turn_state.player_action_taken {
+                    if self.turn_state.current_phase == TurnPhase::PlayerTurn
+                        && !self.turn_state.player_action_taken
+                    {
                         // Already at default, no action needed
                     }
-                    
+
                     if self.clock_state.turn_count == 0 {
                         // Initialize from hero turns if available
                         self.clock_state.turn_count = self.hero.turns;
                     }
-                    
+
                     self.version = 2;
                 }
                 _ => {
@@ -167,17 +168,17 @@ impl SaveData {
             }
         }
     }
-    
+
     /// Validate save data integrity
     pub fn validate(&self) -> Result<(), anyhow::Error> {
         if self.metadata.dungeon_depth == 0 {
             return Err(anyhow::anyhow!("Invalid dungeon depth"));
         }
-        
+
         if self.hero.max_hp == 0 {
             return Err(anyhow::anyhow!("Invalid hero HP"));
         }
-        
+
         Ok(())
     }
 }
@@ -282,7 +283,7 @@ impl SaveSystem {
 
         // Migrate legacy saves to current version
         data.migrate();
-        
+
         // Validate save data integrity
         data.validate().context("Save data validation failed")?;
 
@@ -396,8 +397,8 @@ impl AutoSave {
 mod tests {
     use super::*;
     use bincode::config;
-    use hero::class::Class;
     use hero::Hero;
+    use hero::class::Class;
 
     #[test]
     fn save_data_roundtrip_preserves_class_and_skills() {

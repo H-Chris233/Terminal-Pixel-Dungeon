@@ -12,7 +12,7 @@ pub mod rooms;
 pub mod tiles;
 
 use crate::TrapEffect;
-use crate::boss_room::{BossRoom};
+use crate::boss_room::BossRoom;
 use crate::level::tiles::{DoorState, StairDirection, TerrainType, Tile, TileInfo};
 use crate::trap::{Trap, TrapKind};
 use combat::boss::{Boss, BossType};
@@ -46,7 +46,11 @@ impl Level {
     }
 
     /// 生成指定深度的地牢层级，支持 Boss 房间
-    pub fn generate_with_depth(seed: u64, depth: usize, is_boss_level: bool) -> anyhow::Result<Self> {
+    pub fn generate_with_depth(
+        seed: u64,
+        depth: usize,
+        is_boss_level: bool,
+    ) -> anyhow::Result<Self> {
         let mut rng = Pcg32::seed_from_u64(seed.wrapping_add(depth as u64));
         let width = rng.random_range(50..100);
         let height = rng.random_range(50..100);
@@ -516,10 +520,11 @@ impl Level {
                 let dx = (x - boss_room.arena_center.0) as f32;
                 let dy = (y - boss_room.arena_center.1) as f32;
                 let distance = (dx * dx + dy * dy).sqrt();
-                
+
                 // 在竞技场边缘放置墙壁
-                if distance >= (boss_room.arena_radius - 1) as f32 
-                    && distance <= (boss_room.arena_radius + 1) as f32 {
+                if distance >= (boss_room.arena_radius - 1) as f32
+                    && distance <= (boss_room.arena_radius + 1) as f32
+                {
                     if let Some(tile) = self.get_tile_mut(x, y) {
                         tile.info = TileInfo::new(false, true, TerrainType::Wall);
                     }
@@ -542,10 +547,8 @@ impl Level {
         }
 
         // 创建从入口到竞技场的走廊
-        let corridor_tiles = Corridor::create_corridor_tiles(
-            (entrance_x, entrance_y),
-            boss_room.arena_center,
-        );
+        let corridor_tiles =
+            Corridor::create_corridor_tiles((entrance_x, entrance_y), boss_room.arena_center);
         for (x, y) in corridor_tiles {
             if let Some(tile) = self.get_tile_mut(x, y) {
                 tile.info = TileInfo::new(true, false, TerrainType::Floor);

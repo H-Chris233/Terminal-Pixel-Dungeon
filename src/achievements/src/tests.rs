@@ -90,8 +90,9 @@ fn test_bincode_serialization_achievement() {
     // Test bincode serialization
     let encoded = bincode::encode_to_vec(&achievement, bincode::config::standard())
         .expect("Failed to serialize with bincode");
-    let (decoded, _): (Achievement, _) = bincode::decode_from_slice(&encoded, bincode::config::standard())
-        .expect("Failed to deserialize with bincode");
+    let (decoded, _): (Achievement, _) =
+        bincode::decode_from_slice(&encoded, bincode::config::standard())
+            .expect("Failed to deserialize with bincode");
 
     assert_eq!(achievement.id, decoded.id);
     assert_eq!(achievement.name, decoded.name);
@@ -112,8 +113,9 @@ fn test_bincode_serialization_progress() {
     // Test bincode serialization
     let encoded = bincode::encode_to_vec(&progress, bincode::config::standard())
         .expect("Failed to serialize with bincode");
-    let (decoded, _): (AchievementProgress, _) = bincode::decode_from_slice(&encoded, bincode::config::standard())
-        .expect("Failed to deserialize with bincode");
+    let (decoded, _): (AchievementProgress, _) =
+        bincode::decode_from_slice(&encoded, bincode::config::standard())
+            .expect("Failed to deserialize with bincode");
 
     assert_eq!(progress.kills, decoded.kills);
     assert_eq!(progress.max_depth, decoded.max_depth);
@@ -140,13 +142,17 @@ fn test_bincode_serialization_manager() {
     // Test bincode serialization
     let encoded = bincode::encode_to_vec(&manager, bincode::config::standard())
         .expect("Failed to serialize with bincode");
-    let (decoded, _): (AchievementsManager, _) = bincode::decode_from_slice(&encoded, bincode::config::standard())
-        .expect("Failed to deserialize with bincode");
+    let (decoded, _): (AchievementsManager, _) =
+        bincode::decode_from_slice(&encoded, bincode::config::standard())
+            .expect("Failed to deserialize with bincode");
 
     // Verify progress
     assert_eq!(manager.progress.kills, decoded.progress.kills);
     assert_eq!(manager.progress.max_depth, decoded.progress.max_depth);
-    assert_eq!(manager.progress.bosses_defeated, decoded.progress.bosses_defeated);
+    assert_eq!(
+        manager.progress.bosses_defeated,
+        decoded.progress.bosses_defeated
+    );
 
     // Verify unlocked achievements
     assert!(decoded.is_unlocked(AchievementId::FirstBlood));
@@ -165,8 +171,9 @@ fn test_bincode_roundtrip_empty_manager() {
 
     let encoded = bincode::encode_to_vec(&manager, bincode::config::standard())
         .expect("Failed to serialize with bincode");
-    let (decoded, _): (AchievementsManager, _) = bincode::decode_from_slice(&encoded, bincode::config::standard())
-        .expect("Failed to deserialize with bincode");
+    let (decoded, _): (AchievementsManager, _) =
+        bincode::decode_from_slice(&encoded, bincode::config::standard())
+            .expect("Failed to deserialize with bincode");
 
     assert_eq!(manager.progress.kills, decoded.progress.kills);
     assert_eq!(manager.progress.max_depth, decoded.progress.max_depth);
@@ -193,8 +200,9 @@ fn test_achievement_criteria_variants() {
         // Test bincode serialization
         let encoded = bincode::encode_to_vec(&criteria, bincode::config::standard())
             .expect("Failed to serialize criteria with bincode");
-        let (_decoded, _): (AchievementCriteria, _) = bincode::decode_from_slice(&encoded, bincode::config::standard())
-            .expect("Failed to deserialize criteria with bincode");
+        let (_decoded, _): (AchievementCriteria, _) =
+            bincode::decode_from_slice(&encoded, bincode::config::standard())
+                .expect("Failed to deserialize criteria with bincode");
     }
 }
 
@@ -229,8 +237,9 @@ fn test_achievement_id_variants() {
         // Test bincode serialization
         let encoded = bincode::encode_to_vec(&id, bincode::config::standard())
             .expect("Failed to serialize id with bincode");
-        let (decoded, _): (AchievementId, _) = bincode::decode_from_slice(&encoded, bincode::config::standard())
-            .expect("Failed to deserialize id with bincode");
+        let (decoded, _): (AchievementId, _) =
+            bincode::decode_from_slice(&encoded, bincode::config::standard())
+                .expect("Failed to deserialize id with bincode");
         assert_eq!(id, decoded);
     }
 }
@@ -294,7 +303,10 @@ fn test_manager_query_unlocked() {
 
     // Initially nothing should be unlocked
     assert_eq!(manager.unlocked_achievements().len(), 0);
-    assert_eq!(manager.locked_achievements().len(), manager.achievements().len());
+    assert_eq!(
+        manager.locked_achievements().len(),
+        manager.achievements().len()
+    );
 
     // Unlock some achievements
     manager.on_kill();
@@ -422,12 +434,13 @@ fn test_persistence_simulation() {
     manager1.on_gold_collected(500);
 
     // Save to bincode
-    let saved_data = bincode::encode_to_vec(&manager1, bincode::config::standard())
-        .expect("Failed to save");
+    let saved_data =
+        bincode::encode_to_vec(&manager1, bincode::config::standard()).expect("Failed to save");
 
     // Session 2: Load and continue
-    let (mut manager2, _): (AchievementsManager, _) = bincode::decode_from_slice(&saved_data, bincode::config::standard())
-        .expect("Failed to load");
+    let (mut manager2, _): (AchievementsManager, _) =
+        bincode::decode_from_slice(&saved_data, bincode::config::standard())
+            .expect("Failed to load");
 
     // Verify progress was preserved
     assert_eq!(manager2.progress().kills, 25);

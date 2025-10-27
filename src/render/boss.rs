@@ -3,11 +3,11 @@
 //! 负责渲染 Boss 血条、阶段指示器和技能提示
 
 use ratatui::{
+    Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Gauge, Paragraph},
-    Frame,
 };
 
 use combat::boss::{BossPhase, BossType};
@@ -114,9 +114,7 @@ impl BossUI {
                 Span::raw("║      "),
                 Span::styled(
                     "⚠️  WARNING: BOSS AHEAD  ⚠️",
-                    Style::default()
-                        .fg(Color::Red)
-                        .add_modifier(Modifier::BOLD),
+                    Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
                 ),
                 Span::raw("      ║"),
             ]),
@@ -211,30 +209,22 @@ impl BossUI {
             Line::from(""),
             Line::from(vec![
                 Span::raw("获得金币: "),
-                Span::styled(
-                    format!("{}", gold),
-                    Style::default().fg(Color::Yellow),
-                ),
+                Span::styled(format!("{}", gold), Style::default().fg(Color::Yellow)),
             ]),
             Line::from(vec![
                 Span::raw("获得物品: "),
-                Span::styled(
-                    format!("{} 件", items),
-                    Style::default().fg(Color::Cyan),
-                ),
+                Span::styled(format!("{} 件", items), Style::default().fg(Color::Cyan)),
             ]),
         ];
 
         if is_first_kill {
             reward_text.push(Line::from(""));
-            reward_text.push(Line::from(vec![
-                Span::styled(
-                    "★ 首杀奖励 ★",
-                    Style::default()
-                        .fg(Color::Magenta)
-                        .add_modifier(Modifier::BOLD),
-                ),
-            ]));
+            reward_text.push(Line::from(vec![Span::styled(
+                "★ 首杀奖励 ★",
+                Style::default()
+                    .fg(Color::Magenta)
+                    .add_modifier(Modifier::BOLD),
+            )]));
             reward_text.push(Line::from("获得特殊奖励！"));
         }
 

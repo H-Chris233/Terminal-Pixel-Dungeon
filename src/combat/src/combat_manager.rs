@@ -114,18 +114,42 @@ mod tests {
     }
 
     impl Combatant for TestCombatant {
-        fn id(&self) -> u32 { 0 }
-        fn hp(&self) -> u32 { self.hp }
-        fn max_hp(&self) -> u32 { self.max_hp }
-        fn attack_power(&self) -> u32 { self.attack }
-        fn defense(&self) -> u32 { self.defense }
-        fn accuracy(&self) -> u32 { self.accuracy }
-        fn evasion(&self) -> u32 { self.evasion }
-        fn crit_bonus(&self) -> f32 { self.crit_bonus }
-        fn weapon(&self) -> Option<&items::Weapon> { None }
-        fn is_alive(&self) -> bool { self.hp > 0 }
-        fn name(&self) -> &str { &self.name }
-        fn attack_distance(&self) -> u32 { self.attack_dist }
+        fn id(&self) -> u32 {
+            0
+        }
+        fn hp(&self) -> u32 {
+            self.hp
+        }
+        fn max_hp(&self) -> u32 {
+            self.max_hp
+        }
+        fn attack_power(&self) -> u32 {
+            self.attack
+        }
+        fn defense(&self) -> u32 {
+            self.defense
+        }
+        fn accuracy(&self) -> u32 {
+            self.accuracy
+        }
+        fn evasion(&self) -> u32 {
+            self.evasion
+        }
+        fn crit_bonus(&self) -> f32 {
+            self.crit_bonus
+        }
+        fn weapon(&self) -> Option<&items::Weapon> {
+            None
+        }
+        fn is_alive(&self) -> bool {
+            self.hp > 0
+        }
+        fn name(&self) -> &str {
+            &self.name
+        }
+        fn attack_distance(&self) -> u32 {
+            self.attack_dist
+        }
         fn take_damage(&mut self, amount: u32) -> bool {
             self.hp = self.hp.saturating_sub(amount);
             self.is_alive()

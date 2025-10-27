@@ -3,33 +3,44 @@
 use serde::{Deserialize, Serialize};
 
 /// Unique identifier for an achievement
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    bincode::Encode,
+    bincode::Decode,
+)]
 pub enum AchievementId {
     // Kill-based achievements
-    FirstBlood,        // Kill your first enemy
-    SlayerI,          // Kill 10 enemies
-    SlayerII,         // Kill 50 enemies
-    SlayerIII,        // Kill 100 enemies
-    BossSlayer,       // Defeat a boss
-    
+    FirstBlood, // Kill your first enemy
+    SlayerI,    // Kill 10 enemies
+    SlayerII,   // Kill 50 enemies
+    SlayerIII,  // Kill 100 enemies
+    BossSlayer, // Defeat a boss
+
     // Exploration achievements
-    DeepDiver,        // Reach depth 5
-    Spelunker,        // Reach depth 10
-    MasterExplorer,   // Reach depth 20
-    
+    DeepDiver,      // Reach depth 5
+    Spelunker,      // Reach depth 10
+    MasterExplorer, // Reach depth 20
+
     // Item collection achievements
-    Hoarder,          // Collect 10 items
-    Collector,        // Collect 50 items
-    TreasureHunter,   // Collect 100 items
-    
+    Hoarder,        // Collect 10 items
+    Collector,      // Collect 50 items
+    TreasureHunter, // Collect 100 items
+
     // Survival achievements
-    Survivor,         // Survive 100 turns
-    Veteran,          // Survive 500 turns
-    Legend,           // Survive 1000 turns
-    
+    Survivor, // Survive 100 turns
+    Veteran,  // Survive 500 turns
+    Legend,   // Survive 1000 turns
+
     // Miscellaneous achievements
-    Lucky,            // Find a rare item
-    Wealthy,          // Collect 1000 gold
+    Lucky,   // Find a rare item
+    Wealthy, // Collect 1000 gold
 }
 
 /// Criteria required to unlock an achievement

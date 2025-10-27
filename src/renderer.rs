@@ -2,7 +2,8 @@
 
 use crate::ecs::*;
 use crate::render::{
-    ClassSelectionRenderer, DungeonRenderer, GameOverRenderer, HudRenderer, InventoryRenderer, MenuRenderer,
+    ClassSelectionRenderer, DungeonRenderer, GameOverRenderer, HudRenderer, InventoryRenderer,
+    MenuRenderer,
 };
 use anyhow;
 
@@ -168,7 +169,11 @@ impl RatatuiRenderer {
                     self.dungeon_renderer.render(f, chunks[1], &ecs_world.world);
 
                     // 渲染消息日志（改进版）
-                    Self::render_message_log(f, chunks[2], &ecs_world.resources.game_state.message_log);
+                    Self::render_message_log(
+                        f,
+                        chunks[2],
+                        &ecs_world.resources.game_state.message_log,
+                    );
                 }
             }
         })?;
@@ -209,9 +214,9 @@ impl RatatuiRenderer {
         let main_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),  // 标题
-                Constraint::Min(10),    // 内容
-                Constraint::Length(2),  // 底部提示
+                Constraint::Length(3), // 标题
+                Constraint::Min(10),   // 内容
+                Constraint::Length(2), // 底部提示
             ])
             .split(area);
 
@@ -247,7 +252,9 @@ impl RatatuiRenderer {
                 Span::styled("等级: ", Style::default().fg(TuiColor::Gray)),
                 Span::styled(
                     format!("{}", stats.level),
-                    Style::default().fg(TuiColor::Yellow).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(TuiColor::Yellow)
+                        .add_modifier(Modifier::BOLD),
                 ),
             ]),
             Line::from(vec![
@@ -312,14 +319,18 @@ impl RatatuiRenderer {
                 Span::styled("攻击力: ", Style::default().fg(TuiColor::Gray)),
                 Span::styled(
                     format!("{}", stats.attack),
-                    Style::default().fg(TuiColor::Red).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(TuiColor::Red)
+                        .add_modifier(Modifier::BOLD),
                 ),
             ]),
             Line::from(vec![
                 Span::styled("防御力: ", Style::default().fg(TuiColor::Gray)),
                 Span::styled(
                     format!("{}", stats.defense),
-                    Style::default().fg(TuiColor::Blue).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(TuiColor::Blue)
+                        .add_modifier(Modifier::BOLD),
                 ),
             ]),
             Line::from(""),
@@ -342,7 +353,9 @@ impl RatatuiRenderer {
                 Span::styled("职业: ", Style::default().fg(TuiColor::Gray)),
                 Span::styled(
                     format!("{}", progress.class),
-                    Style::default().fg(TuiColor::Magenta).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(TuiColor::Magenta)
+                        .add_modifier(Modifier::BOLD),
                 ),
             ]),
         ];
@@ -372,7 +385,10 @@ impl RatatuiRenderer {
             vec![
                 Line::from(vec![
                     ratatui::text::Span::styled("欢迎来到", Style::default().fg(TuiColor::White)),
-                    ratatui::text::Span::styled(" 终端像素地牢", Style::default().fg(TuiColor::Yellow)),
+                    ratatui::text::Span::styled(
+                        " 终端像素地牢",
+                        Style::default().fg(TuiColor::Yellow),
+                    ),
                     ratatui::text::Span::styled("！", Style::default().fg(TuiColor::White)),
                 ]),
                 Line::from(ratatui::text::Span::styled(
@@ -388,9 +404,13 @@ impl RatatuiRenderer {
                 .take(3)
                 .rev()
                 .map(|msg| {
-                    let (prefix, color) = if msg.starts_with("!") || msg.contains("死亡") || msg.contains("受伤") {
+                    let (prefix, color) = if msg.starts_with("!")
+                        || msg.contains("死亡")
+                        || msg.contains("受伤")
+                    {
                         ("⚠ ", TuiColor::Red)
-                    } else if msg.starts_with("+") || msg.contains("获得") || msg.contains("拾取") {
+                    } else if msg.starts_with("+") || msg.contains("获得") || msg.contains("拾取")
+                    {
                         ("✓ ", TuiColor::Green)
                     } else if msg.starts_with("*") || msg.contains("发现") {
                         ("★ ", TuiColor::Yellow)

@@ -43,7 +43,7 @@ pub enum GameEvent {
     },
     /// 状态效果移除
     StatusRemoved { entity: u32, status: String },
-    
+
     // ===== Boss 事件 =====
     /// Boss 遭遇
     BossEncountered { boss_type: String, boss_entity: u32 },
@@ -67,10 +67,7 @@ pub enum GameEvent {
         is_first_kill: bool,
     },
     /// Boss 召唤小怪
-    BossSummonedMinions {
-        boss_entity: u32,
-        minion_count: u32,
-    },
+    BossSummonedMinions { boss_entity: u32, minion_count: u32 },
 
     // ===== AI 事件 =====
     /// AI 做出决策

@@ -237,12 +237,12 @@ impl TurnSystem {
     pub fn is_ai_turn(&self) -> bool {
         matches!(self.state, TurnState::AITurn)
     }
-    
+
     /// Get whether player has taken an action this turn
     pub fn player_action_taken(&self) -> bool {
         self.player_action_taken
     }
-    
+
     /// Set the turn system state from saved data
     pub fn set_state(&mut self, state: TurnState, player_action_taken: bool) {
         self.state = state;
