@@ -865,14 +865,219 @@ impl FOVSystem {
     }
 }
 
-pub struct EffectSystem;
+/// Effect processing phase
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EffectPhase {
+    StartOfTurn,
+    EndOfTurn,
+}
+
+pub struct EffectSystem {
+    pub phase: EffectPhase,
+}
+
+impl EffectSystem {
+    pub fn new() -> Self {
+        Self {
+            phase: EffectPhase::EndOfTurn,
+        }
+    }
+
+    /// Run the effect system with event bus support
+    pub fn run_with_events(ecs_world: &mut ECSWorld, phase: EffectPhase) -> SystemResult {
+        use crate::ecs::{StatusEffects, Stats, Player};
+        use crate::event_bus::GameEvent;
+        
+        let current_turn = ecs_world.resources.clock.turn_count;
+        
+        // Collect entities with status effects
+        let mut entities_to_process: Vec<(Entity, StatusEffects, Stats, bool, String)> = Vec::new();
+        
+        for (entity, (effects, stats)) in ecs_world.world.query::<(&StatusEffects, &Stats)>().iter() {
+            let is_player = ecs_world.world.get::<&Player>(entity).is_ok();
+            let entity_name = ecs_world.world.get::<&Actor>(entity)
+                .map(|a| a.name.clone())
+                .unwrap_or_else(|_| "Unknown".to_string());
+            entities_to_process.push((entity, effects.clone(), stats.clone(), is_player, entity_name));
+        }
+        
+        // Process each entity's effects
+        for (entity, mut status_effects, mut stats, is_player, entity_name) in entities_to_process {
+            // Skip if already processed this turn
+            if status_effects.last_tick_turn >= current_turn {
+                continue;
+            }
+            
+            status_effects.last_tick_turn = current_turn;
+            
+            let mut total_damage = 0u32;
+            let mut total_healing = 0u32;
+            let mut effects_to_remove = Vec::new();
+            
+            // Process each effect
+            for (idx, effect) in status_effects.effects.iter_mut().enumerate() {
+                let effect_type = effect.effect_type();
+                let effect_name = format!("{:?}", effect_type);
+                
+                // Apply effect based on phase
+                match phase {
+                    EffectPhase::StartOfTurn => {
+                        // Some effects trigger at start of turn (e.g., paralysis check)
+                        match effect_type {
+                            crate::ecs::EffectType::Paralysis | 
+                            crate::ecs::EffectType::Rooted => {
+                                // These effects prevent action but don't deal damage
+                            }
+                            _ => {}
+                        }
+                    }
+                    EffectPhase::EndOfTurn => {
+                        // Most DoT effects trigger at end of turn
+                        let damage = effect.damage();
+                        if damage > 0 {
+                            total_damage += damage;
+                            
+                            ecs_world.publish_event(GameEvent::StatusEffectTicked {
+                                entity: entity.id(),
+                                status: effect_name.clone(),
+                                damage,
+                                remaining_turns: effect.turns(),
+                            });
+                        }
+                    }
+                }
+                
+                // Decrement duration (only at end of turn)
+                if phase == EffectPhase::EndOfTurn {
+                    let still_active = effect.update();
+                    if !still_active {
+                        effects_to_remove.push(idx);
+                        ecs_world.publish_event(GameEvent::StatusRemoved {
+                            entity: entity.id(),
+                            status: effect_name,
+                            reason: "expired".to_string(),
+                        });
+                    }
+                }
+            }
+            
+            // Remove expired effects (in reverse order to maintain indices)
+            for &idx in effects_to_remove.iter().rev() {
+                status_effects.effects.remove(idx);
+            }
+            
+            // Apply accumulated damage/healing
+            if total_damage > 0 {
+                stats.hp = stats.hp.saturating_sub(total_damage);
+                
+                // Check for death
+                if stats.hp == 0 {
+                    ecs_world.publish_event(GameEvent::EntityDied {
+                        entity: entity.id(),
+                        entity_name: entity_name.clone(),
+                    });
+                    
+                    // Remove all effects on death
+                    ecs_world.publish_event(GameEvent::StatusRemoved {
+                        entity: entity.id(),
+                        status: "所有效果".to_string(),
+                        reason: "death".to_string(),
+                    });
+                    
+                    // Despawn entity
+                    let _ = ecs_world.world.despawn(entity);
+                    continue;
+                }
+            }
+            
+            if total_healing > 0 {
+                stats.hp = (stats.hp + total_healing).min(stats.max_hp);
+            }
+            
+            // Update components
+            let _ = ecs_world.world.insert(entity, (status_effects, stats));
+        }
+        
+        SystemResult::Continue
+    }
+}
 
 impl System for EffectSystem {
     fn name(&self) -> &str {
         "EffectSystem"
     }
 
-    fn run(&mut self, _world: &mut World, _resources: &mut Resources) -> SystemResult {
+    fn run(&mut self, world: &mut World, resources: &mut Resources) -> SystemResult {
+        use crate::ecs::{StatusEffects, Stats, Player};
+        
+        let current_turn = resources.clock.turn_count;
+        
+        // Collect entities with status effects
+        let mut entities_to_process: Vec<(Entity, StatusEffects, Stats, bool, String)> = Vec::new();
+        
+        for (entity, (effects, stats)) in world.query::<(&StatusEffects, &Stats)>().iter() {
+            let is_player = world.get::<&Player>(entity).is_ok();
+            let entity_name = world.get::<&Actor>(entity)
+                .map(|a| a.name.clone())
+                .unwrap_or_else(|_| "Unknown".to_string());
+            entities_to_process.push((entity, effects.clone(), stats.clone(), is_player, entity_name));
+        }
+        
+        // Process each entity's effects
+        for (entity, mut status_effects, mut stats, _is_player, entity_name) in entities_to_process {
+            // Skip if already processed this turn
+            if status_effects.last_tick_turn >= current_turn {
+                continue;
+            }
+            
+            status_effects.last_tick_turn = current_turn;
+            
+            let mut total_damage = 0u32;
+            let mut effects_to_remove = Vec::new();
+            
+            // Process each effect
+            for (idx, effect) in status_effects.effects.iter_mut().enumerate() {
+                // Apply damage/healing from effect (at end of turn)
+                if self.phase == EffectPhase::EndOfTurn {
+                    let damage = effect.damage();
+                    if damage > 0 {
+                        total_damage += damage;
+                    }
+                    
+                    // Decrement duration
+                    let still_active = effect.update();
+                    if !still_active {
+                        effects_to_remove.push(idx);
+                        resources.game_state.message_log.push(format!(
+                            "{}的{:?}效果已消失",
+                            entity_name,
+                            effect.effect_type()
+                        ));
+                    }
+                }
+            }
+            
+            // Remove expired effects
+            for &idx in effects_to_remove.iter().rev() {
+                status_effects.effects.remove(idx);
+            }
+            
+            // Apply accumulated damage
+            if total_damage > 0 {
+                stats.hp = stats.hp.saturating_sub(total_damage);
+                
+                // Check for death
+                if stats.hp == 0 {
+                    resources.game_state.message_log.push(format!("{} 死亡", entity_name));
+                    let _ = world.despawn(entity);
+                    continue;
+                }
+            }
+            
+            // Update components
+            let _ = world.insert(entity, (status_effects, stats));
+        }
+        
         SystemResult::Continue
     }
 }
