@@ -548,7 +548,7 @@ pub struct InputBuffer {
     pub completed_actions: Vec<PlayerAction>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum PlayerAction {
     Move(Direction),
     Attack(Position),
@@ -582,7 +582,7 @@ pub enum NavigateDirection {
     PageDown,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Direction {
     North,
     South,
