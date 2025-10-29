@@ -541,3 +541,90 @@ impl From<Color> for TuiColor {
         }
     }
 }
+
+#[cfg(test)]
+pub mod test_helpers {
+    use super::*;
+
+    /// Mock backend for testing
+    pub struct MockBackend;
+
+    impl Backend for MockBackend {
+        fn draw<'a, I>(&mut self, _content: I) -> io::Result<()>
+        where
+            I: Iterator<Item = (u16, u16, &'a ratatui::buffer::Cell)>,
+        {
+            Ok(())
+        }
+
+        fn hide_cursor(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+
+        fn show_cursor(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+
+        fn get_cursor(&mut self) -> io::Result<(u16, u16)> {
+            Ok((0, 0))
+        }
+
+        fn get_cursor_position(&mut self) -> io::Result<ratatui::layout::Position> {
+            Ok(ratatui::layout::Position { x: 0, y: 0 })
+        }
+
+        fn set_cursor(&mut self, _x: u16, _y: u16) -> io::Result<()> {
+            Ok(())
+        }
+
+        fn set_cursor_position<P: Into<ratatui::layout::Position>>(&mut self, _position: P) -> io::Result<()> {
+            Ok(())
+        }
+
+        fn clear(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+
+        fn size(&self) -> io::Result<ratatui::layout::Size> {
+            Ok(ratatui::layout::Size { width: 80, height: 24 })
+        }
+
+        fn window_size(&mut self) -> io::Result<ratatui::backend::WindowSize> {
+            Ok(ratatui::backend::WindowSize {
+                columns_rows: ratatui::layout::Size { width: 80, height: 24 },
+                pixels: ratatui::layout::Size { width: 800, height: 600 },
+            })
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// Mock renderer for testing
+    pub struct MockRenderer;
+
+    impl Renderer for MockRenderer {
+        type Backend = MockBackend;
+
+        fn init(&mut self) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        fn draw(&mut self, _ecs_world: &mut ECSWorld) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        fn draw_ui(&mut self, _frame: &mut Frame<'_>, _area: Rect) {
+            // No-op for tests
+        }
+
+        fn resize(&mut self, _resources: &mut Resources, _width: u16, _height: u16) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        fn cleanup(&mut self) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+}

@@ -4365,6 +4365,9 @@ mod tests {
         // Run combat system
         CombatSystem::run_with_events(&mut ecs_world);
         
+        // Process events to apply combat effects
+        ecs_world.process_events();
+        
         // Get final HP values
         let final_player_hp = ecs_world.world.get::<&Stats>(player).unwrap().hp;
         let final_enemy_hp = ecs_world.world.get::<&Stats>(enemy).unwrap().hp;

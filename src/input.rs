@@ -372,3 +372,30 @@ pub fn process_input(ecs_world: &mut ECSWorld) -> anyhow::Result<bool> {
         .iter()
         .any(|action| matches!(action, PlayerAction::Quit)))
 }
+
+#[cfg(test)]
+pub mod test_helpers {
+    use super::*;
+
+    /// Mock input source for testing
+    pub struct MockInputSource;
+
+    impl MockInputSource {
+        pub fn new() -> Self {
+            Self
+        }
+    }
+
+    impl InputSource for MockInputSource {
+        type Event = InputEvent;
+
+        fn poll(&mut self, _timeout: Duration) -> anyhow::Result<Option<Self::Event>> {
+            // Return no input for tests
+            Ok(None)
+        }
+
+        fn is_input_available(&self) -> anyhow::Result<bool> {
+            Ok(false)
+        }
+    }
+}

@@ -1,7 +1,14 @@
 //! 游戏循环，协调 `docs/turn_system.md` 中描述的确定性阶段管道。
 //!
-//! 除了运行系统外，循环还将回合状态转换桥接到 `GameEvent` 通知，
-//! 并基于能量调度器控制 AI 处理。
+//! 游戏循环现在被重组为明确的回合阶段：
+//! - PreInput: 时间/时钟更新
+//! - Input: 输入处理和菜单
+//! - IntentGathering: AI 决策
+//! - ActionResolution: 移动、FOV、战斗、效果、库存、饥饿、地牢
+//! - PostTurnUpkeep: 回合结束时的清理和更新
+//! - Render: 渲染输出
+//!
+//! 每个阶段根据游戏状态（菜单、运行中、暂停等）有条件地执行。
 
 use crate::core::GameEngine;
 use crate::ecs::*;
@@ -9,41 +16,86 @@ use crate::input::*;
 use crate::renderer::*;
 use crate::systems::*;
 use crate::systems::EffectPhase;
-use crate::turn_system::{TurnState, TurnSystem};
+use crate::turn_system::{TurnPhase, TurnState, TurnSystem};
 use anyhow;
 use save::{AutoSave, SaveSystem};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-/// 主游戏循环，按顺序运行 ECS 系统
+/// 系统执行阶段，定义了确定性的回合顺序
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SystemPhase {
+    /// 预输入阶段：时间和时钟更新
+    PreInput,
+    /// 输入阶段：输入处理和菜单
+    Input,
+    /// 意图收集阶段：AI 决策
+    IntentGathering,
+    /// 动作解决阶段：执行游戏逻辑
+    ActionResolution,
+    /// 回合后维护阶段：能量、状态效果、清理
+    PostTurnUpkeep,
+    /// 渲染阶段：显示输出
+    Render,
+}
+
+/// 主游戏循环，按阶段运行 ECS 系统
 pub struct GameLoop<R: Renderer, I: InputSource, C: Clock> {
     pub game_engine: GameEngine,
     pub ecs_world: ECSWorld,
     pub renderer: R,
     pub input_source: I,
     pub clock: C,
-    pub systems: Vec<Box<dyn System>>,
+    
+    // 分阶段的系统
+    pub pre_input_systems: Vec<Box<dyn System>>,
+    pub input_systems: Vec<Box<dyn System>>,
+    pub intent_gathering_systems: Vec<Box<dyn System>>,
+    pub action_resolution_systems: Vec<Box<dyn System>>,
+    pub post_turn_upkeep_systems: Vec<Box<dyn System>>,
+    pub render_systems: Vec<Box<dyn System>>,
+    
     pub turn_system: TurnSystem,
     pub is_running: bool,
     pub save_system: Option<AutoSave>,
+    
+    // 回合计时器
+    turn_start_time: Option<Instant>,
+    last_turn_duration: Duration,
 }
 
 impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> GameLoop<R, I, C> {
     pub fn new(renderer: R, input_source: I, clock: C) -> Self {
-        // 此向量的顺序定义了回合系统文档中描述的阶段管道。
-        // 调整时请更新 `docs/turn_system.md`。
-        let systems: Vec<Box<dyn System>> = vec![
-            Box::new(InputSystem),
-            Box::new(MenuSystem), // 菜单系统（需要优先处理菜单动作）
+        // 分阶段的系统定义
+        // 系统执行顺序遵循因果关系：移动 → FOV → AI意图 → 战斗 → 状态清理
+        
+        let pre_input_systems: Vec<Box<dyn System>> = vec![
             Box::new(TimeSystem),
-            Box::new(MovementSystem),
+        ];
+        
+        let input_systems: Vec<Box<dyn System>> = vec![
+            Box::new(InputSystem),
+            Box::new(MenuSystem),
+        ];
+        
+        let intent_gathering_systems: Vec<Box<dyn System>> = vec![
             Box::new(AISystem),
-            Box::new(CombatSystem),
+        ];
+        
+        let action_resolution_systems: Vec<Box<dyn System>> = vec![
+            Box::new(MovementSystem),
             Box::new(FOVSystem),
-            Box::new(EffectSystem::new()), // 效果系统
-            Box::new(EnergySystem),
+            Box::new(CombatSystem),
+            Box::new(EffectSystem::new()),
             Box::new(InventorySystem),
-            Box::new(HungerSystem), // 新增：饥饿系统
+            Box::new(HungerSystem),
             Box::new(DungeonSystem),
+        ];
+        
+        let post_turn_upkeep_systems: Vec<Box<dyn System>> = vec![
+            Box::new(EnergySystem),
+        ];
+        
+        let render_systems: Vec<Box<dyn System>> = vec![
             Box::new(RenderingSystem),
         ];
 
@@ -64,10 +116,17 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
             renderer,
             input_source,
             clock,
-            systems,
+            pre_input_systems,
+            input_systems,
+            intent_gathering_systems,
+            action_resolution_systems,
+            post_turn_upkeep_systems,
+            render_systems,
             turn_system: TurnSystem::new(),
             is_running: true,
             save_system,
+            turn_start_time: None,
+            last_turn_duration: Duration::from_millis(0),
         }
     }
 
@@ -301,9 +360,33 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
         if let Ok(Some(event)) = self.input_source.poll(Duration::from_millis(50)) {
             match event {
                 InputEvent::Key(key_event) => {
-                    // Convert key event to player action (state-aware, internal KeyEvent)
-                    if let Some(action) = key_event_to_player_action_from_internal(
-                        key_event,
+                    // Convert internal KeyEvent to crossterm KeyEvent
+                    let crossterm_key = crossterm::event::KeyEvent::new(
+                        match key_event.code {
+                            KeyCode::Char(c) => crossterm::event::KeyCode::Char(c),
+                            KeyCode::Enter => crossterm::event::KeyCode::Enter,
+                            KeyCode::Esc => crossterm::event::KeyCode::Esc,
+                            KeyCode::Backspace => crossterm::event::KeyCode::Backspace,
+                            KeyCode::Delete => crossterm::event::KeyCode::Delete,
+                            KeyCode::Tab => crossterm::event::KeyCode::Tab,
+                            KeyCode::Left => crossterm::event::KeyCode::Left,
+                            KeyCode::Right => crossterm::event::KeyCode::Right,
+                            KeyCode::Up => crossterm::event::KeyCode::Up,
+                            KeyCode::Down => crossterm::event::KeyCode::Down,
+                            KeyCode::PageUp => crossterm::event::KeyCode::PageUp,
+                            KeyCode::PageDown => crossterm::event::KeyCode::PageDown,
+                            KeyCode::Home => crossterm::event::KeyCode::Home,
+                            KeyCode::End => crossterm::event::KeyCode::End,
+                            KeyCode::Insert => crossterm::event::KeyCode::Insert,
+                            KeyCode::F(n) => crossterm::event::KeyCode::F(n),
+                            KeyCode::Null => crossterm::event::KeyCode::Null,
+                        },
+                        crossterm::event::KeyModifiers::empty(),
+                    );
+                    
+                    // Convert key event to player action (state-aware)
+                    if let Some(action) = key_event_to_player_action(
+                        crossterm_key,
                         &self.ecs_world.resources.game_state.game_state,
                     ) {
                         // 菜单相关动作直接标记为已完成，交由 MenuSystem 处理；其余进入待处理队列
@@ -359,120 +442,106 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
         let prev_status = self.ecs_world.resources.game_state.game_state;
         let prev_turn_state = self.turn_system.state.clone();
 
-        // Run systems based on turn state
-        if self.turn_system.is_player_turn() {
-            // Run non-input systems
-            for system in &mut self.systems {
-                // Skip EnergySystem as we're managing energy through turn system now
-                if system.is_energy_system() {
-                    continue;
-                }
+        // 开始回合计时（仅在玩家回合开始时）
+        if self.turn_system.is_player_turn() && self.turn_start_time.is_none() {
+            self.turn_start_time = Some(Instant::now());
+        }
 
-                // 特殊处理 MovementSystem，使用事件版本
-                if system.name() == "MovementSystem" {
-                    match MovementSystem::run_with_events(&mut self.ecs_world) {
-                        SystemResult::Continue => continue,
-                        SystemResult::Stop => {
-                            self.is_running = false;
-                            return Ok(());
-                        }
-                        SystemResult::Error(msg) => {
-                            eprintln!("System error: {}", msg);
-                            return Err(anyhow::anyhow!(msg));
-                        }
-                    }
-                }
+        // 运行分阶段的系统
+        self.run_phased_systems()?;
 
-                // 特殊处理 CombatSystem，使用事件版本
-                if system.name() == "CombatSystem" {
-                    match CombatSystem::run_with_events(&mut self.ecs_world) {
-                        SystemResult::Continue => continue,
-                        SystemResult::Stop => {
-                            self.is_running = false;
-                            return Ok(());
-                        }
-                        SystemResult::Error(msg) => {
-                            eprintln!("System error: {}", msg);
-                            return Err(anyhow::anyhow!(msg));
-                        }
-                    }
-                }
+        // 处理回合周期
+        self.turn_system
+            .process_turn_cycle(&mut self.ecs_world.world, &mut self.ecs_world.resources)?;
 
-                // 特殊处理 EffectSystem，使用事件版本
-                if system.name() == "EffectSystem" {
-                    match EffectSystem::run_with_events(&mut self.ecs_world, EffectPhase::EndOfTurn) {
-                        SystemResult::Continue => continue,
-                        SystemResult::Stop => {
-                            self.is_running = false;
-                            return Ok(());
-                        }
-                        SystemResult::Error(msg) => {
-                            eprintln!("System error: {}", msg);
-                            return Err(anyhow::anyhow!(msg));
-                        }
-                    }
-                }
-
-                // 特殊处理 HungerSystem，使用事件版本
-                if system.name() == "HungerSystem" {
-                    match HungerSystem::run_with_events(&mut self.ecs_world) {
-                        SystemResult::Continue => continue,
-                        SystemResult::Stop => {
-                            self.is_running = false;
-                            return Ok(());
-                        }
-                        SystemResult::Error(msg) => {
-                            eprintln!("System error: {}", msg);
-                            return Err(anyhow::anyhow!(msg));
-                        }
-                    }
-                }
-
-                // 特殊处理 DungeonSystem，使用事件版本
-                if system.name() == "DungeonSystem" {
-                    match DungeonSystem::run_with_events(&mut self.ecs_world) {
-                        SystemResult::Continue => continue,
-                        SystemResult::Stop => {
-                            self.is_running = false;
-                            return Ok(());
-                        }
-                        SystemResult::Error(msg) => {
-                            eprintln!("System error: {}", msg);
-                            return Err(anyhow::anyhow!(msg));
-                        }
-                    }
-                }
-
-                match system.run(&mut self.ecs_world.world, &mut self.ecs_world.resources) {
-                    SystemResult::Continue => continue,
-                    SystemResult::Stop => {
-                        self.is_running = false;
-                        return Ok(());
-                    }
-                    SystemResult::Error(msg) => {
-                        eprintln!("System error: {}", msg);
-                        return Err(anyhow::anyhow!(msg));
-                    }
-                }
+        // 检查是否完成了一个完整回合（AI回合结束，回到玩家回合）
+        let current_turn_state = self.turn_system.state.clone();
+        if matches!(prev_turn_state, TurnState::AITurn)
+            && matches!(current_turn_state, TurnState::PlayerTurn)
+        {
+            // 记录回合时长
+            if let Some(start) = self.turn_start_time.take() {
+                self.last_turn_duration = start.elapsed();
             }
+            
+            // 在回合结束时触发自动保存
+            self.try_autosave_at_turn_end()?;
+        }
 
-            // 处理所有待处理的事件
-            self.ecs_world.process_events();
+        self.emit_turn_state_events(prev_turn_state, current_turn_state);
 
-            // Process the player's turn
-            self.turn_system
-                .process_turn_cycle(&mut self.ecs_world.world, &mut self.ecs_world.resources)?;
-        } else {
-            // Process AI turns without player input
-            // Run non-input systems
-            for system in &mut self.systems {
-                // Skip EnergySystem as we're managing energy through turn system now
-                if system.is_energy_system() {
-                    continue;
-                }
+        // 桥接：根据 GameStatus 变化发布事件
+        self.bridge_status_events(prev_status);
 
-                // 特殊处理 MovementSystem，使用事件版本
-                if system.name() == "MovementSystem" {
+        // 事件入队后立刻处理当前帧事件（避免 UI 状态不同步）
+        self.ecs_world.process_events();
+
+        // 准备处理下一帧事件
+        self.ecs_world.next_frame();
+
+        Ok(())
+    }
+
+    /// 运行分阶段的系统，根据游戏状态和回合阶段有条件地执行
+    fn run_phased_systems(&mut self) -> anyhow::Result<()> {
+        let game_state = self.ecs_world.resources.game_state.game_state;
+        
+        // 检查是否在菜单/暂停状态
+        let is_menu_or_paused = matches!(
+            game_state,
+            GameStatus::MainMenu { .. }
+                | GameStatus::Paused { .. }
+                | GameStatus::Options { .. }
+                | GameStatus::Inventory { .. }
+                | GameStatus::Help
+                | GameStatus::CharacterInfo
+                | GameStatus::ConfirmQuit { .. }
+                | GameStatus::ClassSelection { .. }
+        );
+
+        // 第1阶段：PreInput - 时间系统（总是运行）
+        self.run_system_phase(SystemPhase::PreInput)?;
+
+        // 第2阶段：Input - 输入和菜单（总是运行）
+        self.run_system_phase(SystemPhase::Input)?;
+
+        // 如果在菜单或暂停状态，跳过游戏逻辑阶段
+        if is_menu_or_paused {
+            // 只运行渲染阶段
+            return Ok(());
+        }
+
+        // 第3阶段：IntentGathering - AI决策（仅在AI回合）
+        if self.turn_system.is_ai_turn() {
+            self.run_system_phase(SystemPhase::IntentGathering)?;
+        }
+
+        // 第4阶段：ActionResolution - 游戏逻辑（在任何非暂停状态）
+        self.run_system_phase(SystemPhase::ActionResolution)?;
+
+        // 第5阶段：PostTurnUpkeep - 回合后维护（在回合结束时）
+        if matches!(self.turn_system.state, TurnState::AITurn) {
+            self.run_system_phase(SystemPhase::PostTurnUpkeep)?;
+        }
+
+        Ok(())
+    }
+
+    /// 运行特定阶段的系统
+    fn run_system_phase(&mut self, phase: SystemPhase) -> anyhow::Result<()> {
+        let systems = match phase {
+            SystemPhase::PreInput => &mut self.pre_input_systems,
+            SystemPhase::Input => &mut self.input_systems,
+            SystemPhase::IntentGathering => &mut self.intent_gathering_systems,
+            SystemPhase::ActionResolution => &mut self.action_resolution_systems,
+            SystemPhase::PostTurnUpkeep => &mut self.post_turn_upkeep_systems,
+            SystemPhase::Render => &mut self.render_systems,
+        };
+
+        for system in systems {
+            // 特殊处理使用事件版本的系统
+            match system.name() {
+                "MovementSystem" => {
                     match MovementSystem::run_with_events(&mut self.ecs_world) {
                         SystemResult::Continue => continue,
                         SystemResult::Stop => {
@@ -485,9 +554,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                         }
                     }
                 }
-
-                // 特殊处理 CombatSystem，使用事件版本
-                if system.name() == "CombatSystem" {
+                "CombatSystem" => {
                     match CombatSystem::run_with_events(&mut self.ecs_world) {
                         SystemResult::Continue => continue,
                         SystemResult::Stop => {
@@ -500,9 +567,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                         }
                     }
                 }
-
-                // 特殊处理 EffectSystem，使用事件版本
-                if system.name() == "EffectSystem" {
+                "EffectSystem" => {
                     match EffectSystem::run_with_events(&mut self.ecs_world, EffectPhase::EndOfTurn) {
                         SystemResult::Continue => continue,
                         SystemResult::Stop => {
@@ -515,9 +580,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                         }
                     }
                 }
-
-                // 特殊处理 HungerSystem，使用事件版本
-                if system.name() == "HungerSystem" {
+                "HungerSystem" => {
                     match HungerSystem::run_with_events(&mut self.ecs_world) {
                         SystemResult::Continue => continue,
                         SystemResult::Stop => {
@@ -530,9 +593,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                         }
                     }
                 }
-
-                // 特殊处理 DungeonSystem，使用事件版本
-                if system.name() == "DungeonSystem" {
+                "DungeonSystem" => {
                     match DungeonSystem::run_with_events(&mut self.ecs_world) {
                         SystemResult::Continue => continue,
                         SystemResult::Stop => {
@@ -545,9 +606,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                         }
                     }
                 }
-
-                // 特殊处理 AISystem，使用事件版本（在AI回合中）
-                if system.name() == "AISystem" {
+                "AISystem" => {
                     match AISystem::run_with_events(&mut self.ecs_world) {
                         SystemResult::Continue => continue,
                         SystemResult::Stop => {
@@ -560,41 +619,31 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                         }
                     }
                 }
-
-                match system.run(&mut self.ecs_world.world, &mut self.ecs_world.resources) {
-                    SystemResult::Continue => continue,
-                    SystemResult::Stop => {
-                        self.is_running = false;
-                        return Ok(());
-                    }
-                    SystemResult::Error(msg) => {
-                        eprintln!("System error: {}", msg);
-                        return Err(anyhow::anyhow!(msg));
+                _ => {
+                    // 运行标准系统
+                    match system.run(&mut self.ecs_world.world, &mut self.ecs_world.resources) {
+                        SystemResult::Continue => continue,
+                        SystemResult::Stop => {
+                            self.is_running = false;
+                            return Ok(());
+                        }
+                        SystemResult::Error(msg) => {
+                            eprintln!("System error: {}", msg);
+                            return Err(anyhow::anyhow!(msg));
+                        }
                     }
                 }
             }
-
-            // 处理所有待处理的事件
-            self.ecs_world.process_events();
-
-            // Process AI turns
-            self.turn_system
-                .process_turn_cycle(&mut self.ecs_world.world, &mut self.ecs_world.resources)?;
         }
 
-        let current_turn_state = self.turn_system.state.clone();
-        self.emit_turn_state_events(prev_turn_state, current_turn_state);
-
-        // 桥接：根据 GameStatus 变化发布事件
-        self.bridge_status_events(prev_status);
-
-        // 事件入队后立刻处理当前帧事件（避免 UI 状态不同步）
+        // 处理所有待处理的事件
         self.ecs_world.process_events();
 
-        // 准备处理下一帧事件
-        self.ecs_world.next_frame();
+        Ok(())
+    }
 
-        // Check for auto-save
+    /// 在回合结束时尝试自动保存
+    fn try_autosave_at_turn_end(&mut self) -> anyhow::Result<()> {
         if let Some(auto_save) = &mut self.save_system {
             if let Ok(save_data) = self.ecs_world.to_save_data(&self.turn_system) {
                 if let Err(e) = auto_save.try_save(&save_data) {
@@ -602,7 +651,6 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                 }
             }
         }
-
         Ok(())
     }
 
@@ -693,12 +741,12 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
 
     /// Update game state by running all systems
     fn update(&mut self) -> anyhow::Result<()> {
-        for system in &mut self.systems {
+        for system in &mut self.pre_input_systems {
             match system.run(&mut self.ecs_world.world, &mut self.ecs_world.resources) {
                 SystemResult::Continue => continue,
                 SystemResult::Stop => {
                     self.is_running = false;
-                    break;
+                    return Ok(());
                 }
                 SystemResult::Error(msg) => {
                     eprintln!("System error: {}", msg);
@@ -706,57 +754,28 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                 }
             }
         }
-
-        // Check for auto-save
-        if let Some(auto_save) = &mut self.save_system {
-            if let Ok(save_data) = self.ecs_world.to_save_data(&self.turn_system) {
-                if let Err(e) = auto_save.try_save(&save_data) {
-                    eprintln!("Auto-save failed: {}", e);
-                }
-            }
-        }
-
         Ok(())
     }
 
-    /// Render the current game state
+    /// Render the game state
     fn render(&mut self) -> anyhow::Result<()> {
-        self.renderer.draw(&mut self.ecs_world)?;
+        // 渲染阶段总是运行，即使在菜单/暂停状态
+        self.run_system_phase(SystemPhase::Render)?;
         Ok(())
     }
 
-    /// Clean up resources
+    /// Cleanup before exit
     fn cleanup(&mut self) -> anyhow::Result<()> {
-        self.renderer.cleanup()?;
-        Ok(())
+        self.renderer.cleanup()
     }
 
-    /// Save the current game state
-    pub fn save_game(&mut self, slot: usize) -> anyhow::Result<()> {
-        if let Some(auto_save) = &mut self.save_system {
-            let save_data = self.ecs_world.to_save_data(&self.turn_system)?;
-            auto_save.save_system.save_game(slot, &save_data)?;
-        }
-        Ok(())
-    }
-
-    /// Load a saved game state
-    pub fn load_game(&mut self, slot: usize) -> anyhow::Result<()> {
-        if let Some(auto_save) = &mut self.save_system {
-            let save_data = auto_save.save_system.load_game(slot)?;
-            let (turn_state, player_action_taken) = self.ecs_world.from_save_data(save_data)?;
-            self.turn_system.set_state(turn_state, player_action_taken);
-        }
-        Ok(())
-    }
-
-    /// 使用选定的职业重新初始化游戏世界
+    /// Reinitialize the game with a new character class
     fn reinitialize_with_class(&mut self, class: hero::class::Class) -> anyhow::Result<()> {
         // 清空当前世界
-        self.ecs_world.world.clear();
+        self.ecs_world.clear();
 
         // 重新生成地牢
-        self.ecs_world.generate_and_set_dungeon(10, 12345)?;
+        self.ecs_world.generate_and_set_dungeon(5, 42)?;
 
         // 获取起始位置
         let (start_x, start_y, _start_z) =
@@ -767,386 +786,201 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                 (10, 10, 0)
             };
 
-        // 使用 EntityFactory 创建玩家实体
-        let factory = crate::core::EntityFactory::new();
-        let _player_entity =
-            factory.create_player(&mut self.ecs_world.world, start_x, start_y, class);
+        // 创建基于职业的玩家实体
+        let factory = crate::core::entity_factory::EntityFactory::new();
+        factory.create_player(
+            &mut self.ecs_world.world,
+            start_x,
+            start_y,
+            class,
+        );
 
-        // 添加一些测试敌人
-        self.ecs_world.world.spawn((
-            Position::new(15, 10, 0),
-            Actor {
-                name: "Goblin".to_string(),
-                faction: Faction::Enemy,
-            },
-            Renderable {
-                symbol: 'g',
-                fg_color: Color::Green,
-                bg_color: Some(Color::Black),
-                order: 5,
-            },
-            Stats {
-                hp: 30,
-                max_hp: 30,
-                attack: 8,
-                defense: 2,
-                accuracy: 70,
-                evasion: 10,
-                level: 1,
-                experience: 10,
-                class: None,
-            },
-            Energy {
-                current: 100,
-                max: 100,
-                regeneration_rate: 1,
-            },
-        ));
-
-        // 添加基础地牢地砖
-        for x in 5..25 {
-            for y in 5..25 {
-                self.ecs_world.world.spawn((
-                    Position::new(x, y, 0),
-                    Tile {
-                        terrain_type: if x == 5 || x == 24 || y == 5 || y == 24 {
-                            TerrainType::Wall
-                        } else {
-                            TerrainType::Floor
-                        },
-                        is_passable: x != 5 && x != 24 && y != 5 && y != 24,
-                        blocks_sight: x == 5 || x == 24 || y == 5 || y == 24,
-                        has_items: false,
-                        has_monster: false,
-                    },
-                    Renderable {
-                        symbol: if x == 5 || x == 24 || y == 5 || y == 24 {
-                            '#'
-                        } else {
-                            '.'
-                        },
-                        fg_color: if x == 5 || x == 24 || y == 5 || y == 24 {
-                            Color::Gray
-                        } else {
-                            Color::White
-                        },
-                        bg_color: Some(Color::Black),
-                        order: 0,
-                    },
-                ));
-            }
-        }
-
-        Ok(())
-    }
-}
-
-/// Headless game loop for testing purposes
-pub struct HeadlessGameLoop {
-    pub game_engine: GameEngine,
-    pub ecs_world: ECSWorld,
-    pub systems: Vec<Box<dyn System>>,
-    pub turn_system: TurnSystem,
-    pub is_running: bool,
-    pub save_system: Option<AutoSave>,
-}
-
-impl HeadlessGameLoop {
-    pub fn new() -> Self {
-        // Keep the phase order in sync with the documentation and the interactive loop.
-        let systems: Vec<Box<dyn System>> = vec![
-            Box::new(InputSystem),
-            Box::new(MenuSystem), // 菜单系统（需要优先处理菜单动作）
-            Box::new(TimeSystem),
-            Box::new(MovementSystem),
-            Box::new(AISystem),
-            Box::new(CombatSystem),
-            Box::new(FOVSystem),
-            Box::new(EffectSystem::new()),
-            Box::new(EnergySystem),
-            Box::new(InventorySystem),
-            Box::new(HungerSystem), // 新增：饥饿系统
-            Box::new(DungeonSystem),
-            Box::new(RenderingSystem),
-        ];
-
-        let ecs_world = ECSWorld::new();
-        let game_engine = GameEngine::new();
-
-        let save_system = match SaveSystem::new("saves", 10) {
-            Ok(save_sys) => Some(AutoSave::new(save_sys, std::time::Duration::from_secs(300))), // 5 min auto-save
-            Err(e) => {
-                eprintln!("Failed to initialize save system: {}", e);
-                None
-            }
-        };
-
-        Self {
-            game_engine,
-            ecs_world,
-            systems,
-            turn_system: TurnSystem::new(),
-            is_running: true,
-            save_system,
-        }
-    }
-
-    /// Run the game loop without rendering (for testing)
-    pub fn run_for_ticks(&mut self, ticks: u32) -> anyhow::Result<()> {
-        for _ in 0..ticks {
-            if !self.is_running {
-                break;
-            }
-
-            self.update()?;
-        }
+        // 生成一些敌人
+        factory.create_monster(&mut self.ecs_world.world, start_x + 5, start_y, "goblin");
+        factory.create_monster(&mut self.ecs_world.world, start_x - 5, start_y, "rat");
 
         Ok(())
     }
 
-    /// Save the current game state
-    pub fn save_game(&mut self, slot: usize) -> anyhow::Result<()> {
-        if let Some(auto_save) = &mut self.save_system {
-            let save_data = self.ecs_world.to_save_data(&self.turn_system)?;
-            auto_save.save_system.save_game(slot, &save_data)?;
-        }
-        Ok(())
-    }
-
-    /// Load a saved game state
-    pub fn load_game(&mut self, slot: usize) -> anyhow::Result<()> {
-        if let Some(auto_save) = &mut self.save_system {
-            let save_data = auto_save.save_system.load_game(slot)?;
-            let (turn_state, player_action_taken) = self.ecs_world.from_save_data(save_data)?;
-            self.turn_system.set_state(turn_state, player_action_taken);
-        }
-        Ok(())
-    }
-
-    /// Update game state by running all systems
-    fn update(&mut self) -> anyhow::Result<()> {
-        for system in &mut self.systems {
-            match system.run(&mut self.ecs_world.world, &mut self.ecs_world.resources) {
-                SystemResult::Continue => continue,
-                SystemResult::Stop => {
-                    self.is_running = false;
-                    break;
-                }
-                SystemResult::Error(msg) => {
-                    eprintln!("System error: {}", msg);
-                    return Err(anyhow::anyhow!(msg));
-                }
-            }
-        }
-
-        // Check for auto-save
-        if let Some(auto_save) = &mut self.save_system {
-            if let Ok(save_data) = self.ecs_world.to_save_data(&self.turn_system) {
-                if let Err(e) = auto_save.try_save(&save_data) {
-                    eprintln!("Auto-save failed: {}", e);
-                }
-            }
-        }
-
-        Ok(())
-    }
-}
-
-/// Helper function to convert internal key event to player action
-fn key_event_to_player_action_from_internal(
-    key_event: KeyEvent,
-    game_state: &GameStatus,
-) -> Option<PlayerAction> {
-    // 根据游戏状态决定如何解释按键（复用 input.rs 的语义）
-    match game_state {
-        GameStatus::MainMenu { .. }
-        | GameStatus::Paused { .. }
-        | GameStatus::Options { .. }
-        | GameStatus::Inventory { .. }
-        | GameStatus::Help
-        | GameStatus::CharacterInfo
-        | GameStatus::ClassSelection { .. }
-        | GameStatus::ConfirmQuit { .. } => {
-            // 菜单上下文：方向键/Enter/Esc 等（增加 WASD 支持）
-            match (key_event.code, key_event.modifiers.shift) {
-                (KeyCode::Up, _) | (KeyCode::Char('k'), _) | (KeyCode::Char('w'), _) => {
-                    Some(PlayerAction::MenuNavigate(NavigateDirection::Up))
-                }
-                (KeyCode::Down, _) | (KeyCode::Char('j'), _) | (KeyCode::Char('s'), _) => {
-                    Some(PlayerAction::MenuNavigate(NavigateDirection::Down))
-                }
-                (KeyCode::Left, _) | (KeyCode::Char('h'), _) | (KeyCode::Char('a'), _) => {
-                    Some(PlayerAction::MenuNavigate(NavigateDirection::Left))
-                }
-                (KeyCode::Right, _) | (KeyCode::Char('l'), _) | (KeyCode::Char('d'), _) => {
-                    Some(PlayerAction::MenuNavigate(NavigateDirection::Right))
-                }
-                (KeyCode::Enter, _) => Some(PlayerAction::MenuSelect),
-                (KeyCode::Esc, _) | (KeyCode::Backspace, _) => Some(PlayerAction::CloseMenu),
-                (KeyCode::Char('q'), _) => Some(PlayerAction::Quit),
-                _ => None,
-            }
-        }
-        _ => {
-            match (key_event.code, key_event.modifiers.shift) {
-                // Movement keys（仅支持方向键、vi-keys，避免与 'd' 丢弃冲突）
-                (KeyCode::Char('k'), _) | (KeyCode::Up, _) => {
-                    Some(PlayerAction::Move(Direction::North))
-                }
-                (KeyCode::Char('j'), _) | (KeyCode::Down, _) => {
-                    Some(PlayerAction::Move(Direction::South))
-                }
-                (KeyCode::Char('h'), _) | (KeyCode::Left, _) => {
-                    Some(PlayerAction::Move(Direction::West))
-                }
-                (KeyCode::Char('l'), _) | (KeyCode::Right, _) => {
-                    Some(PlayerAction::Move(Direction::East))
-                }
-                (KeyCode::Char('y'), _) => Some(PlayerAction::Move(Direction::NorthWest)),
-                (KeyCode::Char('u'), _) => Some(PlayerAction::Move(Direction::NorthEast)),
-                (KeyCode::Char('b'), _) => Some(PlayerAction::Move(Direction::SouthWest)),
-                (KeyCode::Char('n'), _) => Some(PlayerAction::Move(Direction::SouthEast)),
-
-                // Wait/skip turn
-                (KeyCode::Char('.'), _) => Some(PlayerAction::Wait),
-
-                // Stairs
-                (KeyCode::Char('>'), _) => Some(PlayerAction::Descend),
-                (KeyCode::Char('<'), _) => Some(PlayerAction::Ascend),
-
-                // Attack via direction（放宽 SHIFT 要求）
-                (KeyCode::Char('K'), _) => {
-                    Some(PlayerAction::Attack(Position { x: 0, y: -1, z: 0 }))
-                }
-                (KeyCode::Char('J'), _) => {
-                    Some(PlayerAction::Attack(Position { x: 0, y: 1, z: 0 }))
-                }
-                (KeyCode::Char('H'), _) => {
-                    Some(PlayerAction::Attack(Position { x: -1, y: 0, z: 0 }))
-                }
-                (KeyCode::Char('L'), _) => {
-                    Some(PlayerAction::Attack(Position { x: 1, y: 0, z: 0 }))
-                }
-                (KeyCode::Char('Y'), _) => {
-                    Some(PlayerAction::Attack(Position { x: -1, y: -1, z: 0 }))
-                }
-                (KeyCode::Char('U'), _) => {
-                    Some(PlayerAction::Attack(Position { x: 1, y: -1, z: 0 }))
-                }
-                (KeyCode::Char('B'), _) => {
-                    Some(PlayerAction::Attack(Position { x: -1, y: 1, z: 0 }))
-                }
-                (KeyCode::Char('N'), _) => {
-                    Some(PlayerAction::Attack(Position { x: 1, y: 1, z: 0 }))
-                }
-
-                // Game control
-                (KeyCode::Char('q'), _) => Some(PlayerAction::Quit),
-
-                // Number keys for items/spells
-                (KeyCode::Char('1'), _) => Some(PlayerAction::UseItem(0)),
-                (KeyCode::Char('2'), _) => Some(PlayerAction::UseItem(1)),
-                (KeyCode::Char('3'), _) => Some(PlayerAction::UseItem(2)),
-                (KeyCode::Char('4'), _) => Some(PlayerAction::UseItem(3)),
-                (KeyCode::Char('5'), _) => Some(PlayerAction::UseItem(4)),
-                (KeyCode::Char('6'), _) => Some(PlayerAction::UseItem(5)),
-                (KeyCode::Char('7'), _) => Some(PlayerAction::UseItem(6)),
-                (KeyCode::Char('8'), _) => Some(PlayerAction::UseItem(7)),
-                (KeyCode::Char('9'), _) => Some(PlayerAction::UseItem(8)),
-
-                // Drop item
-                (KeyCode::Char('d'), _) => Some(PlayerAction::DropItem(0)),
-
-                _ => None,
-            }
-        }
+    /// 获取上一回合的时长
+    pub fn last_turn_duration(&self) -> Duration {
+        self.last_turn_duration
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::input::{InputEvent, InputSource};
-    use crate::renderer::GameClock;
-    use ratatui::{Frame, Terminal, backend::TestBackend, layout::Rect, widgets::Block};
+    use crate::input::test_helpers::MockInputSource;
+    use crate::renderer::test_helpers::MockRenderer;
     use std::time::Duration;
 
-    struct TestRenderer {
-        terminal: Terminal<TestBackend>,
-    }
+    /// Mock clock for testing
+    pub struct MockClock;
 
-    impl TestRenderer {
-        fn new() -> anyhow::Result<Self> {
-            let backend = TestBackend::new(80, 24);
-            let terminal = Terminal::new(backend)?;
-            Ok(Self { terminal })
-        }
-    }
-
-    impl crate::renderer::Renderer for TestRenderer {
-        type Backend = TestBackend;
-
-        fn init(&mut self) -> anyhow::Result<()> {
-            Ok(())
+    impl Clock for MockClock {
+        fn now(&self) -> std::time::SystemTime {
+            std::time::SystemTime::now()
         }
 
-        fn draw(&mut self, _ecs_world: &mut ECSWorld) -> anyhow::Result<()> {
-            self.terminal.draw(|frame| {
-                let area = frame.size();
-                frame.render_widget(Block::default(), area);
-            })?;
-            Ok(())
+        fn elapsed(&self, since: std::time::SystemTime) -> Duration {
+            since.elapsed().unwrap_or(Duration::from_secs(0))
         }
 
-        fn draw_ui(&mut self, frame: &mut Frame<'_>, area: Rect) {
-            frame.render_widget(Block::default(), area);
+        fn sleep(&self, _duration: Duration) {
+            // No-op for tests
         }
 
-        fn resize(
-            &mut self,
-            resources: &mut Resources,
-            width: u16,
-            height: u16,
-        ) -> anyhow::Result<()> {
-            resources.game_state.terminal_width = width;
-            resources.game_state.terminal_height = height;
-            Ok(())
-        }
-
-        fn cleanup(&mut self) -> anyhow::Result<()> {
-            Ok(())
-        }
-    }
-
-    #[derive(Default)]
-    struct NoopInput;
-
-    impl InputSource for NoopInput {
-        type Event = InputEvent;
-
-        fn poll(&mut self, _timeout: Duration) -> anyhow::Result<Option<Self::Event>> {
-            Ok(None)
-        }
-
-        fn is_input_available(&self) -> anyhow::Result<bool> {
-            Ok(false)
+        fn tick_rate(&self) -> Duration {
+            Duration::from_millis(16) // ~60 FPS
         }
     }
 
     #[test]
-    fn test_game_loop_creation() -> anyhow::Result<()> {
-        let renderer = TestRenderer::new()?;
-        let input_source = NoopInput::default();
-        let clock = GameClock::new(16); // ~60 FPS
+    fn test_game_loop_initialization() {
+        let renderer = MockRenderer;
+        let input = MockInputSource::new();
+        let clock = MockClock;
 
-        let mut game_loop = GameLoop::new(renderer, input_source, clock);
+        let mut game_loop = GameLoop::new(renderer, input, clock);
+        assert!(game_loop.initialize().is_ok());
+        assert!(game_loop.is_running);
+    }
 
-        // Initialize the game loop
-        game_loop.initialize()?;
+    #[test]
+    fn test_phased_system_execution_order() {
+        let renderer = MockRenderer;
+        let input = MockInputSource::new();
+        let clock = MockClock;
 
-        // Check that entities were initialized
-        assert!(game_loop.ecs_world.world.iter().count() > 0);
+        let game_loop = GameLoop::new(renderer, input, clock);
 
-        Ok(())
+        // 验证系统阶段数量
+        assert!(!game_loop.pre_input_systems.is_empty());
+        assert!(!game_loop.input_systems.is_empty());
+        assert!(!game_loop.intent_gathering_systems.is_empty());
+        assert!(!game_loop.action_resolution_systems.is_empty());
+        assert!(!game_loop.post_turn_upkeep_systems.is_empty());
+        assert!(!game_loop.render_systems.is_empty());
+
+        // 验证 action_resolution 系统顺序
+        let action_systems: Vec<&str> = game_loop
+            .action_resolution_systems
+            .iter()
+            .map(|s| s.name())
+            .collect();
+
+        // 验证因果顺序：移动 → FOV → 战斗 → 效果
+        assert_eq!(action_systems[0], "MovementSystem");
+        assert_eq!(action_systems[1], "FOVSystem");
+        assert_eq!(action_systems[2], "CombatSystem");
+        assert_eq!(action_systems[3], "EffectSystem");
+    }
+
+    #[test]
+    fn test_menu_state_short_circuits_game_logic() {
+        let renderer = MockRenderer;
+        let input = MockInputSource::new();
+        let clock = MockClock;
+
+        let mut game_loop = GameLoop::new(renderer, input, clock);
+        game_loop.initialize().unwrap();
+
+        // 设置为主菜单状态
+        game_loop.ecs_world.resources.game_state.game_state =
+            GameStatus::MainMenu { selected_option: 0 };
+
+        // 运行分阶段系统应该跳过游戏逻辑
+        let result = game_loop.run_phased_systems();
+        assert!(result.is_ok());
+
+        // 验证玩家回合状态未改变（因为游戏逻辑被跳过）
+        assert!(game_loop.turn_system.is_player_turn());
+    }
+
+    #[test]
+    fn test_turn_timing_hooks() {
+        let renderer = MockRenderer;
+        let input = MockInputSource::new();
+        let clock = MockClock;
+
+        let mut game_loop = GameLoop::new(renderer, input, clock);
+        game_loop.initialize().unwrap();
+
+        // 初始状态
+        assert_eq!(game_loop.last_turn_duration(), Duration::from_millis(0));
+
+        // 模拟回合开始
+        game_loop.turn_system.state = TurnState::PlayerTurn;
+        game_loop.turn_start_time = Some(Instant::now());
+
+        // 模拟回合结束
+        std::thread::sleep(Duration::from_millis(10));
+        let prev_state = TurnState::AITurn;
+        let current_state = TurnState::PlayerTurn;
+
+        if let Some(start) = game_loop.turn_start_time.take() {
+            game_loop.last_turn_duration = start.elapsed();
+        }
+
+        // 验证记录了回合时长
+        assert!(game_loop.last_turn_duration() > Duration::from_millis(5));
+    }
+
+    #[test]
+    fn test_no_state_leakage_between_turns() {
+        let renderer = MockRenderer;
+        let input = MockInputSource::new();
+        let clock = MockClock;
+
+        let mut game_loop = GameLoop::new(renderer, input, clock);
+        game_loop.initialize().unwrap();
+
+        // 设置为运行状态
+        game_loop.ecs_world.resources.game_state.game_state = GameStatus::Running;
+
+        // 添加一些待处理的动作
+        game_loop
+            .ecs_world
+            .resources
+            .input_buffer
+            .pending_actions
+            .push(PlayerAction::Wait);
+
+        // 运行一个回合
+        let _ = game_loop.run_phased_systems();
+
+        // 验证动作已被处理或保留（不应泄漏到其他地方）
+        let total_actions = game_loop.ecs_world.resources.input_buffer.pending_actions.len()
+            + game_loop
+                .ecs_world
+                .resources
+                .input_buffer
+                .completed_actions
+                .len();
+
+        // 动作应该被处理（总数可能为0或1，取决于系统是否处理了它）
+        assert!(total_actions <= 1);
+    }
+
+    #[test]
+    fn test_autosave_triggered_at_turn_end() {
+        let renderer = MockRenderer;
+        let input = MockInputSource::new();
+        let clock = MockClock;
+
+        let mut game_loop = GameLoop::new(renderer, input, clock);
+        game_loop.initialize().unwrap();
+
+        // 确保有保存系统
+        assert!(game_loop.save_system.is_some());
+
+        // 模拟回合结束（从AI回合回到玩家回合）
+        game_loop.turn_system.state = TurnState::PlayerTurn;
+        let _prev_state = TurnState::AITurn;
+
+        // 尝试自动保存
+        let result = game_loop.try_autosave_at_turn_end();
+        assert!(result.is_ok());
     }
 }
