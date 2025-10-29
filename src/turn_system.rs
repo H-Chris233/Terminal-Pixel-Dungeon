@@ -24,15 +24,34 @@ pub mod energy_costs {
     /// No energy cost (for actions like quit, menu navigation)
     pub const FREE: u32 = 0;
     
+    // Environment interaction costs
+    /// Cost to use stairs (ascend or descend)
+    pub const STAIR_USE: u32 = FULL_ACTION;
+    /// Cost to open a door
+    pub const DOOR_OPEN: u32 = FULL_ACTION;
+    /// Cost to disarm a trap (when implemented)
+    pub const TRAP_DISARM: u32 = FULL_ACTION;
+    
+    // Terrain-based movement costs
+    /// Normal floor movement cost
+    pub const TERRAIN_FLOOR: u32 = FULL_ACTION;
+    /// Water terrain movement cost (slower)
+    pub const TERRAIN_WATER: u32 = 150;
+    /// Grass terrain movement cost (slightly slower)
+    pub const TERRAIN_GRASS: u32 = 110;
+    /// Special terrain movement cost
+    pub const TERRAIN_SPECIAL: u32 = FULL_ACTION;
+    
     /// Get the energy cost for a player action
     pub fn player_action_cost(action: &PlayerAction) -> u32 {
         match action {
             PlayerAction::Move(_)
             | PlayerAction::Attack(_)
             | PlayerAction::UseItem(_)
-            | PlayerAction::DropItem(_)
-            | PlayerAction::Descend
-            | PlayerAction::Ascend => FULL_ACTION,
+            | PlayerAction::DropItem(_) => FULL_ACTION,
+            
+            // Environment interactions have explicit costs
+            PlayerAction::Descend | PlayerAction::Ascend => STAIR_USE,
             
             PlayerAction::Wait => WAIT,
             
@@ -57,6 +76,16 @@ pub mod energy_costs {
             AIIntent::Wait => WAIT,
             AIIntent::Flee => FULL_ACTION,
             AIIntent::UseSkill => FULL_ACTION,
+        }
+    }
+    
+    /// Get terrain-based movement cost modifier
+    pub fn terrain_movement_cost(terrain_type: &TerrainType) -> u32 {
+        match terrain_type {
+            TerrainType::Floor => TERRAIN_FLOOR,
+            TerrainType::Water => TERRAIN_WATER,
+            TerrainType::StairsUp | TerrainType::StairsDown => TERRAIN_FLOOR,
+            _ => TERRAIN_FLOOR, // Default to normal cost
         }
     }
 }
