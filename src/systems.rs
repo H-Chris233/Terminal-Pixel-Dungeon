@@ -1,8 +1,8 @@
 use crate::ecs::{
-    AI, AIType, Actor, Color, ConsumableEffect, Direction, ECSItem, ECSWorld, Energy, Faction,
-    GameOverReason, GameStatus, Hunger, Inventory, ItemSlot, ItemType, NavigateDirection, Player,
-    PlayerAction, PlayerProgress, Position, Renderable, Resources, StatType, Stats, TerrainType,
-    Tile, Viewshed, Wealth,
+    AI, AIState, AIType, Actor, Color, ConsumableEffect, Direction, ECSItem, ECSWorld, EffectType,
+    Energy, Faction, GameOverReason, GameStatus, Hunger, Inventory, ItemSlot, ItemType,
+    NavigateDirection, Player, PlayerAction, PlayerProgress, Position, Renderable, Resources,
+    StatType, Stats, StatusEffects, TerrainType, Tile, Viewshed, Wealth,
 };
 use crate::event_bus::LogLevel;
 use hecs::{Entity, World};
@@ -182,9 +182,14 @@ fn find_player_entity(world: &World) -> Option<Entity> {
         .map(|(entity, _)| entity)
 }
 
-/// Applies AI decision making each frame. Any movement or attack performed
-/// here must spend energy inside `TurnSystem::process_ai_turns` (default 100 per
-/// step).
+/// AI System with split intent generation and execution phases.
+///
+/// This system integrates with the energy-driven turn system to:
+/// 1. Generate intents when AI actors have sufficient energy
+/// 2. Execute actions through a shared action queue
+/// 3. Implement energy-aware waiting (patrol, flee, etc.)
+/// 4. Read fresh world state snapshots for decision making
+/// 5. Emit decision and target-change events via event bus
 pub struct AISystem;
 
 impl System for AISystem {
@@ -192,89 +197,527 @@ impl System for AISystem {
         "AISystem"
     }
 
-    fn run(&mut self, world: &mut World, _resources: &mut Resources) -> SystemResult {
-        // 收集需要处理的 AI 实体信息（只克隆最小必要的数据）
-        let ai_actions: Vec<(Entity, AIType, Position)> = world
-            .query::<(&AI, &Position)>()
+    fn run(&mut self, world: &mut World, resources: &mut Resources) -> SystemResult {
+        // This system is now a placeholder - actual AI processing is done
+        // through run_with_events during AI turn phase
+        SystemResult::Continue
+    }
+}
+
+/// AI intent with detailed context for execution
+#[derive(Debug, Clone)]
+pub struct AIActionIntent {
+    pub entity: Entity,
+    pub intent_type: AIIntentType,
+    pub target_entity: Option<Entity>,
+    pub target_position: Option<Position>,
+    pub reason: String, // For debugging and logging
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum AIIntentType {
+    Move(Direction),
+    Attack(Entity),
+    Wait,
+    Flee(Direction),
+    Patrol(Position),
+    UseSkill,
+}
+
+impl AISystem {
+    /// Run AI system with event bus integration.
+    /// This is called during the AI turn phase to generate and execute intents.
+    pub fn run_with_events(world: &mut ECSWorld) -> SystemResult {
+        use crate::event_bus::{GameEvent, LogLevel};
+        use crate::turn_system::energy_costs;
+
+        // Collect AI entities with sufficient energy
+        let ai_entities: Vec<(Entity, AIType, AIState, Position, u32)> = world
+            .world
+            .query::<(&AI, &Position, &Energy)>()
             .iter()
             .filter(|(entity, _)| {
-                // 过滤掉玩家实体
-                world.get::<&Player>(*entity).is_err()
+                // Filter out player entities
+                world.world.get::<&Player>(*entity).is_err()
             })
-            .map(|(entity, (ai, pos))| {
-                // 只克隆 AI 类型和位置，不克隆整个 AI 结构
-                (entity, ai.ai_type.clone(), pos.clone())
+            .filter(|(_, (_, _, energy))| {
+                // Only process AI with enough energy for an action
+                energy.current >= energy_costs::FULL_ACTION
+            })
+            .map(|(entity, (ai, pos, energy))| {
+                (
+                    entity,
+                    ai.ai_type.clone(),
+                    ai.state.clone(),
+                    pos.clone(),
+                    energy.current,
+                )
             })
             .collect();
 
-        // 找到所有玩家的位置（缓存查询结果）
-        let player_positions: Vec<(Entity, Position)> = world
+        // Get fresh world state snapshot
+        let player_positions: Vec<(Entity, Position, Option<u32>)> = world
+            .world
             .query::<(&Position, &Player)>()
             .iter()
-            .map(|(entity, (pos, _))| (entity, pos.clone()))
+            .map(|(entity, (pos, _))| {
+                let hp = world
+                    .world
+                    .get::<&Stats>(entity)
+                    .map(|s| s.hp)
+                    .ok();
+                (entity, pos.clone(), hp)
+            })
             .collect();
 
-        // 处理每个 AI 实体的行为
-        for (entity, ai_type, pos) in ai_actions {
-            match ai_type {
-                AIType::Aggressive => {
-                    // 获取 AI 范围（不需要克隆整个 AI 对象）
-                    let ai_range = match world.get::<&AI>(entity) {
-                        Ok(ai) => ai.range() as f32,
-                        Err(_) => continue,
-                    };
+        // Generate intents for each AI entity
+        for (ai_entity, ai_type, ai_state, ai_pos, _energy) in ai_entities {
+            // Generate intent based on AI type and current state
+            let intent = Self::generate_intent(
+                &world.world,
+                ai_entity,
+                &ai_type,
+                &ai_state,
+                &ai_pos,
+                &player_positions,
+            );
 
-                    // 查找最近的玩家
-                    let mut closest_player = None;
-                    for (player_entity, player_pos) in &player_positions {
-                        let distance = pos.distance_to(player_pos);
-                        if distance <= ai_range {
-                            let update = closest_player.map_or(true, |(_, d)| distance < d);
-                            if update {
-                                closest_player = Some((*player_entity, distance));
-                            }
-                        }
-                    }
+            if let Some(action_intent) = intent {
+                // Emit decision event
+                world.publish_event(GameEvent::AIDecisionMade {
+                    entity: ai_entity.id(),
+                    decision: action_intent.reason.clone(),
+                });
 
-                    // 如果找到玩家，向其移动
-                    if let Some((player_entity, _)) = closest_player {
-                        if let Some(player_pos) = player_positions
-                            .iter()
-                            .find(|(e, _)| *e == player_entity)
-                            .map(|(_, p)| p)
-                        {
-                            let dx = (player_pos.x - pos.x).signum();
-                            let dy = (player_pos.y - pos.y).signum();
-                            let _ = Self::attempt_move_to(world, entity, pos.x + dx, pos.y + dy);
-                        }
-                    }
-                }
-                AIType::Passive | AIType::Neutral => {
-                    // 被动或中立 AI 暂时不做任何事
-                }
-                AIType::Patrol { .. } => {
-                    // 巡逻 AI 的实现（暂时留空）
-                }
+                // Update AI state and target if changed
+                Self::update_ai_state(
+                    &mut world.world,
+                    ai_entity,
+                    &action_intent,
+                    &mut world.event_bus,
+                );
+
+                // Execute the intent
+                Self::execute_intent(&mut world.world, &action_intent, &mut world.event_bus);
             }
         }
 
         SystemResult::Continue
     }
-}
 
-impl AISystem {
-    fn attempt_move_to(
-        world: &mut World,
-        entity: Entity,
-        new_x: i32,
-        new_y: i32,
-    ) -> Result<(), Box<dyn Error>> {
-        if let Ok(mut pos) = world.get::<&mut Position>(entity) {
-            pos.x = new_x;
-            pos.y = new_y;
-            Ok(())
+    /// Generate an intent for an AI entity based on current world state
+    fn generate_intent(
+        world: &World,
+        ai_entity: Entity,
+        ai_type: &AIType,
+        ai_state: &AIState,
+        ai_pos: &Position,
+        player_positions: &[(Entity, Position, Option<u32>)],
+    ) -> Option<AIActionIntent> {
+        match ai_type {
+            AIType::Aggressive => {
+                Self::generate_aggressive_intent(world, ai_entity, ai_pos, player_positions)
+            }
+            AIType::Passive => {
+                // Passive AI just waits
+                Some(AIActionIntent {
+                    entity: ai_entity,
+                    intent_type: AIIntentType::Wait,
+                    target_entity: None,
+                    target_position: None,
+                    reason: "Passive AI waiting".to_string(),
+                })
+            }
+            AIType::Neutral => {
+                Self::generate_neutral_intent(world, ai_entity, ai_pos, player_positions)
+            }
+            AIType::Patrol { path } => {
+                Self::generate_patrol_intent(world, ai_entity, ai_state, ai_pos, path)
+            }
+        }
+    }
+
+    /// Generate intent for aggressive AI
+    fn generate_aggressive_intent(
+        world: &World,
+        ai_entity: Entity,
+        ai_pos: &Position,
+        player_positions: &[(Entity, Position, Option<u32>)],
+    ) -> Option<AIActionIntent> {
+        let ai_range = world
+            .get::<&AI>(ai_entity)
+            .map(|ai| ai.range() as f32)
+            .unwrap_or(10.0);
+
+        // Check for status effects that impair AI
+        let is_impaired = world
+            .get::<&StatusEffects>(ai_entity)
+            .map(|effects| {
+                effects.has_effect(EffectType::Paralysis)
+                    || effects.has_effect(EffectType::Frost)
+                    || effects.has_effect(EffectType::Rooted)
+            })
+            .unwrap_or(false);
+
+        if is_impaired {
+            return Some(AIActionIntent {
+                entity: ai_entity,
+                intent_type: AIIntentType::Wait,
+                target_entity: None,
+                target_position: None,
+                reason: "Impaired by status effect".to_string(),
+            });
+        }
+
+        // Find closest player
+        let mut closest_player: Option<(Entity, Position, f32)> = None;
+        for (player_entity, player_pos, player_hp) in player_positions {
+            // Skip dead players
+            if player_hp.map_or(true, |hp| hp == 0) {
+                continue;
+            }
+
+            let distance = ai_pos.distance_to(player_pos);
+            if distance <= ai_range {
+                let should_update = closest_player.as_ref().map_or(true, |(_, _, d)| distance < *d);
+                if should_update {
+                    closest_player = Some((*player_entity, player_pos.clone(), distance));
+                }
+            }
+        }
+
+        if let Some((target_entity, target_pos, distance)) = closest_player {
+            // Check if adjacent (can attack)
+            if distance <= 1.5 {
+                // sqrt(2) ≈ 1.414 for diagonal
+                return Some(AIActionIntent {
+                    entity: ai_entity,
+                    intent_type: AIIntentType::Attack(target_entity),
+                    target_entity: Some(target_entity),
+                    target_position: Some(target_pos),
+                    reason: format!("Attacking target at distance {:.1}", distance),
+                });
+            }
+
+            // Otherwise, move towards target
+            let dx = (target_pos.x - ai_pos.x).signum();
+            let dy = (target_pos.y - ai_pos.y).signum();
+            let direction = Self::signum_to_direction(dx, dy);
+
+            Some(AIActionIntent {
+                entity: ai_entity,
+                intent_type: AIIntentType::Move(direction),
+                target_entity: Some(target_entity),
+                target_position: Some(target_pos),
+                reason: format!("Chasing target at distance {:.1}", distance),
+            })
         } else {
-            Err("missing position".into())
+            // No target in range, wait
+            Some(AIActionIntent {
+                entity: ai_entity,
+                intent_type: AIIntentType::Wait,
+                target_entity: None,
+                target_position: None,
+                reason: "No target in range".to_string(),
+            })
+        }
+    }
+
+    /// Generate intent for neutral AI (reacts when attacked)
+    fn generate_neutral_intent(
+        world: &World,
+        ai_entity: Entity,
+        ai_pos: &Position,
+        player_positions: &[(Entity, Position, Option<u32>)],
+    ) -> Option<AIActionIntent> {
+        // Check if AI has a target (has been attacked)
+        let has_target = world
+            .get::<&AI>(ai_entity)
+            .ok()
+            .and_then(|ai| ai.target)
+            .is_some();
+
+        if has_target {
+            // If provoked, act like aggressive
+            Self::generate_aggressive_intent(world, ai_entity, ai_pos, player_positions)
+        } else {
+            // Otherwise wait
+            Some(AIActionIntent {
+                entity: ai_entity,
+                intent_type: AIIntentType::Wait,
+                target_entity: None,
+                target_position: None,
+                reason: "Neutral AI waiting".to_string(),
+            })
+        }
+    }
+
+    /// Generate intent for patrol AI
+    fn generate_patrol_intent(
+        world: &World,
+        ai_entity: Entity,
+        ai_state: &AIState,
+        ai_pos: &Position,
+        patrol_path: &[Position],
+    ) -> Option<AIActionIntent> {
+        if patrol_path.is_empty() {
+            return Some(AIActionIntent {
+                entity: ai_entity,
+                intent_type: AIIntentType::Wait,
+                target_entity: None,
+                target_position: None,
+                reason: "Empty patrol path".to_string(),
+            });
+        }
+
+        // Find next patrol point
+        let next_point = patrol_path
+            .iter()
+            .min_by_key(|p| {
+                let dx = (p.x - ai_pos.x).abs();
+                let dy = (p.y - ai_pos.y).abs();
+                dx + dy
+            })
+            .cloned();
+
+        if let Some(target_pos) = next_point {
+            if ai_pos.x == target_pos.x && ai_pos.y == target_pos.y {
+                // At patrol point, wait
+                return Some(AIActionIntent {
+                    entity: ai_entity,
+                    intent_type: AIIntentType::Wait,
+                    target_entity: None,
+                    target_position: Some(target_pos),
+                    reason: "At patrol point".to_string(),
+                });
+            }
+
+            // Move towards patrol point
+            let dx = (target_pos.x - ai_pos.x).signum();
+            let dy = (target_pos.y - ai_pos.y).signum();
+            let direction = Self::signum_to_direction(dx, dy);
+
+            Some(AIActionIntent {
+                entity: ai_entity,
+                intent_type: AIIntentType::Patrol(target_pos.clone()),
+                target_entity: None,
+                target_position: Some(target_pos.clone()),
+                reason: format!("Patrolling to ({}, {})", target_pos.x, target_pos.y),
+            })
+        } else {
+            Some(AIActionIntent {
+                entity: ai_entity,
+                intent_type: AIIntentType::Wait,
+                target_entity: None,
+                target_position: None,
+                reason: "No patrol point found".to_string(),
+            })
+        }
+    }
+
+    /// Update AI state and target based on intent
+    fn update_ai_state(
+        world: &mut World,
+        ai_entity: Entity,
+        intent: &AIActionIntent,
+        event_bus: &mut crate::event_bus::EventBus,
+    ) {
+        if let Ok(mut ai) = world.get::<&mut AI>(ai_entity) {
+            let old_state = ai.state.clone();
+            let old_target = ai.target;
+
+            // Update state based on intent
+            match &intent.intent_type {
+                AIIntentType::Attack(_) => ai.state = AIState::Attacking,
+                AIIntentType::Move(_) => {
+                    if matches!(ai.ai_type, AIType::Aggressive) {
+                        ai.state = AIState::Chasing;
+                    }
+                }
+                AIIntentType::Flee(_) => ai.state = AIState::Fleeing,
+                AIIntentType::Patrol(_) => ai.state = AIState::Patrolling,
+                AIIntentType::Wait => {
+                    if !matches!(ai.state, AIState::Patrolling) {
+                        ai.state = AIState::Idle;
+                    }
+                }
+                _ => {}
+            }
+
+            // Update target
+            let new_target = intent.target_entity;
+            if old_target != new_target {
+                ai.target = new_target;
+                event_bus.publish(crate::event_bus::GameEvent::AITargetChanged {
+                    entity: ai_entity.id(),
+                    old_target: old_target.map(|e| e.id()),
+                    new_target: new_target.map(|e| e.id()),
+                });
+            }
+        }
+    }
+
+    /// Execute an AI intent
+    fn execute_intent(
+        world: &mut World,
+        intent: &AIActionIntent,
+        event_bus: &mut crate::event_bus::EventBus,
+    ) {
+        use crate::turn_system::energy_costs;
+
+        match &intent.intent_type {
+            AIIntentType::Move(_) | AIIntentType::Patrol(_) => {
+                let direction = match &intent.intent_type {
+                    AIIntentType::Move(d) => *d,
+                    AIIntentType::Patrol(target_pos) => {
+                        // Calculate direction to patrol point
+                        if let Ok(current_pos) = world.get::<&Position>(intent.entity) {
+                            let dx = (target_pos.x - current_pos.x).signum();
+                            let dy = (target_pos.y - current_pos.y).signum();
+                            Self::signum_to_direction(dx, dy)
+                        } else {
+                            Direction::North // fallback
+                        }
+                    }
+                    _ => Direction::North,
+                };
+
+                // Get current position and calculate new position
+                let (old_pos, new_pos) = {
+                    if let Ok(current_pos) = world.get::<&Position>(intent.entity) {
+                        let (dx, dy) = Self::direction_to_offset(direction);
+                        let old = Position::new(current_pos.x, current_pos.y, current_pos.z);
+                        let new = Position::new(
+                            current_pos.x + dx,
+                            current_pos.y + dy,
+                            current_pos.z,
+                        );
+                        (Some(old), Some(new))
+                    } else {
+                        (None, None)
+                    }
+                };
+
+                if let (Some(old_pos), Some(new_pos)) = (old_pos, new_pos) {
+                    // Check if move is valid
+                    if Self::can_move_to(world, &new_pos) {
+                        if let Ok(mut pos) = world.get::<&mut Position>(intent.entity) {
+                            *pos = new_pos.clone();
+
+                            // Emit movement event
+                            event_bus.publish(crate::event_bus::GameEvent::EntityMoved {
+                                entity: intent.entity.id(),
+                                from_x: old_pos.x,
+                                from_y: old_pos.y,
+                                to_x: new_pos.x,
+                                to_y: new_pos.y,
+                            });
+                        }
+                    }
+
+                    // Consume energy
+                    if let Ok(mut energy) = world.get::<&mut Energy>(intent.entity) {
+                        energy.current = energy.current.saturating_sub(energy_costs::FULL_ACTION);
+                    }
+                }
+            }
+            AIIntentType::Attack(target_entity) => {
+                // Attack is handled by CombatSystem, but we mark intent
+                // For now, just consume energy and log
+                if let Ok(mut energy) = world.get::<&mut Energy>(intent.entity) {
+                    energy.current = energy.current.saturating_sub(energy_costs::FULL_ACTION);
+                }
+
+                event_bus.publish(crate::event_bus::GameEvent::LogMessage {
+                    message: format!("AI entity {} attacks", intent.entity.id()),
+                    level: crate::event_bus::LogLevel::Info,
+                });
+            }
+            AIIntentType::Wait => {
+                // Wait action consumes less energy
+                if let Ok(mut energy) = world.get::<&mut Energy>(intent.entity) {
+                    energy.current = energy.current.saturating_sub(energy_costs::WAIT);
+                }
+            }
+            AIIntentType::Flee(direction) => {
+                // Similar to move but in opposite direction
+                let new_pos = {
+                    if let Ok(current_pos) = world.get::<&Position>(intent.entity) {
+                        let (dx, dy) = Self::direction_to_offset(*direction);
+                        Some(Position::new(
+                            current_pos.x + dx,
+                            current_pos.y + dy,
+                            current_pos.z,
+                        ))
+                    } else {
+                        None
+                    }
+                };
+
+                if let Some(new_pos) = new_pos {
+                    if Self::can_move_to(world, &new_pos) {
+                        if let Ok(mut pos) = world.get::<&mut Position>(intent.entity) {
+                            *pos = new_pos;
+                        }
+                    }
+
+                    // Consume energy
+                    if let Ok(mut energy) = world.get::<&mut Energy>(intent.entity) {
+                        energy.current = energy.current.saturating_sub(energy_costs::FULL_ACTION);
+                    }
+                }
+            }
+            AIIntentType::UseSkill => {
+                // Placeholder for future skill implementation
+                if let Ok(mut energy) = world.get::<&mut Energy>(intent.entity) {
+                    energy.current = energy.current.saturating_sub(energy_costs::FULL_ACTION);
+                }
+            }
+        }
+    }
+
+    /// Check if an entity can move to the target position
+    fn can_move_to(world: &World, target_pos: &Position) -> bool {
+        let mut passable = false;
+        for (_, (pos, tile)) in world.query::<(&Position, &Tile)>().iter() {
+            if pos.x == target_pos.x && pos.y == target_pos.y && pos.z == target_pos.z {
+                if tile.is_passable {
+                    passable = true;
+                } else {
+                    return false;
+                }
+                break;
+            }
+        }
+        passable
+    }
+
+    /// Convert direction signum to Direction enum
+    fn signum_to_direction(dx: i32, dy: i32) -> Direction {
+        match (dx, dy) {
+            (0, -1) => Direction::North,
+            (0, 1) => Direction::South,
+            (1, 0) => Direction::East,
+            (-1, 0) => Direction::West,
+            (1, -1) => Direction::NorthEast,
+            (-1, -1) => Direction::NorthWest,
+            (1, 1) => Direction::SouthEast,
+            (-1, 1) => Direction::SouthWest,
+            _ => Direction::North, // Default fallback
+        }
+    }
+
+    /// Convert Direction to offset
+    fn direction_to_offset(direction: Direction) -> (i32, i32) {
+        match direction {
+            Direction::North => (0, -1),
+            Direction::South => (0, 1),
+            Direction::East => (1, 0),
+            Direction::West => (-1, 0),
+            Direction::NorthEast => (1, -1),
+            Direction::NorthWest => (-1, -1),
+            Direction::SouthEast => (1, 1),
+            Direction::SouthWest => (-1, 1),
         }
     }
 }

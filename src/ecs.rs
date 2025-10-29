@@ -582,7 +582,7 @@ pub enum NavigateDirection {
     PageDown,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Direction {
     North,
     South,

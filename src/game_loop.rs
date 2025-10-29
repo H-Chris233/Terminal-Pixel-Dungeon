@@ -518,6 +518,21 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                     }
                 }
 
+                // 特殊处理 AISystem，使用事件版本（在AI回合中）
+                if system.name() == "AISystem" {
+                    match AISystem::run_with_events(&mut self.ecs_world) {
+                        SystemResult::Continue => continue,
+                        SystemResult::Stop => {
+                            self.is_running = false;
+                            return Ok(());
+                        }
+                        SystemResult::Error(msg) => {
+                            eprintln!("System error: {}", msg);
+                            return Err(anyhow::anyhow!(msg));
+                        }
+                    }
+                }
+
                 match system.run(&mut self.ecs_world.world, &mut self.ecs_world.resources) {
                     SystemResult::Continue => continue,
                     SystemResult::Stop => {

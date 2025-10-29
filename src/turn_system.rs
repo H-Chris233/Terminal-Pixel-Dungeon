@@ -326,9 +326,9 @@ impl TurnSystem {
 
     /// Process AI turns until the player's energy is full again.
     ///
-    /// AI controllers are expected to consume energy in 100-point chunks; if
-    /// you introduce actors with different step costs, update this loop and the
-    /// documentation table accordingly.
+    /// This method now primarily checks whether the player has enough energy
+    /// to act again. The actual AI decision-making and energy consumption is
+    /// handled by AISystem::run_with_events called from the game loop.
     pub fn process_ai_turns(
         &mut self,
         world: &mut World,
@@ -337,44 +337,30 @@ impl TurnSystem {
         // Set phase to IntentQueue
         self.meta.set_phase(TurnPhase::IntentQueue);
         
-        // Continue processing AI actions until player energy is refilled or no AI can act
-        loop {
-            // If player has full energy, stop AI processing
-            if let Some(player_entity) = find_player(world) {
-                if let Ok(energy) = world.get::<&Energy>(player_entity) {
-                    if energy.current >= energy.max {
-                        break;
-                    }
-                }
-            } else {
-                break; // no player
-            }
-
-            // Collect AI entities that can act this iteration
-            let ai_entities_with_energy: Vec<Entity> = world
-                .query::<(&AI, &Energy, &Actor)>()
-                .iter()
-                .filter(|(_, (_, energy, _))| energy.current >= energy_costs::FULL_ACTION)
-                .map(|(entity, _)| entity)
-                .collect();
-
-            if ai_entities_with_energy.is_empty() {
-                break;
-            }
-
-            // Each AI takes one action
-            for ai_entity in ai_entities_with_energy {
-                if let Ok(mut energy) = world.get::<&mut Energy>(ai_entity) {
-                    energy.current = energy.current.saturating_sub(energy_costs::FULL_ACTION);
-                    self.meta.set_last_actor(ai_entity);
-                    self.meta.advance_sub_turn();
+        // Check if player has full energy - if so, end AI turn
+        if let Some(player_entity) = find_player(world) {
+            if let Ok(energy) = world.get::<&Energy>(player_entity) {
+                if energy.current >= energy.max {
+                    // Player ready to act again
+                    self.state = TurnState::PlayerTurn;
+                    self.meta.legacy_state = TurnState::PlayerTurn;
+                    return Ok(());
                 }
             }
         }
+        
+        // Check if any AI can still act
+        let has_ai_with_energy = world
+            .query::<(&AI, &Energy, &Actor)>()
+            .iter()
+            .any(|(_, (_, energy, _))| energy.current >= energy_costs::FULL_ACTION);
+        
+        if !has_ai_with_energy {
+            // No AI can act, continue to aftermath phase
+            self.state = TurnState::PlayerTurn;
+            self.meta.legacy_state = TurnState::PlayerTurn;
+        }
 
-        // After AI finishes, switch back to player turn
-        self.state = TurnState::PlayerTurn;
-        self.meta.legacy_state = TurnState::PlayerTurn;
         Ok(())
     }
 
@@ -745,8 +731,11 @@ mod tests {
         let player_energy = world.get::<&Energy>(player).unwrap();
         assert_eq!(player_energy.current, 60); // 50 after wait + 10 regen
         
+        // Note: Enemy energy consumption is now handled by AISystem::run_with_events
+        // In this unit test we're testing the turn system in isolation, so enemy
+        // energy is not consumed. It only regenerates.
         let enemy_energy = world.get::<&Energy>(enemy).unwrap();
-        assert_eq!(enemy_energy.current, 10); // 0 after action + 10 regen
+        assert_eq!(enemy_energy.current, 100); // 100 starting + 10 regen - capped at max
     }
     
     #[test]
