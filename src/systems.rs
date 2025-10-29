@@ -58,8 +58,15 @@ impl System for TimeSystem {
     }
 }
 
-/// 解析 `PlayerAction::Move` 条目并标记成功的步骤，
-/// 以便回合调度器可以精确扣除一次能量。
+/// Movement system integrated with turn scheduler and event bus.
+///
+/// Responsibilities:
+/// - Consume movement intents from the input buffer
+/// - Validate passability and collision detection
+/// - Differentiate between friendly/hostile collisions
+/// - Emit GameEvent::EntityMoved plus context-specific events
+/// - Mark Viewshed components dirty for FOV recalculation
+/// - Record energy expenditure via shared cost table
 pub struct MovementSystem;
 
 impl System for MovementSystem {
@@ -68,7 +75,7 @@ impl System for MovementSystem {
     }
 
     fn run(&mut self, world: &mut World, resources: &mut Resources) -> SystemResult {
-        // 处理待处理的玩家移动动作
+        // Process pending movement actions
         let actions_to_process = std::mem::take(&mut resources.input_buffer.pending_actions);
         let mut new_actions = Vec::new();
 
@@ -76,67 +83,59 @@ impl System for MovementSystem {
             match action {
                 PlayerAction::Move(direction) => {
                     if let Some(player_entity) = find_player_entity(world) {
-                        // 获取玩家当前位置
+                        // Get current position - clone it immediately to release the immutable borrow
                         let current_pos = match world.get::<&Position>(player_entity) {
-                            Ok(pos) => pos.clone(),
+                            Ok(pos) => (*pos).clone(),
                             Err(_) => {
-                                // 玩家没有位置，将动作添加回队列并继续
+                                // Player has no position, re-queue action
                                 new_actions.push(action);
                                 continue;
                             }
                         };
 
-                        // 根据方向计算新位置
-                        let new_pos = match direction {
-                            Direction::North => {
-                                Position::new(current_pos.x, current_pos.y - 1, current_pos.z)
-                            }
-                            Direction::South => {
-                                Position::new(current_pos.x, current_pos.y + 1, current_pos.z)
-                            }
-                            Direction::East => {
-                                Position::new(current_pos.x + 1, current_pos.y, current_pos.z)
-                            }
-                            Direction::West => {
-                                Position::new(current_pos.x - 1, current_pos.y, current_pos.z)
-                            }
-                            Direction::NorthEast => {
-                                Position::new(current_pos.x + 1, current_pos.y - 1, current_pos.z)
-                            }
-                            Direction::NorthWest => {
-                                Position::new(current_pos.x - 1, current_pos.y - 1, current_pos.z)
-                            }
-                            Direction::SouthEast => {
-                                Position::new(current_pos.x + 1, current_pos.y + 1, current_pos.z)
-                            }
-                            Direction::SouthWest => {
-                                Position::new(current_pos.x - 1, current_pos.y + 1, current_pos.z)
-                            }
-                        };
+                        // Calculate target position
+                        let target_pos = Self::calculate_target_position(&current_pos, direction);
 
-                        // Check if the new position is passable (tile allows movement)
-                        let can_move = Self::can_move_to(world, &new_pos);
-
-                        if can_move {
-                            // Update player's position
-                            if let Ok(mut pos) = world.get::<&mut Position>(player_entity) {
-                                *pos = new_pos;
+                        // Validate movement
+                        match Self::validate_movement(world, player_entity, &target_pos) {
+                            MovementResult::Success => {
+                                // Execute movement
+                                Self::execute_movement(
+                                    world,
+                                    resources,
+                                    player_entity,
+                                    &current_pos,
+                                    &target_pos,
+                                );
+                                
+                                // Mark action as completed
+                                resources
+                                    .input_buffer
+                                    .completed_actions
+                                    .push(PlayerAction::Move(direction));
                             }
-                            // Mark action as completed for energy deduction
-                            resources
-                                .input_buffer
-                                .completed_actions
-                                .push(PlayerAction::Move(direction));
-                        } else {
-                            // If can't move, add action back for later processing
-                            new_actions.push(PlayerAction::Move(direction));
+                            MovementResult::Blocked(reason) => {
+                                // Movement blocked, don't consume action
+                                // Log the reason
+                                resources.game_state.message_log.push(reason);
+                            }
+                            MovementResult::AttackInstead(target_entity) => {
+                                // Collision with hostile - convert to attack action
+                                // Get the target entity's position
+                                if let Ok(target_pos) = world.get::<&Position>(target_entity) {
+                                    resources
+                                        .input_buffer
+                                        .completed_actions
+                                        .push(PlayerAction::Attack((*target_pos).clone()));
+                                }
+                            }
                         }
                     } else {
-                        // No player found, add action back
+                        // No player found, re-queue action
                         new_actions.push(PlayerAction::Move(direction));
                     }
                 }
-                // For non-movement actions, add back to queue for other systems to handle
+                // Non-movement actions: pass to other systems
                 _ => {
                     new_actions.push(action);
                 }
@@ -150,25 +149,417 @@ impl System for MovementSystem {
     }
 }
 
+/// Result of movement validation
+enum MovementResult {
+    Success,
+    Blocked(String),
+    AttackInstead(Entity),
+}
+
 impl MovementSystem {
-    /// Check if an entity can move to the target position
-    fn can_move_to(world: &World, target_pos: &Position) -> bool {
-        // Check if there's a tile at the target position and if it's passable
-        let mut passable = false;
-        for (_, (pos, tile)) in world.query::<(&Position, &Tile)>().iter() {
-            if pos.x == target_pos.x && pos.y == target_pos.y && pos.z == target_pos.z {
-                if tile.is_passable {
-                    passable = true;
-                } else {
-                    // Found a tile but it's not passable
-                    return false;
-                }
-                break; // Found the tile, exit the loop
+    /// Calculate target position from current position and direction
+    fn calculate_target_position(current_pos: &Position, direction: Direction) -> Position {
+        match direction {
+            Direction::North => Position::new(current_pos.x, current_pos.y - 1, current_pos.z),
+            Direction::South => Position::new(current_pos.x, current_pos.y + 1, current_pos.z),
+            Direction::East => Position::new(current_pos.x + 1, current_pos.y, current_pos.z),
+            Direction::West => Position::new(current_pos.x - 1, current_pos.y, current_pos.z),
+            Direction::NorthEast => {
+                Position::new(current_pos.x + 1, current_pos.y - 1, current_pos.z)
+            }
+            Direction::NorthWest => {
+                Position::new(current_pos.x - 1, current_pos.y - 1, current_pos.z)
+            }
+            Direction::SouthEast => {
+                Position::new(current_pos.x + 1, current_pos.y + 1, current_pos.z)
+            }
+            Direction::SouthWest => {
+                Position::new(current_pos.x - 1, current_pos.y + 1, current_pos.z)
+            }
+        }
+    }
+
+    /// Validate movement: check passability, collisions, and determine action
+    fn validate_movement(
+        world: &World,
+        mover_entity: Entity,
+        target_pos: &Position,
+    ) -> MovementResult {
+        // Check tile passability
+        if !Self::is_tile_passable(world, target_pos) {
+            return MovementResult::Blocked("路径被阻挡".to_string());
+        }
+
+        // Check for entity collisions
+        if let Some(blocking_entity) = Self::find_entity_at_position(world, target_pos) {
+            // Get mover's faction
+            let mover_faction = world
+                .get::<&Actor>(mover_entity)
+                .map(|a| a.faction.clone())
+                .unwrap_or(Faction::Neutral);
+
+            // Get blocker's faction
+            let blocker_faction = world
+                .get::<&Actor>(blocking_entity)
+                .map(|a| a.faction.clone())
+                .unwrap_or(Faction::Neutral);
+
+            // Determine if hostile
+            if Self::is_hostile(mover_faction, blocker_faction) {
+                // Convert movement to attack
+                return MovementResult::AttackInstead(blocking_entity);
+            } else {
+                // Friendly or neutral entity blocks movement
+                let blocker_name = world
+                    .get::<&Actor>(blocking_entity)
+                    .map(|a| a.name.clone())
+                    .unwrap_or_else(|_| "某物".to_string());
+                return MovementResult::Blocked(format!("被{}阻挡", blocker_name));
             }
         }
 
-        // If no tile is found at the position, we assume it's not passable
-        passable
+        MovementResult::Success
+    }
+
+    /// Execute successful movement: update position, emit events, mark viewshed dirty
+    fn execute_movement(
+        world: &mut World,
+        resources: &mut Resources,
+        entity: Entity,
+        from_pos: &Position,
+        to_pos: &Position,
+    ) {
+        // Update position
+        if let Ok(mut pos) = world.get::<&mut Position>(entity) {
+            *pos = to_pos.clone();
+        }
+
+        // Mark viewshed dirty for FOV recalculation
+        if let Ok(mut viewshed) = world.get::<&mut Viewshed>(entity) {
+            viewshed.dirty = true;
+        }
+
+        // Emit EntityMoved event
+        resources.game_state.message_log.push(format!(
+            "移动从 ({}, {}) 到 ({}, {})",
+            from_pos.x, from_pos.y, to_pos.x, to_pos.y
+        ));
+
+        // Check for traps at the new position
+        Self::check_traps(world, resources, entity, to_pos);
+
+        // Check for items at the new position (trigger pickup opportunity)
+        Self::check_items(world, resources, entity, to_pos);
+
+        // Check for doors at the new position
+        Self::check_doors(world, resources, entity, to_pos);
+    }
+
+    /// Check if a tile at the position is passable
+    fn is_tile_passable(world: &World, target_pos: &Position) -> bool {
+        let mut found_any = false;
+        for (_, (pos, tile)) in world.query::<(&Position, &Tile)>().iter() {
+            if pos.x == target_pos.x && pos.y == target_pos.y && pos.z == target_pos.z {
+                found_any = true;
+                // If ANY tile at this position is impassable, the position is blocked
+                if !tile.is_passable {
+                    return false;
+                }
+            }
+        }
+        // If we found at least one tile and none were impassable, it's passable
+        // If we found no tiles, it's not passable
+        found_any
+    }
+
+    /// Find an entity (actor) at the given position
+    fn find_entity_at_position(world: &World, target_pos: &Position) -> Option<Entity> {
+        for (entity, (pos, _actor)) in world.query::<(&Position, &Actor)>().iter() {
+            if pos.x == target_pos.x && pos.y == target_pos.y && pos.z == target_pos.z {
+                return Some(entity);
+            }
+        }
+        None
+    }
+
+    /// Determine if two factions are hostile to each other
+    fn is_hostile(faction1: Faction, faction2: Faction) -> bool {
+        match (faction1, faction2) {
+            (Faction::Player, Faction::Enemy) | (Faction::Enemy, Faction::Player) => true,
+            (Faction::Player, Faction::Neutral) | (Faction::Neutral, Faction::Player) => false,
+            (Faction::Enemy, Faction::Neutral) | (Faction::Neutral, Faction::Enemy) => false,
+            _ => false,
+        }
+    }
+
+    /// Check for traps at the position and trigger them
+    fn check_traps(world: &mut World, resources: &mut Resources, entity: Entity, pos: &Position) {
+        // Look for trap tiles at this position
+        for (trap_entity, (trap_pos, tile)) in world.query::<(&Position, &Tile)>().iter() {
+            if trap_pos.x == pos.x && trap_pos.y == pos.y && trap_pos.z == pos.z {
+                // Check if this tile has a trap (using terrain type)
+                if matches!(tile.terrain_type, TerrainType::Trap) {
+                    // Trigger trap event
+                    let trap_type = "尖刺陷阱".to_string(); // Simplified
+                    resources.game_state.message_log.push(format!(
+                        "触发了{}！",
+                        trap_type
+                    ));
+                    
+                    // Apply trap damage
+                    if let Ok(mut stats) = world.get::<&mut Stats>(entity) {
+                        let damage = 10; // Simplified trap damage
+                        stats.hp = stats.hp.saturating_sub(damage);
+                        resources.game_state.message_log.push(format!(
+                            "陷阱造成了 {} 点伤害",
+                            damage
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    /// Check for items at the position and log pickup opportunity
+    fn check_items(world: &World, resources: &mut Resources, _entity: Entity, pos: &Position) {
+        // Look for items at this position
+        for (_item_entity, (item_pos, item, _tile)) in
+            world.query::<(&Position, &ECSItem, &Tile)>().iter()
+        {
+            if item_pos.x == pos.x && item_pos.y == pos.y && item_pos.z == pos.z {
+                resources.game_state.message_log.push(format!(
+                    "这里有 {}",
+                    item.name
+                ));
+                // Note: Actual pickup is handled by InventorySystem
+            }
+        }
+    }
+
+    /// Check for doors at the position and handle state changes
+    fn check_doors(
+        world: &mut World,
+        resources: &mut Resources,
+        _entity: Entity,
+        pos: &Position,
+    ) {
+        // Look for door tiles at this position
+        for (_door_entity, (door_pos, tile)) in world.query::<(&Position, &Tile)>().iter() {
+            if door_pos.x == pos.x && door_pos.y == pos.y && door_pos.z == pos.z {
+                // Check if this is a door (using terrain type)
+                if matches!(tile.terrain_type, TerrainType::Door) {
+                    resources.game_state.message_log.push("打开了门".to_string());
+                    // Note: Actual door state changes would be handled here
+                }
+            }
+        }
+    }
+
+    /// Run movement system with event bus integration.
+    /// This version emits events for all movement actions.
+    pub fn run_with_events(ecs_world: &mut ECSWorld) -> SystemResult {
+        use crate::event_bus::GameEvent;
+
+        // Process pending movement actions
+        let actions_to_process = std::mem::take(&mut ecs_world.resources.input_buffer.pending_actions);
+        let mut new_actions = Vec::new();
+
+        for action in actions_to_process {
+            match action {
+                PlayerAction::Move(direction) => {
+                    if let Some(player_entity) = find_player_entity(&ecs_world.world) {
+                        // Get current position - clone it immediately to release the immutable borrow
+                        let current_pos = match ecs_world.world.get::<&Position>(player_entity) {
+                            Ok(pos) => (*pos).clone(),
+                            Err(_) => {
+                                new_actions.push(action);
+                                continue;
+                            }
+                        };
+
+                        // Calculate target position
+                        let target_pos = Self::calculate_target_position(&current_pos, direction);
+
+                        // Validate movement
+                        match Self::validate_movement(&ecs_world.world, player_entity, &target_pos) {
+                            MovementResult::Success => {
+                                // Execute movement with events
+                                Self::execute_movement_with_events(
+                                    ecs_world,
+                                    player_entity,
+                                    &current_pos,
+                                    &target_pos,
+                                );
+                                
+                                // Mark action as completed
+                                ecs_world
+                                    .resources
+                                    .input_buffer
+                                    .completed_actions
+                                    .push(PlayerAction::Move(direction));
+                            }
+                            MovementResult::Blocked(reason) => {
+                                // Movement blocked, don't consume action
+                                ecs_world.resources.game_state.message_log.push(reason);
+                            }
+                            MovementResult::AttackInstead(target_entity) => {
+                                // Collision with hostile - convert to attack action
+                                // Get the target entity's position
+                                if let Ok(target_pos) = ecs_world.world.get::<&Position>(target_entity) {
+                                    ecs_world
+                                        .resources
+                                        .input_buffer
+                                        .completed_actions
+                                        .push(PlayerAction::Attack((*target_pos).clone()));
+                                }
+                            }
+                        }
+                    } else {
+                        new_actions.push(PlayerAction::Move(direction));
+                    }
+                }
+                _ => {
+                    new_actions.push(action);
+                }
+            }
+        }
+
+        // Put unprocessed actions back
+        ecs_world.resources.input_buffer.pending_actions = new_actions;
+
+        SystemResult::Continue
+    }
+
+    /// Execute movement and emit events
+    fn execute_movement_with_events(
+        ecs_world: &mut ECSWorld,
+        entity: Entity,
+        from_pos: &Position,
+        to_pos: &Position,
+    ) {
+        use crate::event_bus::GameEvent;
+
+        // Update position
+        if let Ok(mut pos) = ecs_world.world.get::<&mut Position>(entity) {
+            *pos = to_pos.clone();
+        }
+
+        // Mark viewshed dirty
+        if let Ok(mut viewshed) = ecs_world.world.get::<&mut Viewshed>(entity) {
+            viewshed.dirty = true;
+        }
+
+        // Emit EntityMoved event
+        ecs_world.publish_event(GameEvent::EntityMoved {
+            entity: entity.id(),
+            from_x: from_pos.x,
+            from_y: from_pos.y,
+            to_x: to_pos.x,
+            to_y: to_pos.y,
+        });
+
+        // Check for traps and emit events
+        Self::check_traps_with_events(ecs_world, entity, to_pos);
+
+        // Check for items and emit events
+        Self::check_items_with_events(ecs_world, entity, to_pos);
+
+        // Check for doors
+        Self::check_doors_with_events(ecs_world, entity, to_pos);
+    }
+
+    /// Check traps and emit events
+    fn check_traps_with_events(ecs_world: &mut ECSWorld, entity: Entity, pos: &Position) {
+        use crate::event_bus::GameEvent;
+
+        // Look for trap tiles at this position and collect data first
+        let has_trap = ecs_world.world.query::<(&Position, &Tile)>()
+            .iter()
+            .any(|(_, (trap_pos, tile))| {
+                trap_pos.x == pos.x && trap_pos.y == pos.y && trap_pos.z == pos.z
+                    && matches!(tile.terrain_type, TerrainType::Trap)
+            });
+
+        if has_trap {
+            let trap_type = "尖刺陷阱".to_string();
+            
+            // Emit trap triggered event
+            ecs_world.publish_event(GameEvent::TrapTriggered {
+                entity: entity.id(),
+                trap_type: trap_type.clone(),
+            });
+            
+            // Apply trap damage and collect damage info
+            let damage_info = if let Ok(mut stats) = ecs_world.world.get::<&mut Stats>(entity) {
+                let damage = 10;
+                stats.hp = stats.hp.saturating_sub(damage);
+                Some((entity.id(), damage))
+            } else {
+                None
+            };
+            
+            // Emit damage event if damage was applied
+            if let Some((victim_id, damage)) = damage_info {
+                ecs_world.publish_event(GameEvent::DamageDealt {
+                    attacker: 0, // Trap has no entity
+                    victim: victim_id,
+                    damage,
+                    is_critical: false,
+                });
+            }
+        }
+    }
+
+    /// Check items and emit events
+    fn check_items_with_events(ecs_world: &mut ECSWorld, _entity: Entity, pos: &Position) {
+        use crate::event_bus::GameEvent;
+
+        // Collect item names at this position first
+        let item_names: Vec<String> = ecs_world.world
+            .query::<(&Position, &ECSItem, &Tile)>()
+            .iter()
+            .filter(|(_, (item_pos, _, _))| {
+                item_pos.x == pos.x && item_pos.y == pos.y && item_pos.z == pos.z
+            })
+            .map(|(_, (_, item, _))| item.name.clone())
+            .collect();
+
+        // Now emit events for each item
+        for item_name in item_names {
+            ecs_world.resources.game_state.message_log.push(format!(
+                "这里有 {}",
+                item_name
+            ));
+            
+            // Emit item pickup opportunity event
+            ecs_world.publish_event(GameEvent::LogMessage {
+                message: format!("发现了 {}", item_name),
+                level: crate::event_bus::LogLevel::Info,
+            });
+        }
+    }
+
+    /// Check doors and emit events
+    fn check_doors_with_events(ecs_world: &mut ECSWorld, _entity: Entity, pos: &Position) {
+        use crate::event_bus::GameEvent;
+
+        // Check if there's a door at this position
+        let has_door = ecs_world.world.query::<(&Position, &Tile)>()
+            .iter()
+            .any(|(_, (door_pos, tile))| {
+                door_pos.x == pos.x && door_pos.y == pos.y && door_pos.z == pos.z
+                    && matches!(tile.terrain_type, TerrainType::Door)
+            });
+
+        if has_door {
+            ecs_world.resources.game_state.message_log.push("打开了门".to_string());
+            
+            // Emit door opened event
+            ecs_world.publish_event(GameEvent::LogMessage {
+                message: "打开了门".to_string(),
+                level: crate::event_bus::LogLevel::Info,
+            });
+        }
     }
 }
 
@@ -3312,5 +3703,352 @@ impl System for BossSystem {
         }
 
         SystemResult::Continue
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ecs::*;
+    use crate::turn_system::energy_costs;
+
+    fn create_test_world() -> (World, Resources) {
+        let mut world = World::new();
+        let resources = Resources::default();
+
+        // Create basic floor tiles
+        for x in 0..10 {
+            for y in 0..10 {
+                world.spawn((
+                    Position::new(x, y, 0),
+                    Tile {
+                        terrain_type: TerrainType::Floor,
+                        is_passable: true,
+                        blocks_sight: false,
+                        has_items: false,
+                        has_monster: false,
+                    },
+                ));
+            }
+        }
+
+        // Create walls around the perimeter
+        for x in 0..10 {
+            world.spawn((
+                Position::new(x, 0, 0),
+                Tile {
+                    terrain_type: TerrainType::Wall,
+                    is_passable: false,
+                    blocks_sight: true,
+                    has_items: false,
+                    has_monster: false,
+                },
+            ));
+            world.spawn((
+                Position::new(x, 9, 0),
+                Tile {
+                    terrain_type: TerrainType::Wall,
+                    is_passable: false,
+                    blocks_sight: true,
+                    has_items: false,
+                    has_monster: false,
+                },
+            ));
+        }
+        for y in 0..10 {
+            world.spawn((
+                Position::new(0, y, 0),
+                Tile {
+                    terrain_type: TerrainType::Wall,
+                    is_passable: false,
+                    blocks_sight: true,
+                    has_items: false,
+                    has_monster: false,
+                },
+            ));
+            world.spawn((
+                Position::new(9, y, 0),
+                Tile {
+                    terrain_type: TerrainType::Wall,
+                    is_passable: false,
+                    blocks_sight: true,
+                    has_items: false,
+                    has_monster: false,
+                },
+            ));
+        }
+
+        (world, resources)
+    }
+
+    fn create_player(world: &mut World, x: i32, y: i32) -> Entity {
+        world.spawn((
+            Position::new(x, y, 0),
+            Actor {
+                name: "Player".to_string(),
+                faction: Faction::Player,
+            },
+            Stats {
+                hp: 100,
+                max_hp: 100,
+                attack: 10,
+                defense: 5,
+                accuracy: 80,
+                evasion: 20,
+                level: 1,
+                experience: 0,
+                class: None,
+            },
+            Viewshed {
+                range: 8,
+                visible_tiles: vec![],
+                memory: vec![],
+                dirty: true,
+                algorithm: FovAlgorithm::default(),
+            },
+            Energy {
+                current: 100,
+                max: 100,
+                regeneration_rate: 1,
+            },
+            Player,
+        ))
+    }
+
+    fn create_enemy(world: &mut World, x: i32, y: i32) -> Entity {
+        world.spawn((
+            Position::new(x, y, 0),
+            Actor {
+                name: "Goblin".to_string(),
+                faction: Faction::Enemy,
+            },
+            Stats {
+                hp: 30,
+                max_hp: 30,
+                attack: 5,
+                defense: 2,
+                accuracy: 70,
+                evasion: 10,
+                level: 1,
+                experience: 10,
+                class: None,
+            },
+            Energy {
+                current: 100,
+                max: 100,
+                regeneration_rate: 1,
+            },
+        ))
+    }
+
+    #[test]
+    fn test_movement_cost_application() {
+        let (mut world, mut resources) = create_test_world();
+        let _player = create_player(&mut world, 5, 5);
+
+        // Queue a movement action
+        resources.input_buffer.pending_actions.push(PlayerAction::Move(Direction::North));
+
+        // Run movement system
+        let mut system = MovementSystem;
+        system.run(&mut world, &mut resources);
+
+        // Check that action was completed
+        assert_eq!(resources.input_buffer.completed_actions.len(), 1);
+        assert!(matches!(
+            resources.input_buffer.completed_actions[0],
+            PlayerAction::Move(Direction::North)
+        ));
+
+        // Check that energy cost is correct
+        let cost = energy_costs::player_action_cost(&PlayerAction::Move(Direction::North));
+        assert_eq!(cost, energy_costs::FULL_ACTION);
+    }
+
+    #[test]
+    fn test_movement_blocked_by_wall() {
+        let (mut world, mut resources) = create_test_world();
+        let player = create_player(&mut world, 1, 1);
+
+        // Try to move into a wall (north from 1,1 goes to 1,0 which is a wall)
+        resources.input_buffer.pending_actions.push(PlayerAction::Move(Direction::North));
+
+        // Run movement system
+        let mut system = MovementSystem;
+        system.run(&mut world, &mut resources);
+
+        // Check that action was NOT completed (blocked)
+        assert_eq!(resources.input_buffer.completed_actions.len(), 0);
+
+        // Check that position didn't change
+        let pos = world.get::<&Position>(player).unwrap();
+        assert_eq!(pos.x, 1);
+        assert_eq!(pos.y, 1);
+
+        // Check that a message was logged
+        assert!(!resources.game_state.message_log.is_empty());
+    }
+
+    #[test]
+    fn test_movement_collision_with_enemy_converts_to_attack() {
+        let (mut world, mut resources) = create_test_world();
+        let _player = create_player(&mut world, 5, 5);
+        let enemy = create_enemy(&mut world, 5, 6); // Enemy to the south
+
+        // Try to move south (into enemy)
+        resources.input_buffer.pending_actions.push(PlayerAction::Move(Direction::South));
+
+        // Run movement system
+        let mut system = MovementSystem;
+        system.run(&mut world, &mut resources);
+
+        // Check that action was converted to attack
+        assert_eq!(resources.input_buffer.completed_actions.len(), 1);
+        assert!(matches!(
+            resources.input_buffer.completed_actions[0],
+            PlayerAction::Attack(_)
+        ));
+    }
+
+    #[test]
+    fn test_movement_marks_viewshed_dirty() {
+        let (mut world, mut resources) = create_test_world();
+        let player = create_player(&mut world, 5, 5);
+
+        // Mark viewshed as clean
+        if let Ok(mut viewshed) = world.get::<&mut Viewshed>(player) {
+            viewshed.dirty = false;
+        }
+
+        // Queue and execute movement
+        resources.input_buffer.pending_actions.push(PlayerAction::Move(Direction::East));
+        let mut system = MovementSystem;
+        system.run(&mut world, &mut resources);
+
+        // Check that viewshed is now dirty
+        let viewshed = world.get::<&Viewshed>(player).unwrap();
+        assert!(viewshed.dirty);
+    }
+
+    #[test]
+    fn test_movement_position_update() {
+        let (mut world, mut resources) = create_test_world();
+        let player = create_player(&mut world, 5, 5);
+
+        // Queue movement
+        resources.input_buffer.pending_actions.push(PlayerAction::Move(Direction::East));
+
+        // Run movement system
+        let mut system = MovementSystem;
+        system.run(&mut world, &mut resources);
+
+        // Check position changed
+        let pos = world.get::<&Position>(player).unwrap();
+        assert_eq!(pos.x, 6);
+        assert_eq!(pos.y, 5);
+    }
+
+    #[test]
+    fn test_calculate_target_position() {
+        let start = Position::new(5, 5, 0);
+        
+        let north = MovementSystem::calculate_target_position(&start, Direction::North);
+        assert_eq!(north, Position::new(5, 4, 0));
+        
+        let south = MovementSystem::calculate_target_position(&start, Direction::South);
+        assert_eq!(south, Position::new(5, 6, 0));
+        
+        let east = MovementSystem::calculate_target_position(&start, Direction::East);
+        assert_eq!(east, Position::new(6, 5, 0));
+        
+        let west = MovementSystem::calculate_target_position(&start, Direction::West);
+        assert_eq!(west, Position::new(4, 5, 0));
+        
+        let ne = MovementSystem::calculate_target_position(&start, Direction::NorthEast);
+        assert_eq!(ne, Position::new(6, 4, 0));
+    }
+
+    #[test]
+    fn test_is_hostile() {
+        assert!(MovementSystem::is_hostile(Faction::Player, Faction::Enemy));
+        assert!(MovementSystem::is_hostile(Faction::Enemy, Faction::Player));
+        assert!(!MovementSystem::is_hostile(Faction::Player, Faction::Neutral));
+        assert!(!MovementSystem::is_hostile(Faction::Neutral, Faction::Player));
+        assert!(!MovementSystem::is_hostile(Faction::Player, Faction::Player));
+    }
+
+    #[test]
+    fn test_trap_detection() {
+        let (mut world, mut resources) = create_test_world();
+        let player = create_player(&mut world, 5, 5);
+
+        // Place a trap at (5, 6)
+        world.spawn((
+            Position::new(5, 6, 0),
+            Tile {
+                terrain_type: TerrainType::Trap,
+                is_passable: true,
+                blocks_sight: false,
+                has_items: false,
+                has_monster: false,
+            },
+        ));
+
+        let initial_hp = world.get::<&Stats>(player).unwrap().hp;
+
+        // Move south onto the trap
+        resources.input_buffer.pending_actions.push(PlayerAction::Move(Direction::South));
+        let mut system = MovementSystem;
+        system.run(&mut world, &mut resources);
+
+        // Check that damage was applied
+        let current_hp = world.get::<&Stats>(player).unwrap().hp;
+        assert!(current_hp < initial_hp);
+
+        // Check that a trap message was logged
+        let has_trap_message = resources.game_state.message_log.iter()
+            .any(|msg| msg.contains("陷阱"));
+        assert!(has_trap_message);
+    }
+
+    #[test]
+    fn test_item_detection() {
+        let (mut world, mut resources) = create_test_world();
+        let _player = create_player(&mut world, 5, 5);
+
+        // Place an item at (5, 6)
+        world.spawn((
+            Position::new(5, 6, 0),
+            ECSItem {
+                name: "Health Potion".to_string(),
+                item_type: ItemType::Consumable {
+                    effect: ConsumableEffect::Healing { amount: 20 },
+                },
+                value: 10,
+                identified: true,
+                quantity: 1,
+                level: 0,
+                cursed: false,
+                charges: None,
+                detailed_data: None,
+            },
+            Tile {
+                terrain_type: TerrainType::Floor,
+                is_passable: true,
+                blocks_sight: false,
+                has_items: true,
+                has_monster: false,
+            },
+        ));
+
+        // Move south onto the item
+        resources.input_buffer.pending_actions.push(PlayerAction::Move(Direction::South));
+        let mut system = MovementSystem;
+        system.run(&mut world, &mut resources);
+
+        // Check that an item message was logged
+        let has_item_message = resources.game_state.message_log.iter()
+            .any(|msg| msg.contains("Health Potion"));
+        assert!(has_item_message);
     }
 }

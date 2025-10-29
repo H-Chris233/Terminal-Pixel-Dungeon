@@ -368,6 +368,21 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                     continue;
                 }
 
+                // 特殊处理 MovementSystem，使用事件版本
+                if system.name() == "MovementSystem" {
+                    match MovementSystem::run_with_events(&mut self.ecs_world) {
+                        SystemResult::Continue => continue,
+                        SystemResult::Stop => {
+                            self.is_running = false;
+                            return Ok(());
+                        }
+                        SystemResult::Error(msg) => {
+                            eprintln!("System error: {}", msg);
+                            return Err(anyhow::anyhow!(msg));
+                        }
+                    }
+                }
+
                 // 特殊处理 CombatSystem，使用事件版本
                 if system.name() == "CombatSystem" {
                     match CombatSystem::run_with_events(&mut self.ecs_world) {
@@ -454,6 +469,21 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                 // Skip EnergySystem as we're managing energy through turn system now
                 if system.is_energy_system() {
                     continue;
+                }
+
+                // 特殊处理 MovementSystem，使用事件版本
+                if system.name() == "MovementSystem" {
+                    match MovementSystem::run_with_events(&mut self.ecs_world) {
+                        SystemResult::Continue => continue,
+                        SystemResult::Stop => {
+                            self.is_running = false;
+                            return Ok(());
+                        }
+                        SystemResult::Error(msg) => {
+                            eprintln!("System error: {}", msg);
+                            return Err(anyhow::anyhow!(msg));
+                        }
+                    }
                 }
 
                 // 特殊处理 CombatSystem，使用事件版本
