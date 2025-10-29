@@ -129,6 +129,32 @@ pub enum GameEvent {
         new_effect: String,
     },
 
+    // ===== 技能事件 =====
+    /// 职业技能使用
+    ClassSkillUsed {
+        entity: u32,
+        skill_name: String,
+        class: String,
+        energy_cost: u32,
+    },
+    /// 职能技能冷却完成
+    ClassSkillReady {
+        entity: u32,
+        skill_name: String,
+    },
+    /// 技能使用失败（冷却中或其他原因）
+    SkillUseFailed {
+        entity: u32,
+        skill_name: String,
+        reason: String,
+    },
+    /// 被动技能触发
+    PassivePerkTriggered {
+        entity: u32,
+        perk_name: String,
+        effect: String,
+    },
+
     // ===== Boss 事件 =====
     /// Boss 遭遇
     BossEncountered { boss_type: String, boss_entity: u32 },
@@ -1040,6 +1066,11 @@ impl GameEvent {
             GameEvent::BossSummonedMinions { .. } => "BossSummonedMinions",
             GameEvent::StatusEffectTicked { .. } => "StatusEffectTicked",
             GameEvent::StatusEffectConflict { .. } => "StatusEffectConflict",
+            // Skill events
+            GameEvent::ClassSkillUsed { .. } => "ClassSkillUsed",
+            GameEvent::ClassSkillReady { .. } => "ClassSkillReady",
+            GameEvent::SkillUseFailed { .. } => "SkillUseFailed",
+            GameEvent::PassivePerkTriggered { .. } => "PassivePerkTriggered",
             // New events
             GameEvent::ActionIntended { .. } => "ActionIntended",
             GameEvent::ActionCompleted { .. } => "ActionCompleted",
@@ -1118,6 +1149,12 @@ impl GameEvent {
             // AI events
             GameEvent::AIDecisionMade { .. } 
             | GameEvent::AITargetChanged { .. } => EventCategory::AI,
+
+            // Skill events
+            GameEvent::ClassSkillUsed { .. }
+            | GameEvent::ClassSkillReady { .. }
+            | GameEvent::SkillUseFailed { .. }
+            | GameEvent::PassivePerkTriggered { .. } => EventCategory::Action,
 
             // Environment events
             GameEvent::LevelChanged { .. }

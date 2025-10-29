@@ -137,6 +137,12 @@ impl Hero {
     pub fn on_turn(&mut self) -> Result<(), HeroError> {
         self.turns += 1;
 
+        // 减少技能冷却时间
+        self.class_skills.tick_cooldowns();
+
+        // 触发被动技能
+        self.trigger_passive_perks();
+
         // SPD标准饥饿系统
         if self.turns.is_multiple_of(20) {
             // 每20回合减少1饥饿度（SPD标准）
@@ -162,6 +168,63 @@ impl Hero {
 
         // 更新效果
         self.effects.update();
+        Ok(())
+    }
+
+    /// 触发被动技能（每回合）
+    fn trigger_passive_perks(&mut self) {
+        use crate::abilities::{ClassAbilitySet, PassiveTrigger};
+
+        let abilities = ClassAbilitySet::for_class(self.class.clone());
+        
+        for perk in abilities.passive_perks.iter() {
+            match perk.trigger {
+                PassiveTrigger::PerTurn => {
+                    self.apply_perk_effect(&perk.effect);
+                }
+                PassiveTrigger::LowHealth { threshold } => {
+                    let hp_percent = (self.hp as f32 / self.max_hp as f32 * 100.0) as u8;
+                    if hp_percent < threshold {
+                        self.apply_perk_effect(&perk.effect);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// 应用被动技能效果
+    fn apply_perk_effect(&mut self, effect: &crate::abilities::PerkEffect) {
+        use crate::abilities::PerkEffect;
+
+        match effect {
+            PerkEffect::Regeneration { amount } => {
+                self.heal(*amount);
+            }
+            _ => {}
+        }
+    }
+
+    /// 尝试使用职业技能
+    pub fn try_use_skill(&mut self, skill_name: &str) -> Result<(), HeroError> {
+        use crate::abilities::ClassAbilitySet;
+
+        // 检查技能是否在冷却中
+        if !self.class_skills.is_skill_ready(skill_name) {
+            return Err(HeroError::ActionFailed);
+        }
+
+        // 获取技能定义
+        let abilities = ClassAbilitySet::for_class(self.class.clone());
+        let skill = abilities
+            .active_skills
+            .iter()
+            .find(|s| s.name == skill_name)
+            .ok_or(HeroError::ActionFailed)?;
+
+        // 技能激活成功，设置冷却时间
+        self.class_skills.set_cooldown(skill_name.to_string(), skill.cooldown);
+        
         Ok(())
     }
 

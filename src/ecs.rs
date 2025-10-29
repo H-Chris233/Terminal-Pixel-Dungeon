@@ -243,6 +243,35 @@ impl ECSWorld {
 
             // ===== 新增事件处理 =====
 
+            // 职业技能事件
+            GameEvent::ClassSkillUsed { skill_name, class, energy_cost, .. } => {
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("{} 使用了技能 {}（消耗 {} 能量）", class, skill_name, energy_cost));
+            }
+
+            GameEvent::ClassSkillReady { skill_name, .. } => {
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("技能 {} 冷却完成", skill_name));
+            }
+
+            GameEvent::SkillUseFailed { skill_name, reason, .. } => {
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("技能 {} 使用失败：{}", skill_name, reason));
+            }
+
+            GameEvent::PassivePerkTriggered { perk_name, effect, .. } => {
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("被动技能 {} 触发：{}", perk_name, effect));
+            }
+
             // 动作事件
             GameEvent::ActionCompleted { action_type, success, .. } => {
                 if !success {

@@ -24,6 +24,82 @@ pub struct SkillState {
     pub unlocked_talents: Vec<String>,
     /// 当前激活的职业技能（如果有）
     pub active_skill: Option<String>,
+    /// 技能冷却时间追踪（技能名 -> 剩余回合数）
+    #[serde(default)]
+    pub cooldowns: std::collections::HashMap<String, u32>,
+    /// 技能充能数追踪（技能名 -> 当前充能数）
+    #[serde(default)]
+    pub charges: std::collections::HashMap<String, u32>,
+}
+
+impl SkillState {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// 获取技能剩余冷却时间
+    pub fn get_cooldown(&self, skill_name: &str) -> u32 {
+        self.cooldowns.get(skill_name).copied().unwrap_or(0)
+    }
+
+    /// 设置技能冷却时间
+    pub fn set_cooldown(&mut self, skill_name: String, turns: u32) {
+        if turns > 0 {
+            self.cooldowns.insert(skill_name, turns);
+        } else {
+            self.cooldowns.remove(&skill_name);
+        }
+    }
+
+    /// 减少所有技能冷却时间（每回合调用）
+    pub fn tick_cooldowns(&mut self) {
+        let mut expired = Vec::new();
+        for (skill, cooldown) in self.cooldowns.iter_mut() {
+            *cooldown = cooldown.saturating_sub(1);
+            if *cooldown == 0 {
+                expired.push(skill.clone());
+            }
+        }
+        for skill in expired {
+            self.cooldowns.remove(&skill);
+        }
+    }
+
+    /// 检查技能是否可用
+    pub fn is_skill_ready(&self, skill_name: &str) -> bool {
+        self.get_cooldown(skill_name) == 0
+    }
+
+    /// 获取技能充能数
+    pub fn get_charges(&self, skill_name: &str) -> u32 {
+        self.charges.get(skill_name).copied().unwrap_or(0)
+    }
+
+    /// 设置技能充能数
+    pub fn set_charges(&mut self, skill_name: String, charges: u32) {
+        if charges > 0 {
+            self.charges.insert(skill_name, charges);
+        } else {
+            self.charges.remove(&skill_name);
+        }
+    }
+
+    /// 消耗一次充能
+    pub fn consume_charge(&mut self, skill_name: &str) -> bool {
+        if let Some(charges) = self.charges.get_mut(skill_name) {
+            if *charges > 0 {
+                *charges -= 1;
+                return true;
+            }
+        }
+        false
+    }
+
+    /// 增加充能
+    pub fn add_charge(&mut self, skill_name: String, amount: u32) {
+        let current = self.get_charges(&skill_name);
+        self.set_charges(skill_name, current + amount);
+    }
 }
 
 /// 英雄职业枚举（SPD核心四职业）

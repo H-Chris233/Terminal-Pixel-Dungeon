@@ -8,6 +8,7 @@ mod effects;
 mod rng;
 
 // 子模块
+pub mod abilities;
 pub mod class;
 
 // 标准库导入
