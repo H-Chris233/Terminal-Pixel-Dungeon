@@ -2656,11 +2656,12 @@ impl System for DungeonSystem {
 }
 
 impl DungeonSystem {
-    /// Run dungeon system with event bus access for LevelChanged events
+    /// Run dungeon system with event bus access for environment interactions
     pub fn run_with_events(ecs_world: &mut ECSWorld) -> SystemResult {
         use crate::event_bus::GameEvent;
+        use crate::turn_system::energy_costs;
 
-        // Process pending player actions for dungeon navigation
+        // Process pending player actions for dungeon interactions
         let actions_to_process =
             std::mem::take(&mut ecs_world.resources.input_buffer.pending_actions);
         let mut new_actions = Vec::new();
@@ -2705,8 +2706,6 @@ impl DungeonSystem {
                             let old_level = player_pos_z as usize;
                             let new_level = (player_pos_z + 1) as usize;
 
-                            ecs_world.resources.game_state.depth = new_level;
-
                             // Move player to new level
                             if let Ok(mut pos) = ecs_world.world.get::<&mut Position>(player_entity)
                             {
@@ -2715,11 +2714,34 @@ impl DungeonSystem {
                                 pos.y = 10;
                             }
 
+                            // Reset player's viewshed to trigger FOV recalculation
+                            if let Ok(mut viewshed) = ecs_world.world.get::<&mut Viewshed>(player_entity) {
+                                viewshed.dirty = true;
+                                viewshed.visible_tiles.clear();
+                            }
+
+                            // Update game state depth
+                            ecs_world.resources.game_state.depth = new_level;
+
                             // Publish LevelChanged event
                             ecs_world.publish_event(GameEvent::LevelChanged {
                                 old_level,
                                 new_level,
                             });
+
+                            // Publish action completed event
+                            ecs_world.publish_event(GameEvent::ActionCompleted {
+                                entity: player_entity.id() as u32,
+                                action_type: "Descend".to_string(),
+                                success: true,
+                            });
+
+                            // Add to completed actions for energy deduction
+                            ecs_world
+                                .resources
+                                .input_buffer
+                                .completed_actions
+                                .push(PlayerAction::Descend);
 
                             // Add message to game state log
                             ecs_world
@@ -2739,6 +2761,14 @@ impl DungeonSystem {
                             if ecs_world.resources.game_state.message_log.len() > 10 {
                                 ecs_world.resources.game_state.message_log.remove(0);
                             }
+                            
+                            // Publish action failed event
+                            ecs_world.publish_event(GameEvent::ActionFailed {
+                                entity: player_entity.id() as u32,
+                                action_type: "Descend".to_string(),
+                                reason: "Not on stairs".to_string(),
+                            });
+                            
                             new_actions.push(action);
                         }
                     } else {
@@ -2793,6 +2823,13 @@ impl DungeonSystem {
                                     pos.y = 10;
                                 }
 
+                                // Reset player's viewshed to trigger FOV recalculation
+                                if let Ok(mut viewshed) = ecs_world.world.get::<&mut Viewshed>(player_entity) {
+                                    viewshed.dirty = true;
+                                    viewshed.visible_tiles.clear();
+                                }
+
+                                // Update game state depth
                                 ecs_world.resources.game_state.depth = new_level;
 
                                 // Publish LevelChanged event
@@ -2800,6 +2837,20 @@ impl DungeonSystem {
                                     old_level,
                                     new_level,
                                 });
+
+                                // Publish action completed event
+                                ecs_world.publish_event(GameEvent::ActionCompleted {
+                                    entity: player_entity.id() as u32,
+                                    action_type: "Ascend".to_string(),
+                                    success: true,
+                                });
+
+                                // Add to completed actions for energy deduction
+                                ecs_world
+                                    .resources
+                                    .input_buffer
+                                    .completed_actions
+                                    .push(PlayerAction::Ascend);
 
                                 // Add message to game state log
                                 ecs_world
@@ -2818,15 +2869,30 @@ impl DungeonSystem {
                                 if ecs_world.resources.game_state.message_log.len() > 10 {
                                     ecs_world.resources.game_state.message_log.remove(0);
                                 }
+                                
+                                // Publish action failed event
+                                ecs_world.publish_event(GameEvent::ActionFailed {
+                                    entity: player_entity.id() as u32,
+                                    action_type: "Ascend".to_string(),
+                                    reason: "Already at top level".to_string(),
+                                });
                             }
                         } else {
                             let message = "You need to stand on stairs to ascend.".to_string();
-                            new_actions.push(action);
 
                             ecs_world.resources.game_state.message_log.push(message);
                             if ecs_world.resources.game_state.message_log.len() > 10 {
                                 ecs_world.resources.game_state.message_log.remove(0);
                             }
+                            
+                            // Publish action failed event
+                            ecs_world.publish_event(GameEvent::ActionFailed {
+                                entity: player_entity.id() as u32,
+                                action_type: "Ascend".to_string(),
+                                reason: "Not on stairs".to_string(),
+                            });
+                            
+                            new_actions.push(action);
                         }
                     } else {
                         new_actions.push(action);
@@ -2843,6 +2909,133 @@ impl DungeonSystem {
         ecs_world.resources.input_buffer.pending_actions = new_actions;
 
         SystemResult::Continue
+    }
+
+    /// Check and handle traps at a position with proper event publishing
+    pub fn check_and_trigger_trap(ecs_world: &mut ECSWorld, entity: Entity, pos: &Position) {
+        use crate::event_bus::GameEvent;
+
+        // Collect trap data first to avoid borrow conflicts
+        let mut trap_data: Option<(String, u32)> = None;
+
+        for (_, (trap_pos, tile)) in ecs_world.world.query::<(&Position, &Tile)>().iter() {
+            if trap_pos.x == pos.x && trap_pos.y == pos.y && trap_pos.z == pos.z {
+                if matches!(tile.terrain_type, TerrainType::Trap) {
+                    trap_data = Some(("尖刺陷阱".to_string(), 10)); // Simplified trap
+                    break;
+                }
+            }
+        }
+
+        if let Some((trap_type, damage)) = trap_data {
+            // Publish trap triggered event
+            ecs_world.publish_event(GameEvent::TrapTriggered {
+                entity: entity.id() as u32,
+                trap_type: trap_type.clone(),
+            });
+
+            // Apply trap damage (separate scope to avoid borrow conflicts)
+            {
+                if let Ok(mut stats) = ecs_world.world.get::<&mut Stats>(entity) {
+                    stats.hp = stats.hp.saturating_sub(damage);
+                }
+            }
+
+            // Publish damage event after stats update
+            ecs_world.publish_event(GameEvent::DamageDealt {
+                attacker: 0, // No attacker for environmental damage
+                victim: entity.id() as u32,
+                damage,
+                is_critical: false,
+            });
+
+            ecs_world
+                .resources
+                .game_state
+                .message_log
+                .push(format!("触发了{}，造成了 {} 点伤害", trap_type, damage));
+        }
+    }
+
+    /// Check and handle door opening with proper event publishing
+    pub fn check_and_open_door(ecs_world: &mut ECSWorld, entity: Entity, pos: &Position) -> bool {
+        use crate::event_bus::GameEvent;
+
+        // Find door at position and collect its entity ID first
+        let mut door_entity_opt: Option<hecs::Entity> = None;
+
+        for (door_ent, (door_pos, tile)) in
+            ecs_world.world.query::<(&Position, &Tile)>().iter()
+        {
+            if door_pos.x == pos.x && door_pos.y == pos.y && door_pos.z == pos.z {
+                if matches!(tile.terrain_type, TerrainType::Door) {
+                    door_entity_opt = Some(door_ent);
+                    break;
+                }
+            }
+        }
+
+        // Update the door if found
+        if let Some(door_ent) = door_entity_opt {
+            if let Ok(mut tile) = ecs_world.world.get::<&mut Tile>(door_ent) {
+                // Open the door
+                tile.is_passable = true;
+                tile.blocks_sight = false;
+            }
+
+            // Publish door opened event
+            ecs_world.publish_event(GameEvent::DoorOpened {
+                entity: entity.id() as u32,
+                x: pos.x,
+                y: pos.y,
+                door_type: "木门".to_string(),
+            });
+
+            ecs_world
+                .resources
+                .game_state
+                .message_log
+                .push("打开了门".to_string());
+
+            return true;
+        }
+
+        false
+    }
+
+    /// Get terrain-based energy cost for movement at a position
+    pub fn get_terrain_energy_cost(world: &World, pos: &Position) -> u32 {
+        use crate::turn_system::energy_costs;
+
+        // Find terrain at position
+        for (_, (tile_pos, tile)) in world.query::<(&Position, &Tile)>().iter() {
+            if tile_pos.x == pos.x && tile_pos.y == pos.y && tile_pos.z == pos.z {
+                return energy_costs::terrain_movement_cost(&tile.terrain_type);
+            }
+        }
+
+        // Default to normal cost if no tile found
+        energy_costs::FULL_ACTION
+    }
+
+    /// Handle environmental hazards (fire, gas, etc.) at a position
+    pub fn process_environmental_effects(ecs_world: &mut ECSWorld, _entity: Entity, pos: &Position) {
+        // Check for special terrain types that cause damage or effects
+        for (_, (tile_pos, tile)) in ecs_world.world.query::<(&Position, &Tile)>().iter() {
+            if tile_pos.x == pos.x && tile_pos.y == pos.y && tile_pos.z == pos.z {
+                match tile.terrain_type {
+                    TerrainType::Water => {
+                        // Water might cause slowdown (already handled by terrain cost)
+                        // Could add wet status effect here
+                    }
+                    TerrainType::Barrel => {
+                        // Barrels could explode or provide cover
+                        // Implementation depends on game design
+                    }
+                    _ => {}
+                }
+            }
+        }
     }
 
     /// Generate a basic dungeon level
