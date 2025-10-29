@@ -3,7 +3,7 @@ pub mod ecs;
 pub mod event_bus;
 pub mod game_loop;
 pub mod input;
-pub mod render; // 新增：模块化渲染组件
+pub mod render; // 模块化渲染组件
 pub mod renderer;
 pub mod systems;
 pub mod turn_system;
@@ -35,12 +35,12 @@ fn main() -> anyhow::Result<()> {
     enable_raw_mode().context("Failed to enable raw mode")?;
     execute!(io::stdout(), EnterAlternateScreen).context("Failed to enter alternate screen")?;
 
-    // Initialize the new ECS-based renderer and input source
+    // 初始化基于 ECS 的渲染器和输入源
     let renderer = RatatuiRenderer::new()?;
     let input_source = ConsoleInput::new();
     let clock = GameClock::new(16); // ~60 FPS
 
-    // Initialize and run the game loop
+    // 初始化并运行游戏循环
     let mut game_loop = GameLoop::new(renderer, input_source, clock);
     game_loop.initialize()?;
     game_loop.run()?;
