@@ -43,7 +43,7 @@ criterion = { version = "0.5", features = ["html_reports"] }
 proptest = "1.5"
 pretty_assertions = "1.4"
 
-# Benchmark configuration (currently disabled pending API updates)
+# 基准测试配置（目前因 API 更新而禁用）
 # [[bench]]
 # name = "turn_pipeline_bench"
 # harness = false

@@ -1,6 +1,6 @@
 // src/combat/src/lib.rs
 
-use rand::Rng; // 添加这个导入以修复 random_bool 和 random_range 错误
+use rand::Rng; // 修复 random_bool 和 random_range 错误的导入
 
 pub mod boss;
 pub mod combat_manager;
@@ -31,27 +31,27 @@ pub struct AttackParams<'a, T: Combatant, U: Combatant> {
     pub attacker_fov_range: u32,
 }
 
-/// Handles combat interactions between entities
+/// 处理实体间的战斗交互
 pub struct Combat;
 
-/// Combat configuration constants (balanced to match Shattered PD values)
+/// 战斗配置常量（平衡以匹配 Shattered PD 数值）
 mod constants {
-    pub const BASE_HIT_CHANCE: f32 = 0.8; // Base hit chance
-    pub const MIN_HIT_CHANCE: f32 = 0.05; // Minimum possible hit chance
-    pub const MAX_HIT_CHANCE: f32 = 0.95; // Maximum possible hit chance
-    pub const CRIT_MULTIPLIER: f32 = 1.5; // Critical damage multiplier
-    pub const BASE_CRIT_CHANCE: f32 = 0.1; // Base critical chance
-    pub const DEFENSE_CAP: f32 = 0.8; // Maximum damage reduction from defense
-    pub const MIN_DAMAGE: u32 = 1; // Minimum damage dealt
-    pub const SURPRISE_ATTACK_MODIFIER: f32 = 2.0; // Damage bonus for surprise attacks (2x damage)
+    pub const BASE_HIT_CHANCE: f32 = 0.8; // 基础命中率
+    pub const MIN_HIT_CHANCE: f32 = 0.05; // 最小命中率
+    pub const MAX_HIT_CHANCE: f32 = 0.95; // 最大命中率
+    pub const CRIT_MULTIPLIER: f32 = 1.5; // 暴击伤害倍数
+    pub const BASE_CRIT_CHANCE: f32 = 0.1; // 基础暴击率
+    pub const DEFENSE_CAP: f32 = 0.8; // 防御减伤上限
+    pub const MIN_DAMAGE: u32 = 1; // 最小伤害
+    pub const SURPRISE_ATTACK_MODIFIER: f32 = 2.0; // 潜行攻击伤害加成（2倍伤害）
 }
 
 impl Combat {
-    /// Engage in combat between two combatants (player vs enemy or enemy vs player)
+    /// 在两个战斗者之间进行战斗（玩家对敌人或敌人对玩家）
     pub fn engage<T: Combatant, U: Combatant>(
         attacker: &mut T,
         defender: &mut U,
-        is_ambush: bool, // Whether this is an ambush attack
+        is_ambush: bool, // 是否为潜行攻击
     ) -> CombatResult {
         Self::engage_with_ids(attacker, attacker.id(), defender, defender.id(), is_ambush)
     }
@@ -81,13 +81,13 @@ impl Combat {
         )
     }
 
-    /// Engage in combat between two combatants with explicit IDs (for event bus purposes)
+    /// 使用显式 ID 在两个战斗者之间进行战斗（用于事件总线目的）
     pub fn engage_with_ids<T: Combatant, U: Combatant>(
         attacker: &mut T,
         attacker_id: u32,
         defender: &mut U,
         defender_id: u32,
-        is_ambush: bool, // Whether this is an ambush attack
+        is_ambush: bool, // 是否为潜行攻击
     ) -> CombatResult {
         let mut result = CombatResult::new();
 
@@ -97,7 +97,7 @@ impl Combat {
             defender: defender_id,
         });
 
-        // Attacker's turn (with potential ambush bonus)
+        // 攻击者回合（可能有潜行加成）
         if is_ambush {
             result.log(format!("Ambush by {}!", attacker.name()));
             // 发布潜行攻击事件

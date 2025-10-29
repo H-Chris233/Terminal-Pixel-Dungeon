@@ -1,9 +1,7 @@
-//! Game loop orchestrating the deterministic phase pipeline described in
-//! `docs/turn_system.md`.
+//! 游戏循环，协调 `docs/turn_system.md` 中描述的确定性阶段管道。
 //!
-//! Besides running systems, the loop bridges turn-state transitions to
-//! `GameEvent` notifications and gates AI processing based on the energy
-//! scheduler.
+//! 除了运行系统外，循环还将回合状态转换桥接到 `GameEvent` 通知，
+//! 并基于能量调度器控制 AI 处理。
 
 use crate::core::GameEngine;
 use crate::ecs::*;
@@ -16,7 +14,7 @@ use anyhow;
 use save::{AutoSave, SaveSystem};
 use std::time::Duration;
 
-/// Main game loop that runs the ECS systems in order
+/// 主游戏循环，按顺序运行 ECS 系统
 pub struct GameLoop<R: Renderer, I: InputSource, C: Clock> {
     pub game_engine: GameEngine,
     pub ecs_world: ECSWorld,
@@ -31,8 +29,8 @@ pub struct GameLoop<R: Renderer, I: InputSource, C: Clock> {
 
 impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> GameLoop<R, I, C> {
     pub fn new(renderer: R, input_source: I, clock: C) -> Self {
-        // The order of this vector defines the phase pipeline described in the
-        // turn-system documentation. Update `docs/turn_system.md` when adjusting it.
+        // 此向量的顺序定义了回合系统文档中描述的阶段管道。
+        // 调整时请更新 `docs/turn_system.md`。
         let systems: Vec<Box<dyn System>> = vec![
             Box::new(InputSystem),
             Box::new(MenuSystem), // 菜单系统（需要优先处理菜单动作）
@@ -73,7 +71,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
         }
     }
 
-    /// Initialize the game state
+    /// 初始化游戏状态
     pub fn initialize(&mut self) -> anyhow::Result<()> {
         self.renderer.init()?;
 
@@ -87,9 +85,9 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
         Ok(())
     }
 
-    /// Initialize starting entities
+    /// 初始化起始实体
     fn initialize_entities(&mut self) {
-        // Determine player start position from dungeon if available
+        // 如果可用，从地牢确定玩家起始位置
         let (start_x, start_y, start_z) =
             if let Some(dungeon) = crate::ecs::get_dungeon_clone(&self.ecs_world.world) {
                 let lvl = dungeon.current_level();
@@ -98,7 +96,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                 (10, 10, 0)
             };
 
-        // Add player entity
+        // 添加玩家实体
         let player_entity = self.ecs_world.world.spawn((
             Position::new(start_x, start_y, start_z),
             Actor {
@@ -146,7 +144,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                 max: 100,
                 regeneration_rate: 1,
             },
-            crate::ecs::Player, // Player marker component
+            crate::ecs::Player, // 玩家标记组件
         ));
 
         // Add some test enemies

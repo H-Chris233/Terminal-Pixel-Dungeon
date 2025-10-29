@@ -16,12 +16,11 @@ pub enum SystemResult {
     Error(String),
 }
 
-/// A deterministic phase that participates in the turn pipeline.
+/// 参与回合管道的确定性阶段。
 ///
-/// Systems are executed in the order defined by `game_loop::GameLoop::systems`;
-/// earlier systems have the opportunity to consume actions before later ones
-/// inspect the buffers. When adding new systems, keep the documentation in
-/// `docs/turn_system.md` up to date.
+/// 系统按 `game_loop::GameLoop::systems` 定义的顺序执行；
+/// 早期系统有机会在后续系统检查缓冲区之前消费动作。
+/// 添加新系统时，请保持 `docs/turn_system.md` 中的文档更新。
 pub trait System: Send {
     fn name(&self) -> &str;
     fn run(&mut self, world: &mut World, resources: &mut Resources) -> SystemResult;
@@ -59,8 +58,8 @@ impl System for TimeSystem {
     }
 }
 
-/// Resolves `PlayerAction::Move` entries and flags successful steps so the
-/// turn scheduler can deduct energy exactly once.
+/// 解析 `PlayerAction::Move` 条目并标记成功的步骤，
+/// 以便回合调度器可以精确扣除一次能量。
 pub struct MovementSystem;
 
 impl System for MovementSystem {
@@ -69,7 +68,7 @@ impl System for MovementSystem {
     }
 
     fn run(&mut self, world: &mut World, resources: &mut Resources) -> SystemResult {
-        // Process pending player actions for movement
+        // 处理待处理的玩家移动动作
         let actions_to_process = std::mem::take(&mut resources.input_buffer.pending_actions);
         let mut new_actions = Vec::new();
 
@@ -77,17 +76,17 @@ impl System for MovementSystem {
             match action {
                 PlayerAction::Move(direction) => {
                     if let Some(player_entity) = find_player_entity(world) {
-                        // Get player's current position
+                        // 获取玩家当前位置
                         let current_pos = match world.get::<&Position>(player_entity) {
                             Ok(pos) => pos.clone(),
                             Err(_) => {
-                                // Player has no position, add action back to queue and continue
+                                // 玩家没有位置，将动作添加回队列并继续
                                 new_actions.push(action);
                                 continue;
                             }
                         };
 
-                        // Calculate new position based on direction
+                        // 根据方向计算新位置
                         let new_pos = match direction {
                             Direction::North => {
                                 Position::new(current_pos.x, current_pos.y - 1, current_pos.z)

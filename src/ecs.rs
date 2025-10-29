@@ -1,4 +1,4 @@
-//! ECS (Entity Component System) implementation for the game.
+//! 游戏的 ECS（实体组件系统）实现
 
 use hecs::{Entity, World};
 use std::time::Duration;
@@ -22,7 +22,7 @@ use std::sync::{Arc, Mutex};
 // 例如，保存系统通过监听 GameSaved 事件来保存游戏状态
 // 而不是直接依赖其他模块的结构体
 
-/// Main ECS world container
+/// 主要的 ECS 世界容器
 pub struct ECSWorld {
     pub world: World,
     pub resources: Resources,
@@ -53,7 +53,7 @@ impl ECSWorld {
     pub fn generate_and_set_dungeon(&mut self, max_depth: usize, seed: u64) -> anyhow::Result<()> {
         let dungeon = dungeon::Dungeon::generate(max_depth, seed)?;
         set_dungeon_instance(&mut self.world, dungeon);
-        // Re-seed the RNG for consistent randomness across the game
+        // 重新初始化 RNG 以确保游戏中的随机性一致
         self.resources.rng = StdRng::seed_from_u64(seed);
         self.resources.game_state.depth = 1;
         Ok(())
@@ -242,42 +242,42 @@ impl ECSWorld {
             _ => {}
         }
 
-        // Handle achievements tracking for relevant events
+        // 处理相关事件的成就跟踪
         self.handle_achievement_event(event);
     }
 
-    /// Handle achievement tracking for game events
+    /// 处理游戏事件的成就跟踪
     fn handle_achievement_event(&mut self, event: &GameEvent) {
         let newly_unlocked = match event {
             GameEvent::EntityDied { .. } => {
-                // Track enemy kills
+                // 跟踪敌人击杀数
                 self.resources.achievements.on_kill()
             }
 
             GameEvent::LevelChanged { new_level, .. } => {
-                // Track depth reached
+                // 跟踪到达的深度
                 self.resources.achievements.on_level_change(*new_level)
             }
 
             GameEvent::ItemPickedUp { .. } => {
-                // Track items collected
+                // 跟踪收集的物品
                 self.resources.achievements.on_item_pickup()
             }
 
             GameEvent::TurnEnded { turn } => {
-                // Track turns survived
+                // 跟踪存活的回合数
                 self.resources.achievements.on_turn_end(*turn)
             }
 
             GameEvent::BossDefeated { .. } => {
-                // Track boss defeats
+                // 跟踪击败的 Boss
                 self.resources.achievements.on_boss_defeat()
             }
 
             _ => Vec::new(),
         };
 
-        // Publish unlock notifications
+        // 发布解锁通知
         for achievement_id in newly_unlocked {
             if let Some(achievement) = self.resources.achievements.get_achievement(achievement_id) {
                 let message = format!(
@@ -400,27 +400,27 @@ impl EventHandler for GameStateHandler {
     }
 }
 
-/// Global resources that are shared across systems
+/// 跨系统共享的全局资源
 pub struct Resources {
-    /// Game time tracking
+    /// 游戏时间跟踪
     pub clock: GameClock,
 
-    /// Current game state
+    /// 当前游戏状态
     pub game_state: GameState,
 
-    /// Player input buffer
+    /// 玩家输入缓冲区
     pub input_buffer: InputBuffer,
 
-    /// Game configuration
+    /// 游戏配置
     pub config: GameConfig,
 
-    /// Random number generator state
+    /// 随机数生成器状态
     pub rng: StdRng,
 
-    /// Dungeon state marker entity (actual dungeon stored as a component)
+    /// 地牢状态标记实体（实际地牢存储为组件）
     pub dungeon: Option<hecs::Entity>,
 
-    /// Achievements manager
+    /// 成就管理器
     pub achievements: AchievementsManager,
 }
 
@@ -431,7 +431,7 @@ impl Default for Resources {
             game_state: GameState::default(),
             input_buffer: InputBuffer::default(),
             config: GameConfig::new(),
-            rng: StdRng::seed_from_u64(12345), // default seed
+            rng: StdRng::seed_from_u64(12345), // 默认种子
             dungeon: None,
             achievements: AchievementsManager::new(),
         }
@@ -439,7 +439,7 @@ impl Default for Resources {
 }
 
 impl Resources {
-    /// Create a new Resources with a specific seed
+    /// 使用特定种子创建新的 Resources
     pub fn with_seed(seed: u64) -> Self {
         Self {
             clock: GameClock::default(),
@@ -452,7 +452,7 @@ impl Resources {
         }
     }
 
-    /// Re-seed the RNG (useful for save/load)
+    /// 重新设置 RNG 种子（用于存档/读档）
     pub fn reseed_rng(&mut self, seed: u64) {
         self.rng = StdRng::seed_from_u64(seed);
     }
@@ -544,7 +544,7 @@ impl Default for GameOverReason {
 #[derive(Default)]
 pub struct InputBuffer {
     pub pending_actions: Vec<PlayerAction>,
-    /// Actions that were successfully completed this frame and need energy deduction
+    /// 本帧成功完成且需要扣除能量的动作
     pub completed_actions: Vec<PlayerAction>,
 }
 
@@ -611,16 +611,16 @@ impl GameConfig {
     }
 }
 
-// Player marker component
+// 玩家标记组件
 #[derive(Clone, Debug)]
 pub struct Player;
 
-// Basic Components
+// 基础组件
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Position {
     pub x: i32,
     pub y: i32,
-    pub z: i32, // dungeon level
+    pub z: i32, // 地牢层数
 }
 
 impl Position {
@@ -662,7 +662,7 @@ pub struct Renderable {
     pub symbol: char,
     pub fg_color: Color,
     pub bg_color: Option<Color>,
-    pub order: u8, // rendering order
+    pub order: u8, // 渲染顺序
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

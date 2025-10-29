@@ -1,251 +1,259 @@
-# Terminal Pixel Dungeon
+# 终端像素地牢（Terminal Pixel Dungeon）
 
-A terminal-based roguelike dungeon crawler inspired by Shattered Pixel Dungeon, built with Rust and ECS (Entity Component System) architecture. This game runs entirely in your terminal and features classic roguelike gameplay with turn-based combat, item collection, and dungeon exploration.
+一款基于终端的 Roguelike 地牢爬行游戏，灵感来自 Shattered Pixel Dungeon，使用 Rust 和 ECS（实体组件系统）架构构建。游戏完全在终端中运行，具备经典 Roguelike 玩法，包括回合制战斗、物品收集和地牢探索。
 
-## Table of Contents
-- [Features](#features)
-- [Architecture](#architecture)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Gameplay](#gameplay)
-- [Controls](#controls)
-- [Development](#development)
-- [Contributing](#contributing)
-- [License](#license)
+## 目录
+- [特性](#特性)
+- [架构](#架构)
+- [安装](#安装)
+- [使用](#使用)
+- [游戏玩法](#游戏玩法)
+- [操作控制](#操作控制)
+- [开发](#开发)
+- [贡献](#贡献)
+- [许可证](#许可证)
 
-## Features
+## 特性
 
-- **Terminal-based Interface**: Play the game directly in your terminal using `ratatui` for rendering
-- **ECS Architecture**: Entity-Component-System design for flexible and maintainable game logic
-- **Roguelike Elements**: Random dungeon generation, permadeath, and challenging enemies
-- **Turn-Based Combat**: Strategic combat system with energy management
-- **Item System**: Collect and use various items, weapons, and armor
-- **Field of View**: Advanced line-of-sight system for exploration
-- **AI System**: Enemy AI with different behaviors (aggressive, passive, etc.)
-- **Extensible Design**: Easy to add new systems, components, and entities
+- **基于终端的界面**：使用 `ratatui` 渲染，直接在终端中游玩
+- **ECS 架构**：实体-组件-系统设计，灵活且易维护的游戏逻辑
+- **Roguelike 元素**：随机地牢生成、永久死亡和具有挑战性的敌人
+- **回合制战斗**：具有能量管理的策略性战斗系统
+- **物品系统**：收集和使用各种物品、武器和护甲
+- **视野系统**：高级视线系统用于探索
+- **AI 系统**：具有不同行为的敌人 AI（激进、被动等）
+- **可扩展设计**：易于添加新系统、组件和实体
 
-## Architecture
+## 架构
 
-The game follows the ECS (Entity-Component-System) pattern:
+游戏遵循 ECS（实体-组件-系统）模式：
 
-### Components
-Components are plain data structures that represent properties of entities:
-- `Position`: x, y, z coordinates
-- `Actor`: Contains name and faction
-- `Renderable`: Visual properties like symbol and color
-- `Stats`: Health, attack, defense, etc.
-- `Inventory`: Item management
-- `Viewshed`: Field of view system
-- `Energy`: Turn-based movement system
-- `AI`: Enemy behavior
-- `Effects`: Active status effects
-- `Tile`: Terrain properties
+### 组件（Components）
+组件是表示实体属性的纯数据结构：
+- `Position`：x、y、z 坐标
+- `Actor`：包含名称和阵营
+- `Renderable`：视觉属性，如符号和颜色
+- `Stats`：生命值、攻击、防御等
+- `Inventory`：物品管理
+- `Viewshed`：视野系统
+- `Energy`：基于回合的移动系统
+- `AI`：敌人行为
+- `Effects`：激活的状态效果
+- `Tile`：地形属性
 
-### Entities
-Entities are collections of components that represent game objects like:
-- Player character
-- Enemies (goblins, etc.)
-- Items (potions, weapons, etc.)
-- Dungeon tiles (walls, floors, stairs)
+### 实体（Entities）
+实体是组件的集合，表示游戏对象，如：
+- 玩家角色
+- 敌人（哥布林等）
+- 物品（药水、武器等）
+- 地牢瓦片（墙壁、地板、楼梯）
 
-### Systems
-Systems contain the game logic and operate on entities with specific component combinations:
-- `MovementSystem`: Handles entity movement and collision
-- `AISystem`: Processes enemy AI behavior
-- `CombatSystem`: Processes combat interactions
-- `FOVSystem`: Calculates field of view for entities
-- `EffectSystem`: Manages active effects and status conditions
-- `EnergySystem`: Manages turn scheduling based on energy
-- `InventorySystem`: Handles item management
-- `RenderingSystem`: Prepares data for rendering
-- `InputSystem`: Processes player input
-- `TimeSystem`: Manages game time progression
-- `DungeonSystem`: Manages dungeon generation and level management
+### 系统（Systems）
+系统包含游戏逻辑，操作具有特定组件组合的实体：
+- `MovementSystem`：处理实体移动和碰撞
+- `AISystem`：处理敌人 AI 行为
+- `CombatSystem`：处理战斗交互
+- `FOVSystem`：计算实体的视野
+- `EffectSystem`：管理激活的效果和状态条件
+- `EnergySystem`：基于能量管理回合调度
+- `InventorySystem`：处理物品管理
+- `RenderingSystem`：为渲染准备数据
+- `InputSystem`：处理玩家输入
+- `TimeSystem`：管理游戏时间进程
+- `DungeonSystem`：管理地牢生成和关卡管理
 
-For a detailed breakdown of the energy-driven turn scheduler, phase order, and extension points, see [docs/turn_system.md](docs/turn_system.md).
+有关能量驱动的回合调度器、阶段顺序和扩展点的详细说明，请参阅 [docs/turn_system.md](docs/turn_system.md)。
 
-## Installation
+## 安装
 
-### Prerequisites
-- [Rust](https://www.rust-lang.org/tools/install) (latest stable version)
+### 前置要求
+- [Rust](https://www.rust-lang.org/tools/install)（最新稳定版本）
 - Git
-- A terminal that supports UTF-8 characters
+- 支持 UTF-8 字符的终端
 
-### Building from Source
+### 从源码构建
 
-1. Clone the repository:
+1. 克隆仓库：
 ```bash
 git clone https://github.com/your-username/terminal-pixel-dungeon.git
 cd terminal-pixel-dungeon
 ```
 
-2. Build the project:
+2. 构建项目：
 ```bash
 cargo build --release
 ```
 
-3. Run the game:
+3. 运行游戏：
 ```bash
 cargo run
 ```
 
-## Usage
+## 使用
 
-The game is currently in development and not fully playable yet. You can explore the ECS architecture and contribute to the development process. To run the current build:
+游戏目前正在开发中，尚未完全可玩。您可以探索 ECS 架构并参与开发过程。要运行当前版本：
 
 ```bash
 cargo run --release
 ```
 
-## Gameplay
+## 游戏玩法
 
-### Core Mechanics
-- **Turn-Based Movement**: Each action takes time based on your energy level
-- **Field of Vision**: Only visible tiles are rendered, creating atmosphere and strategy
-- **Item Management**: Collect, use, and manage various items in your inventory
-- **Combat System**: Strategic turn-based combat with attack, defense, and accuracy mechanics
-- **Enemy AI**: Different enemy types with unique behaviors and strategies
-- **Dungeon Progression**: Explore multiple levels with increasing difficulty
+### 核心机制
+- **回合制移动**：每个动作根据您的能量水平消耗时间
+- **视野**：仅渲染可见的瓦片，营造氛围和策略
+- **物品管理**：在您的库存中收集、使用和管理各种物品
+- **战斗系统**：具有攻击、防御和准确度机制的策略性回合制战斗
+- **敌人 AI**：具有独特行为和策略的不同敌人类型
+- **地牢推进**：探索难度递增的多个关卡
 
-### Character Progression
-- Gain experience and level up
-- Improve stats over time
-- Find better equipment as you descend deeper
+### 角色成长
+- 获得经验并升级
+- 随时间改善属性
+- 深入地牢时发现更好的装备
 
-## Controls
+## 操作控制
 
-The game uses vi-keys and numpad for movement:
+游戏使用 vi 键和数字键盘进行移动：
 
-| Key | Action |
+| 按键 | 动作 |
 |-----|--------|
-| `k`, `↑` | Move North |
-| `j`, `↓` | Move South |
-| `h`, `←` | Move West |
-| `l`, `→` | Move East |
-| `y`, `7` | Move Northwest |
-| `u`, `9` | Move Northeast |
-| `b`, `1` | Move Southwest |
-| `n`, `3` | Move Southeast |
-| `.` | Wait/Skip turn |
-| `>` | Descend stairs |
-| `<` | Ascend stairs |
-| `Shift+K/J/H/L/Y/U/B/N` | Attack in direction |
-| `1-9` | Use item from inventory |
-| `d` | Drop item |
-| `q` | Quit game |
+| `k`、`↑` | 向北移动 |
+| `j`、`↓` | 向南移动 |
+| `h`、`←` | 向西移动 |
+| `l`、`→` | 向东移动 |
+| `y`、`7` | 向西北移动 |
+| `u`、`9` | 向东北移动 |
+| `b`、`1` | 向西南移动 |
+| `n`、`3` | 向东南移动 |
+| `.` | 等待/跳过回合 |
+| `>` | 下楼梯 |
+| `<` | 上楼梯 |
+| `Shift+K/J/H/L/Y/U/B/N` | 向某方向攻击 |
+| `1-9` | 使用库存中的物品 |
+| `d` | 丢弃物品 |
+| `q` | 退出游戏 |
 
-### Game States
-- **Running**: Normal gameplay
-- **Paused**: Temporary pause
-- **Game Over**: When the player dies
-- **Victory**: When the player wins
+### 游戏状态
+- **运行中**：正常游戏
+- **暂停**：临时暂停
+- **游戏结束**：当玩家死亡时
+- **胜利**：当玩家获胜时
 
-## Development
+## 开发
 
-### Project Structure
+### 项目结构
 
 ```
 ├── src/
-│   ├── ecs.rs          # ECS framework and core components
-│   ├── systems.rs      # Game systems implementation
-│   ├── game_loop.rs    # Main game loop
-│   ├── renderer.rs     # Terminal rendering with ratatui
-│   ├── input.rs        # Input handling and event processing
-│   └── main.rs         # Entry point
-├── Cargo.toml          # Project dependencies and configuration
-├── README.md           # This file
-└── LICENSE             # Project license
+│   ├── ecs.rs          # ECS 框架和核心组件
+│   ├── systems.rs      # 游戏系统实现
+│   ├── game_loop.rs    # 主游戏循环
+│   ├── renderer.rs     # 使用 ratatui 进行终端渲染
+│   ├── input.rs        # 输入处理和事件处理
+│   ├── main.rs         # 入口点
+│   ├── combat/         # 战斗系统模块
+│   ├── dungeon/        # 地牢生成模块
+│   ├── hero/           # 英雄系统模块
+│   ├── items/          # 物品系统模块
+│   ├── save/           # 存档系统模块
+│   ├── error/          # 错误处理模块
+│   └── achievements/   # 成就系统模块
+├── docs/               # 详细文档
+├── Cargo.toml          # 项目依赖和配置
+├── README.md           # 本文件
+└── LICENSE             # 项目许可证
 ```
 
-### ECS and Modular Architecture
+### ECS 和模块化架构
 
-The project combines ECS (Entity-Component-System) architecture with a modular crate structure:
+项目结合了 ECS（实体-组件-系统）架构和模块化 crate 结构：
 
-- **ECS Implementation**: Built on top of `hecs` for flexible game entity management
-- **Modular Design**: Separate crates for different game systems (combat, dungeon, hero, etc.)
-- **Core Integration**: Central `core` module to coordinate ECS and modular systems
-- **Benefits**:
-  - Decoupled game logic
-  - Flexible entity composition
-  - Efficient system execution
-  - Clear module boundaries
-  - Easy testing and maintenance
+- **ECS 实现**：基于 `hecs` 构建，实现灵活的游戏实体管理
+- **模块化设计**：为不同的游戏系统（战斗、地牢、英雄等）提供独立的 crate
+- **核心集成**：中央 `core` 模块协调 ECS 和模块化系统
+- **优势**：
+  - 解耦的游戏逻辑
+  - 灵活的实体组合
+  - 高效的系统执行
+  - 清晰的模块边界
+  - 易于测试和维护
 
-### Rendering
+### 渲染
 
-The game uses `ratatui` for terminal rendering, providing:
-- Responsive terminal UI
-- Customizable layouts
-- Color and style support
-- Widget-based rendering
+游戏使用 `ratatui` 进行终端渲染，提供：
+- 响应式终端 UI
+- 可自定义的布局
+- 颜色和样式支持
+- 基于小部件的渲染
 
-### Input Handling
+### 输入处理
 
-Input is managed through the `crossterm` crate, providing:
-- Cross-platform terminal support
-- Real-time input detection
-- Event-based input processing
+输入通过 `crossterm` crate 管理，提供：
+- 跨平台终端支持
+- 实时输入检测
+- 基于事件的输入处理
 
-## Contributing
+## 贡献
 
-We welcome contributions to Terminal Pixel Dungeon! Here's how you can help:
+我们欢迎为终端像素地牢做出贡献！以下是您可以提供帮助的方式：
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Ensure your code follows the project's style and conventions
-5. Add or update tests as needed
-6. Commit your changes (`git commit -m 'Add amazing feature'`)
-7. Push to the branch (`git push origin feature/amazing-feature`)
-8. Open a Pull Request
+1. Fork 仓库
+2. 创建功能分支（`git checkout -b feature/amazing-feature`）
+3. 进行更改
+4. 确保您的代码遵循项目的风格和约定
+5. 根据需要添加或更新测试
+6. 提交更改（`git commit -m '添加惊人的功能'`）
+7. 推送到分支（`git push origin feature/amazing-feature`）
+8. 打开 Pull Request
 
-### Development Guidelines
+### 开发指南
 
-- Follow Rust best practices and idioms
-- Use `rustfmt` to format your code
-- Write meaningful commit messages
-- Add documentation for new features
-- Write tests for new functionality
-- Ensure all tests pass before submitting
+- 遵循 Rust 最佳实践和惯用法
+- 使用 `rustfmt` 格式化您的代码
+- 编写有意义的提交消息
+- 为新功能添加文档
+- 为新功能编写测试
+- 在提交之前确保所有测试通过
 
-### Areas Needing Contributions
+### 需要贡献的领域
 
-- **Game Mechanics**: Implementing missing gameplay features
-- **Dungeon Generation**: Creating interesting and varied dungeon layouts
-- **Balance**: Tuning stats, items, and enemy difficulty
-- **Art and Text**: Descriptions, flavor text, and game lore
-- **Bug Fixes**: Identifying and resolving issues
-- **Performance**: Optimizing systems for better performance
-- **Features**: Adding new items, abilities, and content
+- **游戏机制**：实现缺失的游戏功能
+- **地牢生成**：创建有趣且多样的地牢布局
+- **平衡**：调整属性、物品和敌人难度
+- **艺术和文本**：描述、风味文本和游戏传说
+- **错误修复**：识别和解决问题
+- **性能**：优化系统以获得更好的性能
+- **功能**：添加新物品、能力和内容
 
-## License
+## 许可证
 
-This project is licensed under the terms found in the [LICENSE](LICENSE) file.
+本项目根据 [LICENSE](LICENSE) 文件中的条款获得许可。
 
-## Acknowledgments
+## 致谢
 
-- Inspired by [Shattered Pixel Dungeon](https://shatteredpixel.com/)
-- Built with [Rust](https://www.rust-lang.org/)
-- Uses [ratatui](https://github.com/ratatui-org/ratatui) for terminal UI
-- Uses [crossterm](https://github.com/crossterm-rs/crossterm) for cross-platform terminal manipulation
-- Uses [hecs](https://github.com/Ralith/hecs) for ECS architecture
+- 灵感来自 [Shattered Pixel Dungeon](https://shatteredpixel.com/)
+- 使用 [Rust](https://www.rust-lang.org/) 构建
+- 使用 [ratatui](https://github.com/ratatui-org/ratatui) 实现终端 UI
+- 使用 [crossterm](https://github.com/crossterm-rs/crossterm) 实现跨平台终端操作
+- 使用 [hecs](https://github.com/Ralith/hecs) 实现 ECS 架构
 
-## Roadmap
+## 路线图
 
-- [ ] Implement full combat system
-- [ ] Design and implement dungeon generation
-- [ ] Add more enemy types and AI behaviors
-- [ ] Implement item discovery and identification systems
-- [ ] Create multiple dungeon levels
-- [ ] Add character classes and abilities
-- [ ] Implement save/load functionality
-- [ ] Add more items and equipment types
-- [ ] Balance game mechanics
-- [ ] Create a fully playable demo version
+- [ ] 实现完整的战斗系统
+- [ ] 设计和实现地牢生成
+- [ ] 添加更多敌人类型和 AI 行为
+- [ ] 实现物品发现和识别系统
+- [ ] 创建多个地牢关卡
+- [ ] 添加角色职业和能力
+- [ ] 实现保存/加载功能
+- [ ] 添加更多物品和装备类型
+- [ ] 平衡游戏机制
+- [ ] 创建完全可玩的演示版本
 
-## Support
+## 支持
 
-If you encounter any issues or have questions about the project, please open an issue in the GitHub repository.
+如果您遇到任何问题或对项目有疑问，请在 GitHub 仓库中提交 issue。
 
 ---
-*Terminal Pixel Dungeon - A Rust-based terminal roguelike inspired by Shattered Pixel Dungeon*
+*终端像素地牢 - 一个基于 Rust 的终端 Roguelike 游戏，灵感来自 Shattered Pixel Dungeon*
