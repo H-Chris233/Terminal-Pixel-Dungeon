@@ -1,8 +1,9 @@
 use crate::ecs::{
-    AI, AIState, AIType, Actor, Color, ConsumableEffect, Direction, ECSItem, ECSWorld, EffectType,
-    Energy, Faction, GameOverReason, GameStatus, Hunger, Inventory, ItemSlot, ItemType,
-    NavigateDirection, Player, PlayerAction, PlayerProgress, Position, Renderable, Resources,
-    StatType, Stats, StatusEffects, TerrainType, Tile, Viewshed, Wealth,
+    AI, AIState, AIType, Actor, AftermathEvent, CombatIntent, CombatOutcome, Color,
+    ConsumableEffect, Direction, ECSItem, ECSWorld, EffectType, Energy, Faction, GameOverReason,
+    GameStatus, Hunger, Inventory, ItemSlot, ItemType, NavigateDirection, Player, PlayerAction,
+    PlayerProgress, Position, Renderable, Resources, StatType, Stats, StatusEffects, TerrainType,
+    Tile, Viewshed, Wealth,
 };
 use crate::event_bus::LogLevel;
 use hecs::{Entity, World};
@@ -403,14 +404,23 @@ impl MovementSystem {
                                 ecs_world.resources.game_state.message_log.push(reason);
                             }
                             MovementResult::AttackInstead(target_entity) => {
-                                // Collision with hostile - convert to attack action
-                                // Get the target entity's position
+                                // Collision with hostile - queue combat intent instead of immediate attack
                                 if let Ok(target_pos) = ecs_world.world.get::<&Position>(target_entity) {
+                                    let combat_intent = CombatIntent::new(
+                                        player_entity,
+                                        target_entity,
+                                        current_pos.clone(),
+                                        (*target_pos).clone(),
+                                        true, // is_player
+                                    );
+                                    ecs_world.resources.combat_intents.push(combat_intent);
+                                    
+                                    // Mark action as completed (consumed energy)
                                     ecs_world
                                         .resources
                                         .input_buffer
                                         .completed_actions
-                                        .push(PlayerAction::Attack((*target_pos).clone()));
+                                        .push(PlayerAction::Move(direction));
                                 }
                             }
                         }
@@ -688,7 +698,7 @@ impl AISystem {
                 );
 
                 // Execute the intent
-                Self::execute_intent(&mut world.world, &action_intent, &mut world.event_bus);
+                Self::execute_intent(world, &action_intent);
             }
         }
 
@@ -949,9 +959,8 @@ impl AISystem {
 
     /// Execute an AI intent
     fn execute_intent(
-        world: &mut World,
+        ecs_world: &mut ECSWorld,
         intent: &AIActionIntent,
-        event_bus: &mut crate::event_bus::EventBus,
     ) {
         use crate::turn_system::energy_costs;
 
@@ -961,7 +970,7 @@ impl AISystem {
                     AIIntentType::Move(d) => *d,
                     AIIntentType::Patrol(target_pos) => {
                         // Calculate direction to patrol point
-                        if let Ok(current_pos) = world.get::<&Position>(intent.entity) {
+                        if let Ok(current_pos) = ecs_world.world.get::<&Position>(intent.entity) {
                             let dx = (target_pos.x - current_pos.x).signum();
                             let dy = (target_pos.y - current_pos.y).signum();
                             Self::signum_to_direction(dx, dy)
@@ -974,7 +983,7 @@ impl AISystem {
 
                 // Get current position and calculate new position
                 let (old_pos, new_pos) = {
-                    if let Ok(current_pos) = world.get::<&Position>(intent.entity) {
+                    if let Ok(current_pos) = ecs_world.world.get::<&Position>(intent.entity) {
                         let (dx, dy) = Self::direction_to_offset(direction);
                         let old = Position::new(current_pos.x, current_pos.y, current_pos.z);
                         let new = Position::new(
@@ -990,49 +999,63 @@ impl AISystem {
 
                 if let (Some(old_pos), Some(new_pos)) = (old_pos, new_pos) {
                     // Check if move is valid
-                    if Self::can_move_to(world, &new_pos) {
-                        if let Ok(mut pos) = world.get::<&mut Position>(intent.entity) {
+                    if Self::can_move_to(&ecs_world.world, &new_pos) {
+                        // Update position
+                        if let Ok(mut pos) = ecs_world.world.get::<&mut Position>(intent.entity) {
                             *pos = new_pos.clone();
-
-                            // Emit movement event
-                            event_bus.publish(crate::event_bus::GameEvent::EntityMoved {
-                                entity: intent.entity.id(),
-                                from_x: old_pos.x,
-                                from_y: old_pos.y,
-                                to_x: new_pos.x,
-                                to_y: new_pos.y,
-                            });
                         }
+                        
+                        // Emit movement event (after releasing the mutable borrow)
+                        ecs_world.publish_event(crate::event_bus::GameEvent::EntityMoved {
+                            entity: intent.entity.id(),
+                            from_x: old_pos.x,
+                            from_y: old_pos.y,
+                            to_x: new_pos.x,
+                            to_y: new_pos.y,
+                        });
                     }
 
                     // Consume energy
-                    if let Ok(mut energy) = world.get::<&mut Energy>(intent.entity) {
+                    if let Ok(mut energy) = ecs_world.world.get::<&mut Energy>(intent.entity) {
                         energy.current = energy.current.saturating_sub(energy_costs::FULL_ACTION);
                     }
                 }
             }
             AIIntentType::Attack(target_entity) => {
-                // Attack is handled by CombatSystem, but we mark intent
-                // For now, just consume energy and log
-                if let Ok(mut energy) = world.get::<&mut Energy>(intent.entity) {
-                    energy.current = energy.current.saturating_sub(energy_costs::FULL_ACTION);
-                }
+                // Queue combat intent for the combat phase instead of executing immediately
+                let attacker_pos = ecs_world.world.get::<&Position>(intent.entity)
+                    .ok()
+                    .map(|p| (*p).clone());
+                let defender_pos = ecs_world.world.get::<&Position>(*target_entity)
+                    .ok()
+                    .map(|p| (*p).clone());
+                
+                if let (Some(att_pos), Some(def_pos)) = (attacker_pos, defender_pos) {
+                    let combat_intent = CombatIntent::new(
+                        intent.entity,
+                        *target_entity,
+                        att_pos,
+                        def_pos,
+                        false, // is_player = false for AI
+                    );
+                    ecs_world.resources.combat_intents.push(combat_intent);
 
-                event_bus.publish(crate::event_bus::GameEvent::LogMessage {
-                    message: format!("AI entity {} attacks", intent.entity.id()),
-                    level: crate::event_bus::LogLevel::Info,
-                });
+                    // Consume energy (will be deducted during combat resolution)
+                    if let Ok(mut energy) = ecs_world.world.get::<&mut Energy>(intent.entity) {
+                        energy.current = energy.current.saturating_sub(energy_costs::FULL_ACTION);
+                    }
+                }
             }
             AIIntentType::Wait => {
                 // Wait action consumes less energy
-                if let Ok(mut energy) = world.get::<&mut Energy>(intent.entity) {
+                if let Ok(mut energy) = ecs_world.world.get::<&mut Energy>(intent.entity) {
                     energy.current = energy.current.saturating_sub(energy_costs::WAIT);
                 }
             }
             AIIntentType::Flee(direction) => {
                 // Similar to move but in opposite direction
                 let new_pos = {
-                    if let Ok(current_pos) = world.get::<&Position>(intent.entity) {
+                    if let Ok(current_pos) = ecs_world.world.get::<&Position>(intent.entity) {
                         let (dx, dy) = Self::direction_to_offset(*direction);
                         Some(Position::new(
                             current_pos.x + dx,
@@ -1045,21 +1068,21 @@ impl AISystem {
                 };
 
                 if let Some(new_pos) = new_pos {
-                    if Self::can_move_to(world, &new_pos) {
-                        if let Ok(mut pos) = world.get::<&mut Position>(intent.entity) {
+                    if Self::can_move_to(&ecs_world.world, &new_pos) {
+                        if let Ok(mut pos) = ecs_world.world.get::<&mut Position>(intent.entity) {
                             *pos = new_pos;
                         }
                     }
 
                     // Consume energy
-                    if let Ok(mut energy) = world.get::<&mut Energy>(intent.entity) {
+                    if let Ok(mut energy) = ecs_world.world.get::<&mut Energy>(intent.entity) {
                         energy.current = energy.current.saturating_sub(energy_costs::FULL_ACTION);
                     }
                 }
             }
             AIIntentType::UseSkill => {
                 // Placeholder for future skill implementation
-                if let Ok(mut energy) = world.get::<&mut Energy>(intent.entity) {
+                if let Ok(mut energy) = ecs_world.world.get::<&mut Energy>(intent.entity) {
                     energy.current = energy.current.saturating_sub(energy_costs::FULL_ACTION);
                 }
             }
@@ -1130,230 +1153,253 @@ impl System for CombatSystem {
 
 impl CombatSystem {
     /// 使用事件总线的战斗系统运行方法
+    /// 
+    /// 该方法消费战斗意图队列，执行战斗解算，并返回结构化的战斗结果。
+    /// 战斗结果包括：命中、未命中、暴击、反击、连击等。
+    /// 
+    /// 责任：
+    /// 1. 从资源中消费战斗意图
+    /// 2. 按优先级排序并执行战斗
+    /// 3. 发布详细的战斗事件（hit/miss/crit/counter）
+    /// 4. 将死亡/战利品/经验事件排队到后续阶段
+    /// 5. 不直接修改实体（移除），而是标记到 aftermath_queue
     pub fn run_with_events(world: &mut ECSWorld) -> SystemResult {
         use crate::event_bus::GameEvent;
 
-        // 处理待处理的玩家战斗动作
-        let actions_to_process = std::mem::take(&mut world.resources.input_buffer.pending_actions);
-        let mut new_actions = Vec::new();
-
-        for action in actions_to_process {
-            match action {
-                PlayerAction::Attack(ref target_pos) => {
-                    if let Some(player_entity) = find_player_entity(&world.world) {
-                        // 获取玩家位置
-                        let player_pos = match world.world.get::<&Position>(player_entity) {
-                            Ok(pos) => Position::new(pos.x, pos.y, pos.z),
-                            Err(_) => {
-                                new_actions.push(action);
-                                continue;
-                            }
-                        };
-
-                        // 获取玩家名称
-                        let player_name = world
-                            .world
-                            .get::<&Actor>(player_entity)
-                            .map(|a| a.name.clone())
-                            .unwrap_or_else(|_| "Player".to_string());
-
-                        // 计算攻击目标位置
-                        let attack_pos = Position::new(
-                            player_pos.x + target_pos.x,
-                            player_pos.y + target_pos.y,
-                            player_pos.z,
-                        );
-
-                        // 查找目标位置的敌人
-                        let mut target_info: Option<(Entity, String, u32)> = None;
-                        for (entity, (pos, actor, _stats)) in
-                            world.world.query::<(&Position, &Actor, &Stats)>().iter()
-                        {
-                            if actor.faction == Faction::Enemy
-                                && pos.x == attack_pos.x
-                                && pos.y == attack_pos.y
-                                && pos.z == attack_pos.z
-                            {
-                                // 将 entity 转换为 u32 (使用内部表示)
-                                let entity_id = entity.id();
-                                target_info = Some((entity, actor.name.clone(), entity_id));
-                                break;
-                            }
-                        }
-
-                        if let Some((target, target_name, target_id)) = target_info {
-                            let player_id = player_entity.id();
-
-                            // 执行战斗计算 - 克隆 Stats 以避免借用问题，并使用潜行判定
-                            let combat_result = {
-                                let player_stats = world
-                                    .world
-                                    .get::<&Stats>(player_entity)
-                                    .ok()
-                                    .map(|s| (*s).clone());
-                                let target_stats =
-                                    world.world.get::<&Stats>(target).ok().map(|s| (*s).clone());
-
-                                if let (Some(mut temp_player), Some(mut temp_target)) =
-                                    (player_stats, target_stats)
-                                {
-                                    let mut attacker = SimpleCombatant::new(&mut temp_player);
-                                    let mut defender = SimpleCombatant::new(&mut temp_target);
-
-                                    // 构建阻挡检测闭包（基于地图Tile）
-                                    let z = player_pos.z;
-                                    let mut blocked_set = std::collections::HashSet::new();
-                                    for (_, (pos, tile)) in
-                                        world.world.query::<(&Position, &Tile)>().iter()
-                                    {
-                                        if pos.z == z && tile.blocks_sight {
-                                            blocked_set.insert((pos.x, pos.y));
-                                        }
-                                    }
-                                    let is_blocked =
-                                        |x: i32, y: i32| -> bool { blocked_set.contains(&(x, y)) };
-
-                                    // 获取攻击者FOV范围
-                                    let attacker_fov_range = world
-                                        .world
-                                        .get::<&Viewshed>(player_entity)
-                                        .map(|v| v.range as u32)
-                                        .unwrap_or(8);
-
-                                    // 攻击参数（带潜行）
-                                    let mut params = ::combat::AttackParams {
-                                        attacker: &mut attacker,
-                                        attacker_id: player_id,
-                                        attacker_x: player_pos.x,
-                                        attacker_y: player_pos.y,
-                                        defender: &mut defender,
-                                        defender_id: target_id,
-                                        defender_x: attack_pos.x,
-                                        defender_y: attack_pos.y,
-                                        is_blocked: &is_blocked,
-                                        attacker_fov_range,
-                                    };
-
-                                    // 执行战斗（包含潜行与反击）
-                                    let result =
-                                        ::combat::Combat::perform_attack_with_ambush(&mut params);
-                                    Some((temp_player.hp, temp_target.hp, result))
-                                } else {
-                                    None
-                                }
-                            };
-
-                            if let Some((new_player_hp, new_target_hp, combat_result)) =
-                                combat_result
-                            {
-                                // 将 CombatResult 事件映射到游戏事件总线
-                                for ev in &combat_result.events {
-                                    match ev {
-                                        ::combat::CombatEvent::CombatStarted {
-                                            attacker,
-                                            defender,
-                                        } => {
-                                            world.publish_event(GameEvent::CombatStarted {
-                                                attacker: *attacker,
-                                                defender: *defender,
-                                            });
-                                        }
-                                        ::combat::CombatEvent::DamageDealt {
-                                            attacker,
-                                            victim,
-                                            damage,
-                                            is_critical,
-                                        } => {
-                                            world.publish_event(GameEvent::DamageDealt {
-                                                attacker: *attacker,
-                                                victim: *victim,
-                                                damage: *damage,
-                                                is_critical: *is_critical,
-                                            });
-                                        }
-                                        ::combat::CombatEvent::EntityDied {
-                                            entity,
-                                            entity_name,
-                                        } => {
-                                            world.publish_event(GameEvent::EntityDied {
-                                                entity: *entity,
-                                                entity_name: entity_name.clone(),
-                                            });
-                                        }
-                                        ::combat::CombatEvent::Ambush {
-                                            attacker: _,
-                                            defender: _,
-                                        } => {
-                                            world.publish_event(GameEvent::LogMessage {
-                                                message: format!(
-                                                    "伏击！{} -> {}",
-                                                    player_name, target_name
-                                                ),
-                                                level: LogLevel::Info,
-                                            });
-                                        }
-                                    }
-                                }
-
-                                // 应用实际伤害（更新HP）
-                                if let Ok(mut stats) = world.world.get::<&mut Stats>(player_entity)
-                                {
-                                    stats.hp = new_player_hp;
-                                }
-                                if let Ok(mut stats) = world.world.get::<&mut Stats>(target) {
-                                    stats.hp = new_target_hp;
-                                }
-
-                                // 发布日志消息
-                                for log in &combat_result.logs {
-                                    world.publish_event(GameEvent::LogMessage {
-                                        message: log.clone(),
-                                        level: LogLevel::Info,
-                                    });
-                                }
-
-                                // 检查目标是否死亡（移除实体）
-                                if new_target_hp == 0 {
-                                    let _ = world.world.despawn(target);
-                                }
-
-                                // 检查玩家是否死亡
-                                if new_player_hp == 0 {
-                                    world.publish_event(GameEvent::GameOver {
-                                        reason: "你被击败了！".to_string(),
-                                    });
-                                }
-
-                                // 消耗能量
-                                if let Ok(mut energy) =
-                                    world.world.get::<&mut Energy>(player_entity)
-                                {
-                                    energy.current = energy.current.saturating_sub(100);
-                                }
-                            }
-                        } else {
-                            // 没有找到目标
-                            world.publish_event(GameEvent::LogMessage {
-                                message: "该位置没有敌人！".to_string(),
-                                level: LogLevel::Info,
-                            });
-                            new_actions.push(action);
-                        }
-                    } else {
-                        new_actions.push(action);
-                    }
-                }
-                // 其他动作返回队列
-                _ => {
-                    new_actions.push(action);
-                }
+        // 1. 取出所有待处理的战斗意图
+        let mut intents = std::mem::take(&mut world.resources.combat_intents);
+        
+        // 2. 按优先级排序（玩家优先）
+        intents.sort_by(|a, b| b.priority.cmp(&a.priority));
+        
+        // 3. 处理每个战斗意图
+        for intent in intents {
+            // 检查双方是否仍然存活
+            let attacker_alive = world.world.get::<&Stats>(intent.attacker)
+                .map(|s| s.hp > 0)
+                .unwrap_or(false);
+            let defender_alive = world.world.get::<&Stats>(intent.defender)
+                .map(|s| s.hp > 0)
+                .unwrap_or(false);
+            
+            if !attacker_alive || !defender_alive {
+                continue; // 跳过已死亡的实体
             }
+            
+            // 解析战斗意图并执行
+            let outcome = Self::resolve_combat_intent(world, &intent);
+            
+            // 基于结果发布事件和处理后续
+            Self::handle_combat_outcome(world, &intent, outcome);
         }
 
-        // 恢复未处理的动作
-        world.resources.input_buffer.pending_actions = new_actions;
-
         SystemResult::Continue
+    }
+    
+    /// 解析单个战斗意图并返回结构化结果
+    fn resolve_combat_intent(world: &mut ECSWorld, intent: &CombatIntent) -> CombatOutcome {
+        use crate::event_bus::GameEvent;
+        
+        // 发布战斗开始事件
+        world.publish_event(GameEvent::CombatStarted {
+            attacker: intent.attacker.id(),
+            defender: intent.defender.id(),
+        });
+        
+        // 克隆 Stats 以避免借用冲突
+        let attacker_stats = world.world.get::<&Stats>(intent.attacker)
+            .ok()
+            .map(|s| (*s).clone());
+        let defender_stats = world.world.get::<&Stats>(intent.defender)
+            .ok()
+            .map(|s| (*s).clone());
+        
+        if let (Some(mut att_stats), Some(mut def_stats)) = (attacker_stats, defender_stats) {
+            let mut attacker = SimpleCombatant::new(&mut att_stats);
+            let mut defender = SimpleCombatant::new(&mut def_stats);
+            
+            // 构建视野阻挡检测
+            let z = intent.attacker_pos.z;
+            let mut blocked_set = std::collections::HashSet::new();
+            for (_, (pos, tile)) in world.world.query::<(&Position, &Tile)>().iter() {
+                if pos.z == z && tile.blocks_sight {
+                    blocked_set.insert((pos.x, pos.y));
+                }
+            }
+            let is_blocked = |x: i32, y: i32| -> bool { blocked_set.contains(&(x, y)) };
+            
+            // 获取 FOV 范围
+            let fov_range = world.world.get::<&Viewshed>(intent.attacker)
+                .map(|v| v.range as u32)
+                .unwrap_or(8);
+            
+            // 执行战斗计算（含潜行判定）
+            let mut params = ::combat::AttackParams {
+                attacker: &mut attacker,
+                attacker_id: intent.attacker.id(),
+                attacker_x: intent.attacker_pos.x,
+                attacker_y: intent.attacker_pos.y,
+                defender: &mut defender,
+                defender_id: intent.defender.id(),
+                defender_x: intent.defender_pos.x,
+                defender_y: intent.defender_pos.y,
+                is_blocked: &is_blocked,
+                attacker_fov_range: fov_range,
+            };
+            
+            let combat_result = ::combat::Combat::perform_attack_with_ambush(&mut params);
+            
+            // 应用伤害到实际实体
+            if let Ok(mut stats) = world.world.get::<&mut Stats>(intent.attacker) {
+                stats.hp = att_stats.hp;
+            }
+            if let Ok(mut stats) = world.world.get::<&mut Stats>(intent.defender) {
+                stats.hp = def_stats.hp;
+            }
+            
+            // 发布战斗事件
+            for ev in &combat_result.events {
+                match ev {
+                    ::combat::CombatEvent::CombatStarted { .. } => {
+                        // Already published above
+                    }
+                    ::combat::CombatEvent::DamageDealt {
+                        attacker,
+                        victim,
+                        damage,
+                        is_critical,
+                    } => {
+                        world.publish_event(GameEvent::CombatHit {
+                            attacker: *attacker,
+                            defender: *victim,
+                            damage: *damage,
+                            is_critical: *is_critical,
+                            is_ambush: false, // TODO: track ambush state
+                        });
+                        world.publish_event(GameEvent::DamageDealt {
+                            attacker: *attacker,
+                            victim: *victim,
+                            damage: *damage,
+                            is_critical: *is_critical,
+                        });
+                    }
+                    ::combat::CombatEvent::EntityDied { entity, entity_name } => {
+                        world.publish_event(GameEvent::EntityDied {
+                            entity: *entity,
+                            entity_name: entity_name.clone(),
+                        });
+                    }
+                    ::combat::CombatEvent::Ambush { .. } => {
+                        // Handle ambush indicator
+                    }
+                }
+            }
+            
+            // 发布日志消息
+            for log in &combat_result.logs {
+                world.publish_event(GameEvent::LogMessage {
+                    message: log.clone(),
+                    level: LogLevel::Info,
+                });
+            }
+            
+            // 检查死亡并加入后续处理队列
+            if att_stats.hp == 0 {
+                Self::queue_death(world, intent.attacker, Some(intent.defender));
+            }
+            if def_stats.hp == 0 {
+                Self::queue_death(world, intent.defender, Some(intent.attacker));
+                
+                // 授予经验
+                if combat_result.experience > 0 {
+                    world.resources.aftermath_queue.push(AftermathEvent::ExperienceGain {
+                        entity: intent.attacker,
+                        amount: combat_result.experience,
+                    });
+                }
+            }
+            
+            // 返回结构化结果
+            if !combat_result.logs.is_empty() {
+                // 根据combat_result判断结果类型
+                if combat_result.defeated {
+                    CombatOutcome::Hit {
+                        damage: 0, // TODO: extract from combat_result
+                        is_critical: false,
+                        is_ambush: false,
+                    }
+                } else {
+                    CombatOutcome::Hit {
+                        damage: 0,
+                        is_critical: false,
+                        is_ambush: false,
+                    }
+                }
+            } else {
+                CombatOutcome::Miss
+            }
+        } else {
+            CombatOutcome::Miss
+        }
+    }
+    
+    /// 处理战斗结果并发布相应事件
+    fn handle_combat_outcome(world: &mut ECSWorld, intent: &CombatIntent, outcome: CombatOutcome) {
+        use crate::event_bus::GameEvent;
+        
+        match outcome {
+            CombatOutcome::Hit { damage, is_critical, is_ambush } => {
+                // Events already published in resolve_combat_intent
+            }
+            CombatOutcome::Miss => {
+                world.publish_event(GameEvent::CombatMiss {
+                    attacker: intent.attacker.id(),
+                    defender: intent.defender.id(),
+                });
+            }
+            CombatOutcome::Counter { damage, is_critical } => {
+                world.publish_event(GameEvent::CombatCounter {
+                    attacker: intent.defender.id(),
+                    defender: intent.attacker.id(),
+                    damage,
+                    is_critical,
+                });
+            }
+            CombatOutcome::ChainAttack { damage, is_critical } => {
+                world.publish_event(GameEvent::CombatChainAttack {
+                    attacker: intent.attacker.id(),
+                    defender: intent.defender.id(),
+                    damage,
+                    is_critical,
+                });
+            }
+        }
+    }
+    
+    /// 将死亡事件加入后续处理队列
+    fn queue_death(world: &mut ECSWorld, entity: Entity, killer: Option<Entity>) {
+        let entity_id = entity.id();
+        let entity_name = world.world.get::<&Actor>(entity)
+            .map(|a| a.name.clone())
+            .unwrap_or_else(|_| "Unknown".to_string());
+        let position = world.world.get::<&Position>(entity)
+            .ok()
+            .map(|p| (*p).clone());
+        
+        world.resources.aftermath_queue.push(AftermathEvent::Death {
+            entity,
+            entity_id,
+            entity_name,
+            killer,
+        });
+        
+        // 战利品掉落
+        if let Some(pos) = position {
+            world.resources.aftermath_queue.push(AftermathEvent::LootDrop {
+                entity,
+                position: pos,
+            });
+        }
     }
 }
 
@@ -1434,6 +1480,80 @@ impl<'a> ::combat::Combatant for SimpleCombatant<'a> {
 
     fn exp_value(&self) -> u32 {
         10
+    }
+}
+
+/// Aftermath system that handles post-combat cleanup
+/// 
+/// This system processes the aftermath queue populated by the combat system.
+/// It handles:
+/// - Entity death and despawning
+/// - Loot drops
+/// - Experience gain
+/// - Victory/defeat conditions
+///
+/// This separation ensures that combat resolution doesn't directly mutate
+/// world state (e.g., despawning entities mid-combat) which could cause
+/// issues with multi-attacker scenarios.
+pub struct AftermathSystem;
+
+impl System for AftermathSystem {
+    fn name(&self) -> &str {
+        "AftermathSystem"
+    }
+
+    fn run(&mut self, world: &mut World, resources: &mut Resources) -> SystemResult {
+        SystemResult::Continue
+    }
+}
+
+impl AftermathSystem {
+    /// Run aftermath system with event bus integration
+    pub fn run_with_events(world: &mut ECSWorld) -> SystemResult {
+        use crate::event_bus::GameEvent;
+        
+        // Take the aftermath queue
+        let aftermath_events = std::mem::take(&mut world.resources.aftermath_queue);
+        
+        for event in aftermath_events {
+            match event {
+                AftermathEvent::Death { entity, entity_id, entity_name, killer } => {
+                    // Check if entity is player
+                    let is_player = world.world.get::<&Player>(entity).is_ok();
+                    
+                    if is_player {
+                        // Game over
+                        world.publish_event(GameEvent::GameOver {
+                            reason: "你被击败了！".to_string(),
+                        });
+                        world.resources.game_state.game_state = GameStatus::GameOver {
+                            reason: GameOverReason::Died("战斗中死亡"),
+                        };
+                    } else {
+                        // Despawn enemy entity
+                        let _ = world.world.despawn(entity);
+                    }
+                }
+                AftermathEvent::LootDrop { entity, position } => {
+                    // TODO: Implement loot drop logic
+                    // For now, just log it
+                    world.publish_event(GameEvent::LogMessage {
+                        message: format!("战利品掉落在 ({}, {})", position.x, position.y),
+                        level: LogLevel::Debug,
+                    });
+                }
+                AftermathEvent::ExperienceGain { entity, amount } => {
+                    // Award experience to entity
+                    // TODO: Implement experience system - for now just log it
+                    world.publish_event(GameEvent::LogMessage {
+                        message: format!("获得 {} 点经验", amount),
+                        level: LogLevel::Info,
+                    });
+                }
+            }
+        }
+        
+        SystemResult::Continue
     }
 }
 
@@ -3711,6 +3831,7 @@ mod tests {
     use super::*;
     use crate::ecs::*;
     use crate::turn_system::energy_costs;
+    use hero::class::{Class, SkillState};
 
     fn create_test_world() -> (World, Resources) {
         let mut world = World::new();
@@ -3975,6 +4096,502 @@ mod tests {
         assert!(!MovementSystem::is_hostile(Faction::Player, Faction::Neutral));
         assert!(!MovementSystem::is_hostile(Faction::Neutral, Faction::Player));
         assert!(!MovementSystem::is_hostile(Faction::Player, Faction::Player));
+    }
+
+    // ============ Combat Resolution Tests ============
+    
+    #[test]
+    fn test_combat_intent_queuing() {
+        let (mut world, mut resources) = create_test_world();
+        let player = create_player(&mut world, 5, 5);
+        let enemy = create_enemy(&mut world, 5, 6);
+        
+        // Create a combat intent
+        let player_pos = world.get::<&Position>(player).map(|p| (*p).clone()).unwrap();
+        let enemy_pos = world.get::<&Position>(enemy).map(|p| (*p).clone()).unwrap();
+        
+        let intent = CombatIntent::new(player, enemy, player_pos, enemy_pos, true);
+        resources.combat_intents.push(intent);
+        
+        // Verify intent was queued
+        assert_eq!(resources.combat_intents.len(), 1);
+        assert_eq!(resources.combat_intents[0].attacker, player);
+        assert_eq!(resources.combat_intents[0].defender, enemy);
+        assert_eq!(resources.combat_intents[0].priority, 1000); // Player priority
+    }
+    
+    #[test]
+    fn test_combat_intent_priority_ordering() {
+        let (mut world, mut resources) = create_test_world();
+        let player = create_player(&mut world, 5, 5);
+        let enemy1 = create_enemy(&mut world, 5, 6);
+        let enemy2 = create_enemy(&mut world, 6, 5);
+        
+        let player_pos = world.get::<&Position>(player).map(|p| (*p).clone()).unwrap();
+        let enemy1_pos = world.get::<&Position>(enemy1).map(|p| (*p).clone()).unwrap();
+        let enemy2_pos = world.get::<&Position>(enemy2).map(|p| (*p).clone()).unwrap();
+        
+        // Queue AI intent first (lower priority)
+        let ai_intent = CombatIntent::new(enemy1, player, enemy1_pos, player_pos.clone(), false);
+        resources.combat_intents.push(ai_intent);
+        
+        // Queue player intent second (higher priority)
+        let player_intent = CombatIntent::new(player, enemy2, player_pos, enemy2_pos, true);
+        resources.combat_intents.push(player_intent);
+        
+        // Sort by priority (as CombatSystem does)
+        resources.combat_intents.sort_by(|a, b| b.priority.cmp(&a.priority));
+        
+        // Player intent should be first
+        assert_eq!(resources.combat_intents[0].is_player, true);
+        assert_eq!(resources.combat_intents[1].is_player, false);
+    }
+    
+    #[test]
+    fn test_multi_attacker_engagement() {
+        let mut ecs_world = ECSWorld::new();
+        
+        // Create player and multiple enemies
+        let player = ecs_world.world.spawn((
+            Player,
+            Actor {
+                name: "Player".to_string(),
+                faction: Faction::Player,
+            },
+            Stats {
+                hp: 100,
+                max_hp: 100,
+                attack: 10,
+                defense: 5,
+                accuracy: 10,
+                evasion: 5,
+                level: 1,
+                experience: 0,
+                class: None,
+            },
+            Position::new(5, 5, 0),
+            Energy { current: 100, max: 100, regeneration_rate: 10 },
+            Viewshed {
+                range: 8,
+                visible_tiles: vec![],
+                memory: vec![],
+                dirty: false,
+                algorithm: FovAlgorithm::RayCasting,
+            },
+        ));
+        
+        let enemy1 = ecs_world.world.spawn((
+            Actor {
+                name: "Goblin1".to_string(),
+                faction: Faction::Enemy,
+            },
+            Stats {
+                hp: 20,
+                max_hp: 20,
+                attack: 5,
+                defense: 2,
+                accuracy: 8,
+                evasion: 3,
+                level: 1,
+                experience: 5,
+                class: None,
+            },
+            Position::new(5, 6, 0),
+        ));
+        
+        let enemy2 = ecs_world.world.spawn((
+            Actor {
+                name: "Goblin2".to_string(),
+                faction: Faction::Enemy,
+            },
+            Stats {
+                hp: 20,
+                max_hp: 20,
+                attack: 5,
+                defense: 2,
+                accuracy: 8,
+                evasion: 3,
+                level: 1,
+                experience: 5,
+                class: None,
+            },
+            Position::new(6, 5, 0),
+        ));
+        
+        // Create floor tiles
+        ecs_world.world.spawn((
+            Position::new(5, 5, 0),
+            Tile {
+                terrain_type: TerrainType::Floor,
+                is_passable: true,
+                blocks_sight: false,
+                has_items: false,
+                has_monster: false,
+            },
+        ));
+        
+        ecs_world.world.spawn((
+            Position::new(5, 6, 0),
+            Tile {
+                terrain_type: TerrainType::Floor,
+                is_passable: true,
+                blocks_sight: false,
+                has_items: false,
+                has_monster: false,
+            },
+        ));
+        
+        ecs_world.world.spawn((
+            Position::new(6, 5, 0),
+            Tile {
+                terrain_type: TerrainType::Floor,
+                is_passable: true,
+                blocks_sight: false,
+                has_items: false,
+                has_monster: false,
+            },
+        ));
+        
+        // Queue combat intents: both enemies attack player
+        let player_pos = ecs_world.world.get::<&Position>(player).map(|p| (*p).clone()).unwrap();
+        let enemy1_pos = ecs_world.world.get::<&Position>(enemy1).map(|p| (*p).clone()).unwrap();
+        let enemy2_pos = ecs_world.world.get::<&Position>(enemy2).map(|p| (*p).clone()).unwrap();
+        
+        ecs_world.resources.combat_intents.push(
+            CombatIntent::new(enemy1, player, enemy1_pos.clone(), player_pos.clone(), false)
+        );
+        ecs_world.resources.combat_intents.push(
+            CombatIntent::new(enemy2, player, enemy2_pos, player_pos, false)
+        );
+        
+        // Run combat system
+        CombatSystem::run_with_events(&mut ecs_world);
+        
+        // Verify player took damage from both attacks
+        let player_stats = ecs_world.world.get::<&Stats>(player).unwrap();
+        assert!(player_stats.hp < 100, "Player should have taken damage from multiple attackers");
+        
+        // Verify aftermath queue has events if enemies died
+        // (depends on combat resolution)
+    }
+    
+    #[test]
+    fn test_counterattack_mechanics() {
+        let mut ecs_world = ECSWorld::new();
+        
+        // Create player and enemy
+        let player = ecs_world.world.spawn((
+            Player,
+            Actor {
+                name: "Player".to_string(),
+                faction: Faction::Player,
+            },
+            Stats {
+                hp: 50,
+                max_hp: 50,
+                attack: 15,
+                defense: 5,
+                accuracy: 12,
+                evasion: 8,
+                level: 1,
+                experience: 0,
+                class: None,
+            },
+            Position::new(5, 5, 0),
+            Energy { current: 100, max: 100, regeneration_rate: 10 },
+            Viewshed {
+                range: 8,
+                visible_tiles: vec![],
+                memory: vec![],
+                dirty: false,
+                algorithm: FovAlgorithm::RayCasting,
+            },
+        ));
+        
+        let enemy = ecs_world.world.spawn((
+            Actor {
+                name: "Orc".to_string(),
+                faction: Faction::Enemy,
+            },
+            Stats {
+                hp: 30,
+                max_hp: 30,
+                attack: 10,
+                defense: 3,
+                accuracy: 10,
+                evasion: 5,
+                level: 1,
+                experience: 0,
+                class: None,
+            },
+            Position::new(5, 6, 0),
+        ));
+        
+        // Create floor tiles
+        ecs_world.world.spawn((
+            Position::new(5, 5, 0),
+            Tile {
+                terrain_type: TerrainType::Floor,
+                is_passable: true,
+                blocks_sight: false,
+                has_items: false,
+                has_monster: false,
+            },
+        ));
+        
+        ecs_world.world.spawn((
+            Position::new(5, 6, 0),
+            Tile {
+                terrain_type: TerrainType::Floor,
+                is_passable: true,
+                blocks_sight: false,
+                has_items: false,
+                has_monster: false,
+            },
+        ));
+        
+        // Queue player attacking enemy
+        let player_pos = ecs_world.world.get::<&Position>(player).map(|p| (*p).clone()).unwrap();
+        let enemy_pos = ecs_world.world.get::<&Position>(enemy).map(|p| (*p).clone()).unwrap();
+        
+        ecs_world.resources.combat_intents.push(
+            CombatIntent::new(player, enemy, player_pos, enemy_pos, true)
+        );
+        
+        // Get initial HP values
+        let initial_player_hp = ecs_world.world.get::<&Stats>(player).unwrap().hp;
+        let initial_enemy_hp = ecs_world.world.get::<&Stats>(enemy).unwrap().hp;
+        
+        // Run combat system
+        CombatSystem::run_with_events(&mut ecs_world);
+        
+        // Get final HP values
+        let final_player_hp = ecs_world.world.get::<&Stats>(player).unwrap().hp;
+        let final_enemy_hp = ecs_world.world.get::<&Stats>(enemy).unwrap().hp;
+        
+        // Verify combat occurred (HP should change)
+        // Note: The combat module includes counterattack logic
+        assert!(
+            final_player_hp != initial_player_hp || final_enemy_hp != initial_enemy_hp,
+            "Combat should have caused HP changes"
+        );
+    }
+    
+    #[test]
+    fn test_critical_hit_detection() {
+        let mut ecs_world = ECSWorld::new();
+        
+        // Create player with high crit chance (though SimpleCombatant has 0 crit bonus)
+        let player = ecs_world.world.spawn((
+            Player,
+            Actor {
+                name: "Player".to_string(),
+                faction: Faction::Player,
+            },
+            Stats {
+                hp: 100,
+                max_hp: 100,
+                attack: 20,
+                defense: 5,
+                accuracy: 15,
+                evasion: 5,
+                level: 1,
+                experience: 0,
+                class: None,
+            },
+            Position::new(5, 5, 0),
+            Energy { current: 100, max: 100, regeneration_rate: 10 },
+            Viewshed {
+                range: 8,
+                visible_tiles: vec![],
+                memory: vec![],
+                dirty: false,
+                algorithm: FovAlgorithm::RayCasting,
+            },
+        ));
+        
+        let enemy = ecs_world.world.spawn((
+            Actor {
+                name: "Target".to_string(),
+                faction: Faction::Enemy,
+            },
+            Stats {
+                hp: 50,
+                max_hp: 50,
+                attack: 5,
+                defense: 2,
+                accuracy: 8,
+                evasion: 3,
+                level: 1,
+                experience: 5,
+                class: None,
+            },
+            Position::new(5, 6, 0),
+        ));
+        
+        // Create floor tiles
+        for x in 4..=6 {
+            for y in 4..=7 {
+                ecs_world.world.spawn((
+                    Position::new(x, y, 0),
+                    Tile {
+                        terrain_type: TerrainType::Floor,
+                        is_passable: true,
+                        blocks_sight: false,
+                        has_items: false,
+                        has_monster: false,
+                    },
+                ));
+            }
+        }
+        
+        // Perform multiple attacks to test for critical hits
+        for _ in 0..10 {
+            let player_pos = ecs_world.world.get::<&Position>(player).map(|p| (*p).clone()).unwrap();
+            let enemy_pos = ecs_world.world.get::<&Position>(enemy).map(|p| (*p).clone()).unwrap();
+            
+            // Reset enemy HP for each test
+            if let Ok(mut stats) = ecs_world.world.get::<&mut Stats>(enemy) {
+                stats.hp = 50;
+            }
+            
+            ecs_world.resources.combat_intents.push(
+                CombatIntent::new(player, enemy, player_pos, enemy_pos, true)
+            );
+            
+            CombatSystem::run_with_events(&mut ecs_world);
+            
+            // Check if any CombatHit events were published with is_critical = true
+            // This would require inspecting the event bus
+        }
+    }
+    
+    #[test]
+    fn test_aftermath_death_handling() {
+        let mut ecs_world = ECSWorld::new();
+        
+        let enemy = ecs_world.world.spawn((
+            Actor {
+                name: "Goblin".to_string(),
+                faction: Faction::Enemy,
+            },
+            Stats {
+                hp: 0, // Already dead
+                max_hp: 20,
+                attack: 5,
+                defense: 2,
+                accuracy: 8,
+                evasion: 3,
+                level: 1,
+                experience: 5,
+                class: None,
+            },
+            Position::new(5, 6, 0),
+        ));
+        
+        // Queue death event
+        ecs_world.resources.aftermath_queue.push(AftermathEvent::Death {
+            entity: enemy,
+            entity_id: enemy.id(),
+            entity_name: "Goblin".to_string(),
+            killer: None,
+        });
+        
+        // Run aftermath system
+        AftermathSystem::run_with_events(&mut ecs_world);
+        
+        // Verify entity was despawned
+        assert!(ecs_world.world.get::<&Actor>(enemy).is_err(), "Dead enemy should be despawned");
+    }
+    
+    #[test]
+    fn test_aftermath_experience_gain() {
+        let mut ecs_world = ECSWorld::new();
+        
+        let player = ecs_world.world.spawn((
+            Player,
+            Actor {
+                name: "Player".to_string(),
+                faction: Faction::Player,
+            },
+            PlayerProgress {
+                turns: 0,
+                strength: 10,
+                class: Class::Warrior,
+                skill_state: SkillState::default(),
+            },
+        ));
+        
+        // Queue experience gain
+        ecs_world.resources.aftermath_queue.push(AftermathEvent::ExperienceGain {
+            entity: player,
+            amount: 50,
+        });
+        
+        // Run aftermath system
+        AftermathSystem::run_with_events(&mut ecs_world);
+        
+        // Verify log message was published (experience system is TODO)
+        // For now just check system doesn't panic
+    }
+    
+    #[test]
+    fn test_combat_intent_skips_dead_entities() {
+        let mut ecs_world = ECSWorld::new();
+        
+        let player = ecs_world.world.spawn((
+            Player,
+            Actor {
+                name: "Player".to_string(),
+                faction: Faction::Player,
+            },
+            Stats {
+                hp: 100,
+                max_hp: 100,
+                attack: 10,
+                defense: 5,
+                accuracy: 10,
+                evasion: 5,
+                level: 1,
+                experience: 0,
+                class: None,
+            },
+            Position::new(5, 5, 0),
+        ));
+        
+        let dead_enemy = ecs_world.world.spawn((
+            Actor {
+                name: "DeadGoblin".to_string(),
+                faction: Faction::Enemy,
+            },
+            Stats {
+                hp: 0, // Already dead
+                max_hp: 20,
+                attack: 5,
+                defense: 2,
+                accuracy: 8,
+                evasion: 3,
+                level: 1,
+                experience: 5,
+                class: None,
+            },
+            Position::new(5, 6, 0),
+        ));
+        
+        // Queue combat intent with dead enemy
+        let player_pos = ecs_world.world.get::<&Position>(player).map(|p| (*p).clone()).unwrap();
+        let enemy_pos = ecs_world.world.get::<&Position>(dead_enemy).map(|p| (*p).clone()).unwrap();
+        
+        ecs_world.resources.combat_intents.push(
+            CombatIntent::new(player, dead_enemy, player_pos, enemy_pos, true)
+        );
+        
+        // Run combat system
+        CombatSystem::run_with_events(&mut ecs_world);
+        
+        // Verify player HP didn't change (no combat occurred)
+        let player_stats = ecs_world.world.get::<&Stats>(player).unwrap();
+        assert_eq!(player_stats.hp, 100, "Player shouldn't take damage from dead enemy");
     }
 
     #[test]

@@ -422,6 +422,12 @@ pub struct Resources {
 
     /// 成就管理器
     pub achievements: AchievementsManager,
+
+    /// 战斗意图队列
+    pub combat_intents: Vec<CombatIntent>,
+
+    /// 后续处理队列（死亡、战利品、经验）
+    pub aftermath_queue: Vec<AftermathEvent>,
 }
 
 impl Default for Resources {
@@ -434,6 +440,8 @@ impl Default for Resources {
             rng: StdRng::seed_from_u64(12345), // 默认种子
             dungeon: None,
             achievements: AchievementsManager::new(),
+            combat_intents: Vec::new(),
+            aftermath_queue: Vec::new(),
         }
     }
 }
@@ -449,6 +457,8 @@ impl Resources {
             rng: StdRng::seed_from_u64(seed),
             dungeon: None,
             achievements: AchievementsManager::new(),
+            combat_intents: Vec::new(),
+            aftermath_queue: Vec::new(),
         }
     }
 
@@ -592,6 +602,74 @@ pub enum Direction {
     NorthWest,
     SouthEast,
     SouthWest,
+}
+
+/// 战斗意图 - 在战斗阶段执行的攻击行为
+#[derive(Clone, Debug)]
+pub struct CombatIntent {
+    pub attacker: Entity,
+    pub defender: Entity,
+    pub attacker_pos: Position,
+    pub defender_pos: Position,
+    pub is_player: bool,
+    pub priority: u32, // 更高优先级先执行
+}
+
+impl CombatIntent {
+    pub fn new(
+        attacker: Entity,
+        defender: Entity,
+        attacker_pos: Position,
+        defender_pos: Position,
+        is_player: bool,
+    ) -> Self {
+        Self {
+            attacker,
+            defender,
+            attacker_pos,
+            defender_pos,
+            is_player,
+            priority: if is_player { 1000 } else { 100 },
+        }
+    }
+}
+
+/// 战斗结果类型
+#[derive(Clone, Debug)]
+pub enum CombatOutcome {
+    Hit {
+        damage: u32,
+        is_critical: bool,
+        is_ambush: bool,
+    },
+    Miss,
+    Counter {
+        damage: u32,
+        is_critical: bool,
+    },
+    ChainAttack {
+        damage: u32,
+        is_critical: bool,
+    },
+}
+
+/// 后续处理事件 - 在后续阶段处理的事件
+#[derive(Clone, Debug)]
+pub enum AftermathEvent {
+    Death {
+        entity: Entity,
+        entity_id: u32,
+        entity_name: String,
+        killer: Option<Entity>,
+    },
+    LootDrop {
+        entity: Entity,
+        position: Position,
+    },
+    ExperienceGain {
+        entity: Entity,
+        amount: u32,
+    },
 }
 
 #[derive(Default)]

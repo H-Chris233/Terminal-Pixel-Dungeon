@@ -26,10 +26,34 @@ pub enum GameEvent {
     // ===== 战斗事件 =====
     /// 战斗开始
     CombatStarted { attacker: u32, defender: u32 },
+    /// 攻击命中
+    CombatHit {
+        attacker: u32,
+        defender: u32,
+        damage: u32,
+        is_critical: bool,
+        is_ambush: bool,
+    },
+    /// 攻击未命中
+    CombatMiss { attacker: u32, defender: u32 },
     /// 造成伤害
     DamageDealt {
         attacker: u32,
         victim: u32,
+        damage: u32,
+        is_critical: bool,
+    },
+    /// 反击
+    CombatCounter {
+        attacker: u32,
+        defender: u32,
+        damage: u32,
+        is_critical: bool,
+    },
+    /// 连击
+    CombatChainAttack {
+        attacker: u32,
+        defender: u32,
         damage: u32,
         is_critical: bool,
     },
@@ -498,6 +522,10 @@ impl GameEvent {
         match self {
             GameEvent::EntityMoved { .. } => "EntityMoved",
             GameEvent::CombatStarted { .. } => "CombatStarted",
+            GameEvent::CombatHit { .. } => "CombatHit",
+            GameEvent::CombatMiss { .. } => "CombatMiss",
+            GameEvent::CombatCounter { .. } => "CombatCounter",
+            GameEvent::CombatChainAttack { .. } => "CombatChainAttack",
             GameEvent::DamageDealt { .. } => "DamageDealt",
             GameEvent::EntityDied { .. } => "EntityDied",
             GameEvent::StatusApplied { .. } => "StatusApplied",
