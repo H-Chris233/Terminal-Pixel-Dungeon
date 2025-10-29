@@ -1,3 +1,5 @@
+#![cfg(feature = "legacy-tests")]
+
 //! Test helpers and builders for creating ECS worlds with scripted turn sequences.
 //!
 //! This module provides utilities for setting up deterministic test scenarios

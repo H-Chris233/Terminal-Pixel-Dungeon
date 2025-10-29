@@ -4107,8 +4107,8 @@ mod tests {
         let enemy = create_enemy(&mut world, 5, 6);
         
         // Create a combat intent
-        let player_pos = world.get::<&Position>(player).unwrap().clone();
-        let enemy_pos = world.get::<&Position>(enemy).unwrap().clone();
+        let player_pos = world.get::<&Position>(player).map(|p| (*p).clone()).unwrap();
+        let enemy_pos = world.get::<&Position>(enemy).map(|p| (*p).clone()).unwrap();
         
         let intent = CombatIntent::new(player, enemy, player_pos, enemy_pos, true);
         resources.combat_intents.push(intent);
@@ -4127,9 +4127,9 @@ mod tests {
         let enemy1 = create_enemy(&mut world, 5, 6);
         let enemy2 = create_enemy(&mut world, 6, 5);
         
-        let player_pos = world.get::<&Position>(player).unwrap().clone();
-        let enemy1_pos = world.get::<&Position>(enemy1).unwrap().clone();
-        let enemy2_pos = world.get::<&Position>(enemy2).unwrap().clone();
+        let player_pos = world.get::<&Position>(player).map(|p| (*p).clone()).unwrap();
+        let enemy1_pos = world.get::<&Position>(enemy1).map(|p| (*p).clone()).unwrap();
+        let enemy2_pos = world.get::<&Position>(enemy2).map(|p| (*p).clone()).unwrap();
         
         // Queue AI intent first (lower priority)
         let ai_intent = CombatIntent::new(enemy1, player, enemy1_pos, player_pos.clone(), false);
@@ -4165,14 +4165,18 @@ mod tests {
                 defense: 5,
                 accuracy: 10,
                 evasion: 5,
+                level: 1,
+                experience: 0,
+                class: None,
             },
             Position::new(5, 5, 0),
             Energy { current: 100, max: 100, regeneration_rate: 10 },
             Viewshed {
-                visible_tiles: vec![],
                 range: 8,
+                visible_tiles: vec![],
+                memory: vec![],
                 dirty: false,
-                algorithm: crate::ecs::FOVAlgorithm::Bresenham,
+                algorithm: FovAlgorithm::RayCasting,
             },
         ));
         
@@ -4188,6 +4192,9 @@ mod tests {
                 defense: 2,
                 accuracy: 8,
                 evasion: 3,
+                level: 1,
+                experience: 5,
+                class: None,
             },
             Position::new(5, 6, 0),
         ));
@@ -4204,6 +4211,9 @@ mod tests {
                 defense: 2,
                 accuracy: 8,
                 evasion: 3,
+                level: 1,
+                experience: 5,
+                class: None,
             },
             Position::new(6, 5, 0),
         ));
@@ -4243,9 +4253,9 @@ mod tests {
         ));
         
         // Queue combat intents: both enemies attack player
-        let player_pos = ecs_world.world.get::<&Position>(player).unwrap().clone();
-        let enemy1_pos = ecs_world.world.get::<&Position>(enemy1).unwrap().clone();
-        let enemy2_pos = ecs_world.world.get::<&Position>(enemy2).unwrap().clone();
+        let player_pos = ecs_world.world.get::<&Position>(player).map(|p| (*p).clone()).unwrap();
+        let enemy1_pos = ecs_world.world.get::<&Position>(enemy1).map(|p| (*p).clone()).unwrap();
+        let enemy2_pos = ecs_world.world.get::<&Position>(enemy2).map(|p| (*p).clone()).unwrap();
         
         ecs_world.resources.combat_intents.push(
             CombatIntent::new(enemy1, player, enemy1_pos.clone(), player_pos.clone(), false)
@@ -4283,14 +4293,18 @@ mod tests {
                 defense: 5,
                 accuracy: 12,
                 evasion: 8,
+                level: 1,
+                experience: 0,
+                class: None,
             },
             Position::new(5, 5, 0),
             Energy { current: 100, max: 100, regeneration_rate: 10 },
             Viewshed {
-                visible_tiles: vec![],
                 range: 8,
+                visible_tiles: vec![],
+                memory: vec![],
                 dirty: false,
-                algorithm: crate::ecs::FOVAlgorithm::Bresenham,
+                algorithm: FovAlgorithm::RayCasting,
             },
         ));
         
@@ -4306,6 +4320,9 @@ mod tests {
                 defense: 3,
                 accuracy: 10,
                 evasion: 5,
+                level: 1,
+                experience: 0,
+                class: None,
             },
             Position::new(5, 6, 0),
         ));
@@ -4334,8 +4351,8 @@ mod tests {
         ));
         
         // Queue player attacking enemy
-        let player_pos = ecs_world.world.get::<&Position>(player).unwrap().clone();
-        let enemy_pos = ecs_world.world.get::<&Position>(enemy).unwrap().clone();
+        let player_pos = ecs_world.world.get::<&Position>(player).map(|p| (*p).clone()).unwrap();
+        let enemy_pos = ecs_world.world.get::<&Position>(enemy).map(|p| (*p).clone()).unwrap();
         
         ecs_world.resources.combat_intents.push(
             CombatIntent::new(player, enemy, player_pos, enemy_pos, true)
@@ -4378,14 +4395,18 @@ mod tests {
                 defense: 5,
                 accuracy: 15,
                 evasion: 5,
+                level: 1,
+                experience: 0,
+                class: None,
             },
             Position::new(5, 5, 0),
             Energy { current: 100, max: 100, regeneration_rate: 10 },
             Viewshed {
-                visible_tiles: vec![],
                 range: 8,
+                visible_tiles: vec![],
+                memory: vec![],
                 dirty: false,
-                algorithm: crate::ecs::FOVAlgorithm::Bresenham,
+                algorithm: FovAlgorithm::RayCasting,
             },
         ));
         
@@ -4401,6 +4422,9 @@ mod tests {
                 defense: 2,
                 accuracy: 8,
                 evasion: 3,
+                level: 1,
+                experience: 5,
+                class: None,
             },
             Position::new(5, 6, 0),
         ));
@@ -4423,8 +4447,8 @@ mod tests {
         
         // Perform multiple attacks to test for critical hits
         for _ in 0..10 {
-            let player_pos = ecs_world.world.get::<&Position>(player).unwrap().clone();
-            let enemy_pos = ecs_world.world.get::<&Position>(enemy).unwrap().clone();
+            let player_pos = ecs_world.world.get::<&Position>(player).map(|p| (*p).clone()).unwrap();
+            let enemy_pos = ecs_world.world.get::<&Position>(enemy).map(|p| (*p).clone()).unwrap();
             
             // Reset enemy HP for each test
             if let Ok(mut stats) = ecs_world.world.get::<&mut Stats>(enemy) {
@@ -4458,6 +4482,9 @@ mod tests {
                 defense: 2,
                 accuracy: 8,
                 evasion: 3,
+                level: 1,
+                experience: 5,
+                class: None,
             },
             Position::new(5, 6, 0),
         ));
@@ -4525,6 +4552,9 @@ mod tests {
                 defense: 5,
                 accuracy: 10,
                 evasion: 5,
+                level: 1,
+                experience: 0,
+                class: None,
             },
             Position::new(5, 5, 0),
         ));
@@ -4541,13 +4571,16 @@ mod tests {
                 defense: 2,
                 accuracy: 8,
                 evasion: 3,
+                level: 1,
+                experience: 5,
+                class: None,
             },
             Position::new(5, 6, 0),
         ));
         
         // Queue combat intent with dead enemy
-        let player_pos = ecs_world.world.get::<&Position>(player).unwrap().clone();
-        let enemy_pos = ecs_world.world.get::<&Position>(dead_enemy).unwrap().clone();
+        let player_pos = ecs_world.world.get::<&Position>(player).map(|p| (*p).clone()).unwrap();
+        let enemy_pos = ecs_world.world.get::<&Position>(dead_enemy).map(|p| (*p).clone()).unwrap();
         
         ecs_world.resources.combat_intents.push(
             CombatIntent::new(player, dead_enemy, player_pos, enemy_pos, true)
