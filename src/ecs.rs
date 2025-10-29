@@ -89,6 +89,8 @@ impl ECSWorld {
     }
 
     /// 处理核心游戏状态事件（更新 Resources）
+    /// 
+    /// 注意：此方法设计为向后兼容，能够处理新旧事件类型而不会panic
     fn handle_core_event(&mut self, event: &GameEvent) {
         match event {
             GameEvent::DamageDealt {
@@ -239,7 +241,167 @@ impl ECSWorld {
                     .push(format!("饥饿造成了 {} 点伤害", damage));
             }
 
-            _ => {}
+            // ===== 新增事件处理 =====
+
+            // 动作事件
+            GameEvent::ActionCompleted { action_type, success, .. } => {
+                if !success {
+                    self.resources
+                        .game_state
+                        .message_log
+                        .push(format!("动作 {} 执行失败", action_type));
+                }
+            }
+
+            GameEvent::ActionFailed { action_type, reason, .. } => {
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("动作 {} 失败：{}", action_type, reason));
+            }
+
+            // 高级战斗事件
+            GameEvent::CombatBlocked { blocked_damage, .. } => {
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("格挡了 {} 点伤害", blocked_damage));
+            }
+
+            GameEvent::CombatParried { parry_damage, .. } => {
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("招架反击造成 {} 点伤害", parry_damage));
+            }
+
+            GameEvent::CombatDodged { .. } => {
+                self.resources
+                    .game_state
+                    .message_log
+                    .push("完全闪避了攻击".to_string());
+            }
+
+            GameEvent::CombatGrazed { damage, .. } => {
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("擦伤造成 {} 点伤害", damage));
+            }
+
+            GameEvent::CombatLifesteal { healed, .. } => {
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("吸血恢复了 {} 点生命", healed));
+            }
+
+            GameEvent::CombatReflected { reflected_damage, .. } => {
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("反弹了 {} 点伤害", reflected_damage));
+            }
+
+            GameEvent::CombatShieldAbsorbed { damage_absorbed, shield_remaining, .. } => {
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("护盾吸收 {} 点伤害（剩余：{}）", damage_absorbed, shield_remaining));
+            }
+
+            // 状态生命周期事件
+            GameEvent::StatusStacked { status, new_intensity, .. } => {
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("{} 效果堆叠至 {} 层", status, new_intensity));
+            }
+
+            GameEvent::StatusRefreshed { status, duration, .. } => {
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("{} 效果刷新，持续 {} 回合", status, duration));
+            }
+
+            GameEvent::StatusResisted { status, .. } => {
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("抵抗了 {} 效果", status));
+            }
+
+            GameEvent::StatusImmune { status, .. } => {
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("免疫 {} 效果", status));
+            }
+
+            // 环境事件
+            GameEvent::DoorOpened { door_type, .. } => {
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("打开了{}", door_type));
+            }
+
+            GameEvent::SecretDiscovered { secret_type, .. } => {
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("发现了{}！", secret_type));
+            }
+
+            GameEvent::ChestOpened { loot_count, .. } => {
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("打开宝箱，获得 {} 件物品", loot_count));
+            }
+
+            GameEvent::ShrineActivated { shrine_type, effect, .. } => {
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("激活{}：{}", shrine_type, effect));
+            }
+
+            GameEvent::TrapDisarmed { trap_type, .. } => {
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("成功解除{}陷阱", trap_type));
+            }
+
+            GameEvent::ExplosionTriggered { damage, radius, .. } => {
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("爆炸！半径 {} 造成 {} 点伤害", radius, damage));
+            }
+
+            // UI事件（通常由UI层直接处理，这里记录日志用于调试）
+            GameEvent::UINotification { message, .. } => {
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(message.clone());
+            }
+
+            GameEvent::UIAlert { message, severity, .. } => {
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("[{}] {}", severity, message));
+            }
+
+            // 其他事件（静默处理，不产生日志）
+            _ => {
+                // 静默处理未匹配的事件，确保向后兼容性
+                // 新事件不会导致panic，旧存档也能正常加载
+            }
         }
 
         // 处理相关事件的成就跟踪

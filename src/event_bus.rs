@@ -5,10 +5,53 @@
 //! - 注册事件监听器
 //! - 按优先级处理事件
 //! - 使用中间件拦截和转换事件
+//! - 回合阶段感知的事件处理
+//! - 按类别分组的事件分类
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, BinaryHeap};
 use std::sync::{Arc, Mutex};
+use std::cmp::Ordering;
+
+/// 事件类别 - 用于事件分组和过滤
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum EventCategory {
+    /// 战斗相关事件
+    Combat,
+    /// 移动相关事件
+    Movement,
+    /// 状态效果相关事件
+    Status,
+    /// 物品相关事件
+    Items,
+    /// AI相关事件
+    AI,
+    /// 环境交互事件
+    Environment,
+    /// UI提示事件
+    UI,
+    /// 系统事件
+    System,
+    /// 回合阶段事件
+    TurnPhase,
+    /// 动作意图与结果
+    Action,
+}
+
+/// 回合阶段枚举 - 用于phase-aware事件处理
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum TurnPhase {
+    /// 输入阶段
+    Input,
+    /// 意图队列构建阶段
+    IntentQueue,
+    /// 动作解析阶段
+    Resolution,
+    /// 后续处理阶段（能量恢复、状态效果等）
+    Aftermath,
+    /// 任意阶段（处理器可在任何阶段运行）
+    Any,
+}
 
 /// 游戏事件定义 - 用于模块间解耦通信
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -110,6 +153,208 @@ pub enum GameEvent {
     },
     /// Boss 召唤小怪
     BossSummonedMinions { boss_entity: u32, minion_count: u32 },
+
+    // ===== 动作意图与结果事件 =====
+    /// 动作意图（动作排队前）
+    ActionIntended {
+        entity: u32,
+        action_type: String,
+        priority: u32,
+    },
+    /// 动作完成
+    ActionCompleted {
+        entity: u32,
+        action_type: String,
+        success: bool,
+    },
+    /// 动作失败
+    ActionFailed {
+        entity: u32,
+        action_type: String,
+        reason: String,
+    },
+    /// 动作取消
+    ActionCancelled {
+        entity: u32,
+        action_type: String,
+        reason: String,
+    },
+
+    // ===== 高级战斗结果事件 =====
+    /// 攻击被格挡
+    CombatBlocked {
+        attacker: u32,
+        defender: u32,
+        blocked_damage: u32,
+    },
+    /// 攻击被招架
+    CombatParried {
+        attacker: u32,
+        defender: u32,
+        parry_damage: u32, // 招架反击伤害
+    },
+    /// 攻击被闪避
+    CombatDodged {
+        attacker: u32,
+        defender: u32,
+    },
+    /// 擦伤攻击（部分伤害）
+    CombatGrazed {
+        attacker: u32,
+        defender: u32,
+        damage: u32,
+    },
+    /// 吸血效果
+    CombatLifesteal {
+        attacker: u32,
+        defender: u32,
+        damage: u32,
+        healed: u32,
+    },
+    /// 反弹伤害
+    CombatReflected {
+        attacker: u32,
+        defender: u32,
+        reflected_damage: u32,
+    },
+    /// 护盾吸收
+    CombatShieldAbsorbed {
+        entity: u32,
+        damage_absorbed: u32,
+        shield_remaining: u32,
+    },
+
+    // ===== 状态生命周期事件 =====
+    /// 状态效果堆叠
+    StatusStacked {
+        entity: u32,
+        status: String,
+        old_intensity: u8,
+        new_intensity: u8,
+    },
+    /// 状态效果刷新
+    StatusRefreshed {
+        entity: u32,
+        status: String,
+        duration: u32,
+    },
+    /// 状态效果抵抗
+    StatusResisted {
+        entity: u32,
+        status: String,
+        resist_chance: u8,
+    },
+    /// 状态效果免疫
+    StatusImmune {
+        entity: u32,
+        status: String,
+    },
+    /// 状态效果转移
+    StatusTransferred {
+        from_entity: u32,
+        to_entity: u32,
+        status: String,
+    },
+    /// 状态效果扩散
+    StatusSpread {
+        source_entity: u32,
+        target_entities: Vec<u32>,
+        status: String,
+    },
+
+    // ===== 环境触发事件 =====
+    /// 门被打开
+    DoorOpened {
+        entity: u32,
+        x: i32,
+        y: i32,
+        door_type: String,
+    },
+    /// 门被关闭
+    DoorClosed {
+        entity: u32,
+        x: i32,
+        y: i32,
+    },
+    /// 发现秘密
+    SecretDiscovered {
+        entity: u32,
+        x: i32,
+        y: i32,
+        secret_type: String,
+    },
+    /// 宝箱打开
+    ChestOpened {
+        entity: u32,
+        x: i32,
+        y: i32,
+        loot_count: u32,
+    },
+    /// 神龛激活
+    ShrineActivated {
+        entity: u32,
+        x: i32,
+        y: i32,
+        shrine_type: String,
+        effect: String,
+    },
+    /// 陷阱解除
+    TrapDisarmed {
+        entity: u32,
+        x: i32,
+        y: i32,
+        trap_type: String,
+    },
+    /// 地形改变
+    TerrainChanged {
+        x: i32,
+        y: i32,
+        old_terrain: String,
+        new_terrain: String,
+    },
+    /// 爆炸效果
+    ExplosionTriggered {
+        x: i32,
+        y: i32,
+        radius: u32,
+        damage: u32,
+    },
+
+    // ===== UI 提示事件 =====
+    /// UI 通知
+    UINotification {
+        message: String,
+        notification_type: String, // "info", "warning", "error", "success"
+        duration_ms: u32,
+    },
+    /// UI 警告
+    UIAlert {
+        message: String,
+        severity: String, // "low", "medium", "high", "critical"
+    },
+    /// 请求工具提示
+    TooltipRequested {
+        entity: Option<u32>,
+        x: i32,
+        y: i32,
+        context: String,
+    },
+    /// 高亮提示
+    HighlightRequested {
+        entities: Vec<u32>,
+        positions: Vec<(i32, i32)>,
+        highlight_type: String,
+        duration_ms: u32,
+    },
+    /// 动画请求
+    AnimationRequested {
+        animation_type: String,
+        start_x: i32,
+        start_y: i32,
+        end_x: i32,
+        end_y: i32,
+        duration_ms: u32,
+    },
 
     // ===== AI 事件 =====
     /// AI 做出决策
@@ -247,7 +492,7 @@ pub trait EventMiddleware: Send + Sync {
     }
 }
 
-/// 事件处理器 trait
+/// 事件处理器 trait - 支持phase-aware处理
 pub trait EventHandler: Send + Sync {
     /// 处理事件
     fn handle(&mut self, event: &GameEvent);
@@ -264,6 +509,11 @@ pub trait EventHandler: Send + Sync {
     fn should_handle(&self, event: &GameEvent) -> bool {
         true
     }
+
+    /// 声明处理器应在哪些回合阶段运行（默认Any - 所有阶段）
+    fn run_in_phases(&self) -> Vec<TurnPhase> {
+        vec![TurnPhase::Any]
+    }
 }
 
 /// 事件处理器包装器，包含优先级信息
@@ -278,27 +528,89 @@ struct MiddlewareEntry {
     priority: Priority,
 }
 
-/// 增强的事件总线 - 支持订阅模式和队列模式
+/// 优先级事件队列条目
+#[derive(Clone)]
+struct PriorityEventEntry {
+    event: GameEvent,
+    priority: Priority,
+    sequence: u64, // 序列号用于同优先级的FIFO排序
+}
+
+impl PriorityEventEntry {
+    fn new(event: GameEvent, priority: Priority, sequence: u64) -> Self {
+        Self {
+            event,
+            priority,
+            sequence,
+        }
+    }
+}
+
+// 实现Ord以支持BinaryHeap（最大堆，优先级高的先出）
+impl Ord for PriorityEventEntry {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // 首先比较优先级（数值小的优先级高）
+        match other.priority.cmp(&self.priority) {
+            Ordering::Equal => {
+                // 优先级相同时，序列号小的先处理（FIFO）
+                other.sequence.cmp(&self.sequence)
+            }
+            other_order => other_order,
+        }
+    }
+}
+
+impl PartialOrd for PriorityEventEntry {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Eq for PriorityEventEntry {}
+
+impl PartialEq for PriorityEventEntry {
+    fn eq(&self, other: &Self) -> bool {
+        self.priority == other.priority && self.sequence == other.sequence
+    }
+}
+
+/// 增强的事件总线 - 支持订阅模式、队列模式和phase-aware处理
 ///
 /// 设计思路：
 /// 1. 保留原有的队列模式（适合游戏循环）
 /// 2. 添加订阅者模式（适合模块解耦）
 /// 3. 支持事件优先级和过滤
+/// 4. 按回合阶段分组的事件队列
+/// 5. 防止递归发布的保护机制
 pub struct EventBus {
-    /// 当前帧的事件队列
+    /// 当前帧的事件队列（传统模式）
     events: Vec<GameEvent>,
     /// 下一帧的事件队列
     next_frame_events: Vec<GameEvent>,
+    /// 按阶段分组的优先级事件队列
+    phase_queues: HashMap<TurnPhase, BinaryHeap<PriorityEventEntry>>,
     /// 注册的事件处理器（按事件类型分组）
     handlers: HashMap<&'static str, Vec<HandlerEntry>>,
     /// 全局事件处理器（处理所有事件）
     global_handlers: Vec<HandlerEntry>,
+    /// 按阶段注册的处理器
+    phase_handlers: HashMap<TurnPhase, Vec<HandlerEntry>>,
     /// 事件中间件
     middlewares: Vec<MiddlewareEntry>,
     /// 事件历史（用于调试和回放）
     history: Vec<GameEvent>,
     /// 历史记录的最大长度
     max_history: usize,
+    /// 当前回合阶段
+    current_phase: TurnPhase,
+    /// 事件序列计数器（用于FIFO排序）
+    event_sequence: u64,
+    /// 递归发布深度计数器
+    publish_depth: usize,
+    /// 最大递归深度
+    max_publish_depth: usize,
+    /// 批处理缓冲区（用于防止递归发布）
+    batch_buffer: Vec<(GameEvent, Priority, TurnPhase)>,
 }
 
 impl EventBus {
@@ -308,14 +620,88 @@ impl EventBus {
 
     /// 创建一个指定历史记录大小的事件总线
     pub fn with_history_size(max_history: usize) -> Self {
+        let mut phase_queues = HashMap::new();
+        // 初始化所有阶段的队列
+        phase_queues.insert(TurnPhase::Input, BinaryHeap::new());
+        phase_queues.insert(TurnPhase::IntentQueue, BinaryHeap::new());
+        phase_queues.insert(TurnPhase::Resolution, BinaryHeap::new());
+        phase_queues.insert(TurnPhase::Aftermath, BinaryHeap::new());
+        phase_queues.insert(TurnPhase::Any, BinaryHeap::new());
+
         Self {
             events: Vec::new(),
             next_frame_events: Vec::new(),
+            phase_queues,
             handlers: HashMap::new(),
             global_handlers: Vec::new(),
+            phase_handlers: HashMap::new(),
             middlewares: Vec::new(),
             history: Vec::new(),
             max_history,
+            current_phase: TurnPhase::Input,
+            event_sequence: 0,
+            publish_depth: 0,
+            max_publish_depth: 10,
+            batch_buffer: Vec::new(),
+        }
+    }
+
+    /// 设置当前回合阶段
+    pub fn set_current_phase(&mut self, phase: TurnPhase) {
+        self.current_phase = phase;
+    }
+
+    /// 获取当前回合阶段
+    pub fn get_current_phase(&self) -> TurnPhase {
+        self.current_phase
+    }
+
+    /// 发布事件到指定阶段和优先级的队列
+    pub fn publish_to_phase(&mut self, event: GameEvent, priority: Priority, phase: TurnPhase) {
+        // 检查递归深度
+        if self.publish_depth >= self.max_publish_depth {
+            eprintln!(
+                "Warning: Maximum publish depth reached ({}), buffering event for batch processing",
+                self.max_publish_depth
+            );
+            self.batch_buffer.push((event, priority, phase));
+            return;
+        }
+
+        self.publish_depth += 1;
+
+        // 记录到历史
+        self.add_to_history(event.clone());
+
+        // 立即触发订阅者处理
+        self.dispatch_to_handlers(&event);
+
+        // 获取下一个序列号
+        let sequence = self.event_sequence;
+        self.event_sequence += 1;
+
+        // 添加到相应阶段的优先级队列
+        let entry = PriorityEventEntry::new(event.clone(), priority, sequence);
+        if let Some(queue) = self.phase_queues.get_mut(&phase) {
+            queue.push(entry);
+        }
+
+        // 也添加到传统队列以保持向后兼容
+        self.events.push(event);
+
+        self.publish_depth -= 1;
+
+        // 如果递归深度回到0，处理批处理缓冲区
+        if self.publish_depth == 0 {
+            self.flush_batch_buffer();
+        }
+    }
+
+    /// 刷新批处理缓冲区
+    fn flush_batch_buffer(&mut self) {
+        let batch = std::mem::take(&mut self.batch_buffer);
+        for (event, priority, phase) in batch {
+            self.publish_to_phase(event, priority, phase);
         }
     }
 
@@ -379,6 +765,72 @@ impl EventBus {
     pub fn clear(&mut self) {
         self.events.clear();
         self.next_frame_events.clear();
+        for queue in self.phase_queues.values_mut() {
+            queue.clear();
+        }
+        self.batch_buffer.clear();
+    }
+
+    /// 排空当前阶段的事件队列，返回按优先级排序的事件
+    pub fn drain_phase(&mut self, phase: TurnPhase) -> Vec<GameEvent> {
+        let mut events = Vec::new();
+        
+        // 排空指定阶段的队列
+        if let Some(queue) = self.phase_queues.get_mut(&phase) {
+            while let Some(entry) = queue.pop() {
+                events.push(entry.event);
+            }
+        }
+        
+        // 也排空Any阶段的队列（这些事件在所有阶段都应该处理）
+        if phase != TurnPhase::Any {
+            if let Some(any_queue) = self.phase_queues.get_mut(&TurnPhase::Any) {
+                while let Some(entry) = any_queue.pop() {
+                    events.push(entry.event);
+                }
+            }
+        }
+        
+        events
+    }
+
+    /// 处理当前阶段的所有事件（使用phase-aware handlers）
+    pub fn process_phase_events(&mut self, phase: TurnPhase) {
+        let events = self.drain_phase(phase);
+        
+        for event in events {
+            self.dispatch_to_phase_handlers(&event, phase);
+        }
+    }
+
+    /// 分发事件给phase-aware处理器
+    fn dispatch_to_phase_handlers(&mut self, event: &GameEvent, phase: TurnPhase) {
+        // 首先让中间件处理事件
+        if !self.run_middleware_before(event) {
+            return;
+        }
+
+        // 处理注册到此阶段的处理器
+        if let Some(handlers) = self.phase_handlers.get_mut(&phase) {
+            for entry in handlers {
+                if entry.handler.should_handle(event) {
+                    entry.handler.handle(event);
+                }
+            }
+        }
+
+        // 也处理注册到Any阶段的处理器
+        if phase != TurnPhase::Any {
+            if let Some(handlers) = self.phase_handlers.get_mut(&TurnPhase::Any) {
+                for entry in handlers {
+                    if entry.handler.should_handle(event) {
+                        entry.handler.handle(event);
+                    }
+                }
+            }
+        }
+
+        self.run_middleware_after(event);
     }
 
     // ========== 中间件 API（新增）==========
@@ -421,6 +873,32 @@ impl EventBus {
         // 按优先级排序
         self.global_handlers
             .sort_by(|a, b| a.priority.cmp(&b.priority));
+    }
+
+    /// 注册phase-aware事件处理器
+    pub fn subscribe_for_phase(&mut self, phase: TurnPhase, handler: Box<dyn EventHandler>) {
+        let priority = handler.priority();
+        let entry = HandlerEntry { handler, priority };
+
+        let handlers = self.phase_handlers.entry(phase).or_insert_with(Vec::new);
+        handlers.push(entry);
+
+        // 按优先级排序
+        handlers.sort_by(|a, b| a.priority.cmp(&b.priority));
+    }
+
+    /// 注册处理器到多个阶段（根据handler的run_in_phases声明）
+    /// 
+    /// 注意：由于无法克隆 Box<dyn EventHandler>，此方法只注册到第一个声明的阶段
+    /// 如果需要注册到多个阶段，请手动调用 subscribe_for_phase 多次
+    pub fn subscribe_with_phases(&mut self, handler: Box<dyn EventHandler>) {
+        let phases = handler.run_in_phases();
+        
+        // 简化版本：只注册到第一个声明的阶段
+        // 在实际使用中，调用者需要为每个阶段单独创建处理器实例
+        if let Some(&first_phase) = phases.first() {
+            self.subscribe_for_phase(first_phase, handler);
+        }
     }
 
     /// 分发事件给所有订阅者
@@ -562,6 +1040,137 @@ impl GameEvent {
             GameEvent::BossSummonedMinions { .. } => "BossSummonedMinions",
             GameEvent::StatusEffectTicked { .. } => "StatusEffectTicked",
             GameEvent::StatusEffectConflict { .. } => "StatusEffectConflict",
+            // New events
+            GameEvent::ActionIntended { .. } => "ActionIntended",
+            GameEvent::ActionCompleted { .. } => "ActionCompleted",
+            GameEvent::ActionFailed { .. } => "ActionFailed",
+            GameEvent::ActionCancelled { .. } => "ActionCancelled",
+            GameEvent::CombatBlocked { .. } => "CombatBlocked",
+            GameEvent::CombatParried { .. } => "CombatParried",
+            GameEvent::CombatDodged { .. } => "CombatDodged",
+            GameEvent::CombatGrazed { .. } => "CombatGrazed",
+            GameEvent::CombatLifesteal { .. } => "CombatLifesteal",
+            GameEvent::CombatReflected { .. } => "CombatReflected",
+            GameEvent::CombatShieldAbsorbed { .. } => "CombatShieldAbsorbed",
+            GameEvent::StatusStacked { .. } => "StatusStacked",
+            GameEvent::StatusRefreshed { .. } => "StatusRefreshed",
+            GameEvent::StatusResisted { .. } => "StatusResisted",
+            GameEvent::StatusImmune { .. } => "StatusImmune",
+            GameEvent::StatusTransferred { .. } => "StatusTransferred",
+            GameEvent::StatusSpread { .. } => "StatusSpread",
+            GameEvent::DoorOpened { .. } => "DoorOpened",
+            GameEvent::DoorClosed { .. } => "DoorClosed",
+            GameEvent::SecretDiscovered { .. } => "SecretDiscovered",
+            GameEvent::ChestOpened { .. } => "ChestOpened",
+            GameEvent::ShrineActivated { .. } => "ShrineActivated",
+            GameEvent::TrapDisarmed { .. } => "TrapDisarmed",
+            GameEvent::TerrainChanged { .. } => "TerrainChanged",
+            GameEvent::ExplosionTriggered { .. } => "ExplosionTriggered",
+            GameEvent::UINotification { .. } => "UINotification",
+            GameEvent::UIAlert { .. } => "UIAlert",
+            GameEvent::TooltipRequested { .. } => "TooltipRequested",
+            GameEvent::HighlightRequested { .. } => "HighlightRequested",
+            GameEvent::AnimationRequested { .. } => "AnimationRequested",
+        }
+    }
+
+    /// 获取事件的类别
+    pub fn category(&self) -> EventCategory {
+        match self {
+            // Combat events
+            GameEvent::CombatStarted { .. }
+            | GameEvent::CombatHit { .. }
+            | GameEvent::CombatMiss { .. }
+            | GameEvent::CombatCounter { .. }
+            | GameEvent::CombatChainAttack { .. }
+            | GameEvent::DamageDealt { .. }
+            | GameEvent::EntityDied { .. }
+            | GameEvent::CombatBlocked { .. }
+            | GameEvent::CombatParried { .. }
+            | GameEvent::CombatDodged { .. }
+            | GameEvent::CombatGrazed { .. }
+            | GameEvent::CombatLifesteal { .. }
+            | GameEvent::CombatReflected { .. }
+            | GameEvent::CombatShieldAbsorbed { .. } => EventCategory::Combat,
+
+            // Movement events
+            GameEvent::EntityMoved { .. } => EventCategory::Movement,
+
+            // Status events
+            GameEvent::StatusApplied { .. }
+            | GameEvent::StatusRemoved { .. }
+            | GameEvent::StatusEffectTicked { .. }
+            | GameEvent::StatusEffectConflict { .. }
+            | GameEvent::StatusStacked { .. }
+            | GameEvent::StatusRefreshed { .. }
+            | GameEvent::StatusResisted { .. }
+            | GameEvent::StatusImmune { .. }
+            | GameEvent::StatusTransferred { .. }
+            | GameEvent::StatusSpread { .. } => EventCategory::Status,
+
+            // Item events
+            GameEvent::ItemPickedUp { .. }
+            | GameEvent::ItemDropped { .. }
+            | GameEvent::ItemUsed { .. }
+            | GameEvent::ItemEquipped { .. }
+            | GameEvent::ItemUnequipped { .. } => EventCategory::Items,
+
+            // AI events
+            GameEvent::AIDecisionMade { .. } 
+            | GameEvent::AITargetChanged { .. } => EventCategory::AI,
+
+            // Environment events
+            GameEvent::LevelChanged { .. }
+            | GameEvent::RoomDiscovered { .. }
+            | GameEvent::TrapTriggered { .. }
+            | GameEvent::DoorOpened { .. }
+            | GameEvent::DoorClosed { .. }
+            | GameEvent::SecretDiscovered { .. }
+            | GameEvent::ChestOpened { .. }
+            | GameEvent::ShrineActivated { .. }
+            | GameEvent::TrapDisarmed { .. }
+            | GameEvent::TerrainChanged { .. }
+            | GameEvent::ExplosionTriggered { .. } => EventCategory::Environment,
+
+            // UI events
+            GameEvent::UINotification { .. }
+            | GameEvent::UIAlert { .. }
+            | GameEvent::TooltipRequested { .. }
+            | GameEvent::HighlightRequested { .. }
+            | GameEvent::AnimationRequested { .. }
+            | GameEvent::LogMessage { .. } => EventCategory::UI,
+
+            // System events
+            GameEvent::GameOver { .. }
+            | GameEvent::Victory
+            | GameEvent::GamePaused
+            | GameEvent::GameResumed
+            | GameEvent::GameSaved { .. }
+            | GameEvent::GameLoaded { .. } => EventCategory::System,
+
+            // Turn phase events
+            GameEvent::TurnEnded { .. }
+            | GameEvent::PlayerTurnStarted
+            | GameEvent::AITurnStarted => EventCategory::TurnPhase,
+
+            // Action events
+            GameEvent::ActionIntended { .. }
+            | GameEvent::ActionCompleted { .. }
+            | GameEvent::ActionFailed { .. }
+            | GameEvent::ActionCancelled { .. } => EventCategory::Action,
+
+            // Special cases (Boss, Hunger, etc.)
+            GameEvent::BossEncountered { .. }
+            | GameEvent::BossRoomEntered { .. }
+            | GameEvent::BossPhaseChanged { .. }
+            | GameEvent::BossSkillUsed { .. }
+            | GameEvent::BossDefeated { .. }
+            | GameEvent::BossSummonedMinions { .. } => EventCategory::Combat,
+
+            GameEvent::HungerChanged { .. }
+            | GameEvent::PlayerHungry { .. }
+            | GameEvent::PlayerStarving { .. }
+            | GameEvent::StarvationDamage { .. } => EventCategory::Status,
         }
     }
 }
