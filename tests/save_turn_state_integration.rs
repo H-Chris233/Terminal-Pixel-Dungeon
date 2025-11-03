@@ -47,6 +47,7 @@ fn test_save_and_restore_turn_state() {
         Hunger {
             satiety: 7,
             last_hunger_turn: 10,
+            turn_accumulator: 0,
         },
         Wealth { gold: 250 },
         PlayerProgress {
@@ -293,6 +294,7 @@ fn test_save_mid_combat_with_enemies() {
         Hunger {
             satiety: 5,
             last_hunger_turn: 20,
+            turn_accumulator: 0,
         },
         Wealth { gold: 100 },
         PlayerProgress {
