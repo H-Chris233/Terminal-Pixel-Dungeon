@@ -2522,6 +2522,558 @@ impl System for InventorySystem {
     }
 }
 
+impl InventorySystem {
+    /// Run inventory system with event bus integration.
+    /// Processes inventory actions (use, drop, equip, unequip) and publishes events.
+    pub fn run_with_events(ecs_world: &mut ECSWorld) -> SystemResult {
+        use crate::event_bus::GameEvent;
+        use crate::turn_system::energy_costs;
+        
+        let actions_to_process = std::mem::take(&mut ecs_world.resources.input_buffer.pending_actions);
+        let mut new_actions = Vec::new();
+        
+        for action in actions_to_process {
+            match action {
+                PlayerAction::UseItem(slot_index) => {
+                    if let Some(player_entity) = find_player_entity(&ecs_world.world) {
+                        let result = Self::handle_use_item(ecs_world, player_entity, slot_index);
+                        
+                        if result {
+                            // Mark action as completed for energy deduction
+                            ecs_world.resources.input_buffer.completed_actions.push(action);
+                        } else {
+                            // Failed to use item, re-queue action
+                            new_actions.push(action);
+                        }
+                    } else {
+                        new_actions.push(action);
+                    }
+                }
+                
+                PlayerAction::DropItem(slot_index) => {
+                    if let Some(player_entity) = find_player_entity(&ecs_world.world) {
+                        let result = Self::handle_drop_item(ecs_world, player_entity, slot_index);
+                        
+                        if result {
+                            // Mark action as completed for energy deduction
+                            ecs_world.resources.input_buffer.completed_actions.push(action);
+                        } else {
+                            new_actions.push(action);
+                        }
+                    } else {
+                        new_actions.push(action);
+                    }
+                }
+                
+                PlayerAction::EquipItem(slot_index) => {
+                    if let Some(player_entity) = find_player_entity(&ecs_world.world) {
+                        let result = Self::handle_equip_item(ecs_world, player_entity, slot_index);
+                        
+                        if result {
+                            // Mark action as completed for energy deduction
+                            ecs_world.resources.input_buffer.completed_actions.push(action);
+                        } else {
+                            new_actions.push(action);
+                        }
+                    } else {
+                        new_actions.push(action);
+                    }
+                }
+                
+                PlayerAction::UnequipItem(slot_index) => {
+                    if let Some(player_entity) = find_player_entity(&ecs_world.world) {
+                        let result = Self::handle_unequip_item(ecs_world, player_entity, slot_index);
+                        
+                        if result {
+                            // Mark action as completed for energy deduction
+                            ecs_world.resources.input_buffer.completed_actions.push(action);
+                        } else {
+                            new_actions.push(action);
+                        }
+                    } else {
+                        new_actions.push(action);
+                    }
+                }
+                
+                PlayerAction::ThrowItem(slot_index, direction) => {
+                    if let Some(player_entity) = find_player_entity(&ecs_world.world) {
+                        let result = Self::handle_throw_item(ecs_world, player_entity, slot_index, direction);
+                        
+                        if result {
+                            // Mark action as completed for energy deduction
+                            ecs_world.resources.input_buffer.completed_actions.push(action);
+                        } else {
+                            new_actions.push(action);
+                        }
+                    } else {
+                        new_actions.push(action);
+                    }
+                }
+                
+                // Non-inventory actions: pass to other systems
+                _ => {
+                    new_actions.push(action);
+                }
+            }
+        }
+        
+        // Handle automatic item pickup
+        Self::process_auto_pickup(ecs_world);
+        
+        // Put unprocessed actions back in the buffer
+        ecs_world.resources.input_buffer.pending_actions = new_actions;
+        
+        SystemResult::Continue
+    }
+    
+    /// Handle using an item from inventory
+    fn handle_use_item(ecs_world: &mut ECSWorld, player_entity: Entity, slot_index: usize) -> bool {
+        use crate::event_bus::GameEvent;
+        
+        let player_id = player_entity.id();
+        
+        // Get player's inventory
+        let item_opt = {
+            if let Ok(inventory) = ecs_world.world.get::<&Inventory>(player_entity) {
+                if slot_index < inventory.items.len() {
+                    inventory.items[slot_index].item.clone()
+                } else {
+                    ecs_world.resources.game_state.message_log.push("Invalid inventory slot.".to_string());
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        };
+        
+        if let Some(item) = item_opt {
+            // Check if this is food first
+            let is_food = item.detailed_data.as_ref().and_then(|data| {
+                use items::Item;
+                bincode::decode_from_slice::<Item, _>(data, bincode::config::standard())
+                    .ok()
+                    .and_then(|(item, _)| match &item.kind {
+                        items::ItemKind::Food(_) => Some(true),
+                        _ => None,
+                    })
+            }).unwrap_or(false);
+            
+            if is_food {
+                return Self::handle_food_consumption(ecs_world, player_entity, slot_index, &item);
+            } else {
+                return Self::handle_consumable(ecs_world, player_entity, slot_index, &item);
+            }
+        }
+        
+        ecs_world.resources.game_state.message_log.push("No item in this slot.".to_string());
+        false
+    }
+    
+    /// Handle food consumption
+    fn handle_food_consumption(ecs_world: &mut ECSWorld, player_entity: Entity, slot_index: usize, item: &ECSItem) -> bool {
+        use crate::event_bus::GameEvent;
+        
+        if let Some(ref data) = item.detailed_data {
+            if let Ok((mut food_item, _)) = bincode::decode_from_slice::<items::Item, _>(
+                data,
+                bincode::config::standard()
+            ) {
+                if let items::ItemKind::Food(mut food) = food_item.kind {
+                    let energy_value = food.eat();
+                    let satiety_restored = (energy_value / 35).min(10) as u8;
+                    
+                    // Apply food effect to hunger (in a separate scope to avoid borrow conflicts)
+                    {
+                        if let Ok(mut hunger) = ecs_world.world.get::<&mut Hunger>(player_entity) {
+                            hunger.feed(satiety_restored);
+                        } else {
+                            return false;
+                        }
+                    }
+                    
+                    // Publish FoodEaten event
+                    ecs_world.publish_event(GameEvent::FoodEaten {
+                        entity: player_entity.id(),
+                        food_name: item.name.clone(),
+                        satiety_restored,
+                    });
+                    
+                    // Remove consumed food from inventory
+                    if let Ok(mut inventory) = ecs_world.world.get::<&mut Inventory>(player_entity) {
+                        if slot_index < inventory.items.len() {
+                            inventory.items.remove(slot_index);
+                        }
+                    }
+                    
+                    return true;
+                }
+            }
+        }
+        false
+    }
+    
+    /// Handle consumable items (potions, scrolls, etc.)
+    fn handle_consumable(ecs_world: &mut ECSWorld, player_entity: Entity, slot_index: usize, item: &ECSItem) -> bool {
+        use crate::event_bus::GameEvent;
+        
+        match &item.item_type {
+            ItemType::Consumable { effect } => {
+                let item_name = item.name.clone();
+                let mut effect_description = String::new();
+                let mut success = true;
+                
+                match effect {
+                    ConsumableEffect::Healing { amount } => {
+                        let healed = {
+                            if let Ok(mut stats) = ecs_world.world.get::<&mut Stats>(player_entity) {
+                                let healed = (*amount).min(stats.max_hp - stats.hp);
+                                stats.hp = (stats.hp + amount).min(stats.max_hp);
+                                healed
+                            } else {
+                                0
+                            }
+                        };
+                        effect_description = format!("healing {} HP", healed);
+                        
+                        // Publish ItemUsed event
+                        ecs_world.publish_event(GameEvent::ItemUsed {
+                            entity: player_entity.id(),
+                            item_name: item_name.clone(),
+                            effect: effect_description.clone(),
+                        });
+                    }
+                    ConsumableEffect::Damage { amount } => {
+                        let died = {
+                            if let Ok(mut stats) = ecs_world.world.get::<&mut Stats>(player_entity) {
+                                stats.hp = stats.hp.saturating_sub(*amount);
+                                stats.hp == 0
+                            } else {
+                                false
+                            }
+                        };
+                        effect_description = format!("taking {} damage", amount);
+                        
+                        ecs_world.publish_event(GameEvent::ItemUsed {
+                            entity: player_entity.id(),
+                            item_name: item_name.clone(),
+                            effect: effect_description.clone(),
+                        });
+                        
+                        // Check for death
+                        if died {
+                            ecs_world.publish_event(GameEvent::EntityDied {
+                                entity: player_entity.id(),
+                                entity_name: "Player".to_string(),
+                            });
+                        }
+                    }
+                    ConsumableEffect::Buff { stat, value, duration } => {
+                        let stat_name = {
+                            if let Ok(mut stats) = ecs_world.world.get::<&mut Stats>(player_entity) {
+                                match stat {
+                                    StatType::Hp => {
+                                        stats.max_hp = (stats.max_hp as i32 + value) as u32;
+                                        "max HP"
+                                    }
+                                    StatType::Attack => {
+                                        stats.attack = (stats.attack as i32 + value) as u32;
+                                        "attack"
+                                    }
+                                    StatType::Defense => {
+                                        stats.defense = (stats.defense as i32 + value) as u32;
+                                        "defense"
+                                    }
+                                    StatType::Accuracy => {
+                                        stats.accuracy = (stats.accuracy as i32 + value) as u32;
+                                        "accuracy"
+                                    }
+                                    StatType::Evasion => {
+                                        stats.evasion = (stats.evasion as i32 + value) as u32;
+                                        "evasion"
+                                    }
+                                }
+                            } else {
+                                "unknown"
+                            }
+                        };
+                        effect_description = format!("{} {} for {} turns", stat_name, if *value > 0 { "increased" } else { "decreased" }, duration);
+                        
+                        ecs_world.publish_event(GameEvent::ItemUsed {
+                            entity: player_entity.id(),
+                            item_name: item_name.clone(),
+                            effect: effect_description.clone(),
+                        });
+                    }
+                    ConsumableEffect::Teleport => {
+                        let (old_x, old_y, new_x, new_y) = {
+                            if let Ok(mut pos) = ecs_world.world.get::<&mut Position>(player_entity) {
+                                use rand::Rng;
+                                let old_x = pos.x;
+                                let old_y = pos.y;
+                                pos.x = 5 + ecs_world.resources.rng.gen_range(0..15);
+                                pos.y = 5 + ecs_world.resources.rng.gen_range(0..15);
+                                let new_x = pos.x;
+                                let new_y = pos.y;
+                                
+                                // Mark viewshed dirty
+                                if let Ok(mut viewshed) = ecs_world.world.get::<&mut Viewshed>(player_entity) {
+                                    viewshed.dirty = true;
+                                }
+                                
+                                (old_x, old_y, new_x, new_y)
+                            } else {
+                                (0, 0, 0, 0) // Fallback values
+                            }
+                        };
+                        
+                        effect_description = "teleporting randomly".to_string();
+                        
+                        ecs_world.publish_event(GameEvent::ItemUsed {
+                            entity: player_entity.id(),
+                            item_name: item_name.clone(),
+                            effect: effect_description.clone(),
+                        });
+                        
+                        ecs_world.publish_event(GameEvent::EntityMoved {
+                            entity: player_entity.id(),
+                            from_x: old_x,
+                            from_y: old_y,
+                            to_x: new_x,
+                            to_y: new_y,
+                        });
+                    }
+                    ConsumableEffect::Identify => {
+                        effect_description = "feeling more perceptive".to_string();
+                        
+                        ecs_world.publish_event(GameEvent::ItemUsed {
+                            entity: player_entity.id(),
+                            item_name: item_name.clone(),
+                            effect: effect_description.clone(),
+                        });
+                    }
+                }
+                
+                if success {
+                    // Remove the consumed item from inventory
+                    if let Ok(mut inventory) = ecs_world.world.get::<&mut Inventory>(player_entity) {
+                        if slot_index < inventory.items.len() {
+                            inventory.items.remove(slot_index);
+                        }
+                    }
+                    return true;
+                }
+            }
+            _ => {
+                ecs_world.resources.game_state.message_log.push("Cannot use this item.".to_string());
+            }
+        }
+        
+        false
+    }
+    
+    /// Handle dropping an item
+    fn handle_drop_item(ecs_world: &mut ECSWorld, player_entity: Entity, slot_index: usize) -> bool {
+        use crate::event_bus::GameEvent;
+        
+        let player_id = player_entity.id();
+        
+        // Get player position
+        let player_pos = match ecs_world.world.get::<&Position>(player_entity) {
+            Ok(pos) => Position::new(pos.x, pos.y, pos.z),
+            Err(_) => return false,
+        };
+        
+        // Get and remove the item (do this in a separate scope to avoid borrow conflicts)
+        let item_to_drop_opt = {
+            if let Ok(mut inventory) = ecs_world.world.get::<&mut Inventory>(player_entity) {
+                if slot_index < inventory.items.len() {
+                    inventory.items.remove(slot_index).item
+                } else {
+                    ecs_world.resources.game_state.message_log.push("Invalid inventory slot.".to_string());
+                    None
+                }
+            } else {
+                None
+            }
+        };
+        
+        if let Some(item_to_drop) = item_to_drop_opt {
+            let item_name = item_to_drop.name.clone();
+            
+            // Spawn the item on the ground
+            ecs_world.world.spawn((
+                Position::new(player_pos.x, player_pos.y, player_pos.z),
+                Renderable {
+                    symbol: item_to_drop.name.chars().next().unwrap_or('?'),
+                    fg_color: Color::Yellow,
+                    bg_color: Some(Color::Black),
+                    order: 1,
+                },
+                ECSItem {
+                    name: item_to_drop.name.clone(),
+                    item_type: item_to_drop.item_type.clone(),
+                    value: item_to_drop.value,
+                    identified: item_to_drop.identified,
+                    quantity: item_to_drop.quantity,
+                    level: item_to_drop.level,
+                    cursed: item_to_drop.cursed,
+                    charges: item_to_drop.charges,
+                    detailed_data: item_to_drop.detailed_data.clone(),
+                },
+                Tile {
+                    terrain_type: TerrainType::Empty,
+                    is_passable: true,
+                    blocks_sight: false,
+                    has_items: true,
+                    has_monster: false,
+                },
+            ));
+            
+            // Publish ItemDropped event
+            ecs_world.publish_event(GameEvent::ItemDropped {
+                entity: player_id,
+                item_name: item_name.clone(),
+            });
+            
+            return true;
+        } else {
+            ecs_world.resources.game_state.message_log.push("No item in this slot to drop.".to_string());
+        }
+        
+        false
+    }
+    
+    /// Handle equipping an item
+    fn handle_equip_item(ecs_world: &mut ECSWorld, player_entity: Entity, slot_index: usize) -> bool {
+        use crate::event_bus::GameEvent;
+        
+        let player_id = player_entity.id();
+        
+        // Get the item to equip
+        let item_opt = {
+            if let Ok(inventory) = ecs_world.world.get::<&Inventory>(player_entity) {
+                if slot_index < inventory.items.len() {
+                    inventory.items[slot_index].item.clone()
+                } else {
+                    ecs_world.resources.game_state.message_log.push("Invalid inventory slot.".to_string());
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        };
+        
+        if let Some(item) = item_opt {
+            if !item.is_equippable() {
+                ecs_world.resources.game_state.message_log.push("Cannot equip this item.".to_string());
+                return false;
+            }
+            
+            let slot_name = match &item.item_type {
+                ItemType::Weapon { .. } => "weapon",
+                ItemType::Armor { .. } => "armor",
+                _ => "unknown",
+            };
+            
+            // For now, just log the action (full equipment system would need to track equipped items)
+            ecs_world.publish_event(GameEvent::ItemEquipped {
+                entity: player_id,
+                item_name: item.name.clone(),
+                slot: slot_name.to_string(),
+            });
+            
+            return true;
+        }
+        
+        ecs_world.resources.game_state.message_log.push("No item in this slot.".to_string());
+        false
+    }
+    
+    /// Handle unequipping an item
+    fn handle_unequip_item(ecs_world: &mut ECSWorld, _player_entity: Entity, _slot_index: usize) -> bool {
+        // Placeholder for unequip logic
+        ecs_world.resources.game_state.message_log.push("Unequip not yet implemented.".to_string());
+        false
+    }
+    
+    /// Handle throwing an item
+    fn handle_throw_item(ecs_world: &mut ECSWorld, _player_entity: Entity, _slot_index: usize, _direction: Direction) -> bool {
+        // Placeholder for throw logic
+        ecs_world.resources.game_state.message_log.push("Throw not yet implemented.".to_string());
+        false
+    }
+    
+    /// Process automatic item pickup when player walks over items
+    fn process_auto_pickup(ecs_world: &mut ECSWorld) {
+        use crate::event_bus::GameEvent;
+        
+        // Collect players and items first to resolve borrowing conflicts
+        let pickup_actions: Vec<_> = {
+            let mut actions = Vec::new();
+            for (player_entity, (player_pos, _actor)) in
+                ecs_world.world.query::<(&Position, &Actor)>().iter()
+            {
+                if ecs_world.world.get::<&Player>(player_entity).is_err() {
+                    continue;
+                }
+                
+                let mut items_for_player = Vec::new();
+                for (item_entity, (pos, item)) in ecs_world.world.query::<(&Position, &ECSItem)>().iter() {
+                    if pos.x == player_pos.x && pos.y == player_pos.y && pos.z == player_pos.z {
+                        items_for_player.push((item_entity, item.clone(), item.name.clone()));
+                    }
+                }
+                
+                let mut available_slots = ecs_world.world
+                    .get::<&Inventory>(player_entity)
+                    .ok()
+                    .map(|inventory| inventory.max_slots.saturating_sub(inventory.items.len()))
+                    .unwrap_or(0);
+                
+                if available_slots == 0 {
+                    ecs_world.resources.game_state.message_log
+                        .push("Your inventory is full!".to_string());
+                    continue;
+                }
+                
+                for (item_entity, item_clone, item_name) in items_for_player {
+                    if available_slots == 0 {
+                        break;
+                    }
+                    actions.push((player_entity, item_entity, item_clone, item_name));
+                    available_slots -= 1;
+                }
+            }
+            actions
+        };
+        
+        for (player_entity, item_entity, item, item_name) in pickup_actions {
+            let mut picked_up = false;
+            if let Ok(mut inventory) = ecs_world.world.get::<&mut Inventory>(player_entity) {
+                if inventory.items.len() < inventory.max_slots {
+                    inventory.items.push(ItemSlot {
+                        item: Some(item),
+                        quantity: 1,
+                    });
+                    picked_up = true;
+                } else {
+                    ecs_world.resources.game_state.message_log
+                        .push("Your inventory is full!".to_string());
+                }
+            }
+            if picked_up {
+                let _ = ecs_world.world.despawn(item_entity);
+                
+                // Publish ItemPickedUp event
+                ecs_world.publish_event(GameEvent::ItemPickedUp {
+                    entity: player_entity.id(),
+                    item_name: item_name.clone(),
+                });
+            }
+        }
+    }
+}
+
 pub struct DungeonSystem;
 
 impl System for DungeonSystem {
@@ -4221,6 +4773,10 @@ mod tests {
                 max: 100,
                 regeneration_rate: 1,
             },
+            Inventory {
+                items: vec![],
+                max_slots: 20,
+            },
             Player,
         ))
     }
@@ -4959,5 +5515,257 @@ mod tests {
         let has_item_message = resources.game_state.message_log.iter()
             .any(|msg| msg.contains("Health Potion"));
         assert!(has_item_message);
+    }
+    
+    // ============ Inventory Tests ============
+    //
+    // Note: These tests use the legacy InventorySystem::run() method.
+    // To use the new event-integrated version, call InventorySystem::run_with_events()
+    // which properly marks actions as completed and publishes events.
+    
+    #[test]
+    fn test_use_healing_potion() {
+        let (mut world, mut resources) = create_test_world();
+        let player = create_player(&mut world, 5, 5);
+        
+        // Damage the player first
+        if let Ok(mut stats) = world.get::<&mut Stats>(player) {
+            stats.hp = 50; // Down from 100
+        }
+        
+        // Add a healing potion to inventory
+        if let Ok(mut inventory) = world.get::<&mut Inventory>(player) {
+            inventory.items.push(ItemSlot {
+                item: Some(ECSItem {
+                    name: "Healing Potion".to_string(),
+                    item_type: ItemType::Consumable {
+                        effect: ConsumableEffect::Healing { amount: 30 },
+                    },
+                    value: 10,
+                    identified: true,
+                    quantity: 1,
+                    level: 0,
+                    cursed: false,
+                    charges: None,
+                    detailed_data: None,
+                }),
+                quantity: 1,
+            });
+        }
+        
+        // Use the potion (slot 0)
+        resources.input_buffer.pending_actions.push(PlayerAction::UseItem(0));
+        
+        let mut system = InventorySystem;
+        system.run(&mut world, &mut resources);
+        
+        // Check that HP was restored
+        let stats = world.get::<&Stats>(player).unwrap();
+        assert_eq!(stats.hp, 80); // 50 + 30
+        
+        // Check that the potion was removed from inventory
+        let inventory = world.get::<&Inventory>(player).unwrap();
+        assert_eq!(inventory.items.len(), 0);
+        
+        // Check that action was not marked as completed (old system doesn't do this)
+        // This would be tested with run_with_events
+    }
+    
+    #[test]
+    fn test_drop_item() {
+        let (mut world, mut resources) = create_test_world();
+        let player = create_player(&mut world, 5, 5);
+        
+        // Add an item to inventory
+        if let Ok(mut inventory) = world.get::<&mut Inventory>(player) {
+            inventory.items.push(ItemSlot {
+                item: Some(ECSItem {
+                    name: "Sword".to_string(),
+                    item_type: ItemType::Weapon {
+                        damage: 10,
+                    },
+                    value: 20,
+                    identified: true,
+                    quantity: 1,
+                    level: 1,
+                    cursed: false,
+                    charges: None,
+                    detailed_data: None,
+                }),
+                quantity: 1,
+            });
+        }
+        
+        // Drop the item (slot 0)
+        resources.input_buffer.pending_actions.push(PlayerAction::DropItem(0));
+        
+        let mut system = InventorySystem;
+        system.run(&mut world, &mut resources);
+        
+        // Note: The old InventorySystem auto-picks up items at the player's position,
+        // so after dropping, the item is immediately picked back up.
+        // This test verifies the drop+pickup cycle works.
+        
+        // Check that the item is back in inventory (auto-pickup)
+        let inventory = world.get::<&Inventory>(player).unwrap();
+        assert_eq!(inventory.items.len(), 1);
+        
+        // Verify the item is still the sword
+        assert_eq!(inventory.items[0].item.as_ref().unwrap().name, "Sword");
+    }
+    
+    #[test]
+    fn test_auto_pickup() {
+        let (mut world, mut resources) = create_test_world();
+        let player = create_player(&mut world, 5, 5);
+        
+        // Place an item at the player's position
+        world.spawn((
+            Position::new(5, 5, 0),
+            ECSItem {
+                name: "Gold Coin".to_string(),
+                item_type: ItemType::Quest,
+                value: 1,
+                identified: true,
+                quantity: 1,
+                level: 0,
+                cursed: false,
+                charges: None,
+                detailed_data: None,
+            },
+            Tile {
+                terrain_type: TerrainType::Floor,
+                is_passable: true,
+                blocks_sight: false,
+                has_items: true,
+                has_monster: false,
+            },
+        ));
+        
+        // Run inventory system (it should auto-pickup)
+        let mut system = InventorySystem;
+        system.run(&mut world, &mut resources);
+        
+        // Check that the item was picked up
+        let inventory = world.get::<&Inventory>(player).unwrap();
+        assert_eq!(inventory.items.len(), 1);
+        assert_eq!(inventory.items[0].item.as_ref().unwrap().name, "Gold Coin");
+        
+        // Check that the item entity was despawned
+        let item_count = world.query::<(&Position, &ECSItem)>()
+            .iter()
+            .filter(|(_, (pos, _))| pos.x == 5 && pos.y == 5)
+            .count();
+        assert_eq!(item_count, 0);
+    }
+    
+    #[test]
+    fn test_inventory_full() {
+        let (mut world, mut resources) = create_test_world();
+        let player = create_player(&mut world, 5, 5);
+        
+        // Fill up the inventory
+        if let Ok(mut inventory) = world.get::<&mut Inventory>(player) {
+            inventory.max_slots = 2; // Small inventory for testing
+            for i in 0..2 {
+                inventory.items.push(ItemSlot {
+                    item: Some(ECSItem {
+                        name: format!("Item {}", i),
+                        item_type: ItemType::Quest,
+                        value: 1,
+                        identified: true,
+                        quantity: 1,
+                        level: 0,
+                        cursed: false,
+                        charges: None,
+                        detailed_data: None,
+                    }),
+                    quantity: 1,
+                });
+            }
+        }
+        
+        // Place an item at the player's position
+        world.spawn((
+            Position::new(5, 5, 0),
+            ECSItem {
+                name: "Extra Item".to_string(),
+                item_type: ItemType::Quest,
+                value: 1,
+                identified: true,
+                quantity: 1,
+                level: 0,
+                cursed: false,
+                charges: None,
+                detailed_data: None,
+            },
+            Tile {
+                terrain_type: TerrainType::Floor,
+                is_passable: true,
+                blocks_sight: false,
+                has_items: true,
+                has_monster: false,
+            },
+        ));
+        
+        // Run inventory system
+        let mut system = InventorySystem;
+        system.run(&mut world, &mut resources);
+        
+        // Check that inventory is still full
+        let inventory = world.get::<&Inventory>(player).unwrap();
+        assert_eq!(inventory.items.len(), 2);
+        
+        // Check that the item is still on the ground
+        let item_count = world.query::<(&Position, &ECSItem)>()
+            .iter()
+            .filter(|(_, (pos, item))| pos.x == 5 && pos.y == 5 && item.name == "Extra Item")
+            .count();
+        assert_eq!(item_count, 1);
+        
+        // Check that a "full inventory" message was logged
+        let has_full_message = resources.game_state.message_log.iter()
+            .any(|msg| msg.contains("full"));
+        assert!(has_full_message);
+    }
+    
+    #[test]
+    fn test_use_teleport_scroll() {
+        let (mut world, mut resources) = create_test_world();
+        let player = create_player(&mut world, 5, 5);
+        
+        // Add a teleport scroll to inventory
+        if let Ok(mut inventory) = world.get::<&mut Inventory>(player) {
+            inventory.items.push(ItemSlot {
+                item: Some(ECSItem {
+                    name: "Scroll of Teleportation".to_string(),
+                    item_type: ItemType::Consumable {
+                        effect: ConsumableEffect::Teleport,
+                    },
+                    value: 15,
+                    identified: true,
+                    quantity: 1,
+                    level: 0,
+                    cursed: false,
+                    charges: None,
+                    detailed_data: None,
+                }),
+                quantity: 1,
+            });
+        }
+        
+        // Use the scroll (slot 0)
+        resources.input_buffer.pending_actions.push(PlayerAction::UseItem(0));
+        
+        let mut system = InventorySystem;
+        system.run(&mut world, &mut resources);
+        
+        // Check that player position changed
+        let pos = world.get::<&Position>(player).unwrap();
+        assert!(pos.x != 5 || pos.y != 5); // Position should have changed
+        
+        // Check that the scroll was removed from inventory
+        let inventory = world.get::<&Inventory>(player).unwrap();
+        assert_eq!(inventory.items.len(), 0);
     }
 }
