@@ -2079,9 +2079,55 @@ impl System for InventorySystem {
                         if let Ok(mut inventory) = world.get::<&mut Inventory>(player_entity) {
                             if slot_index < inventory.items.len() {
                                 if let Some(ref item) = inventory.items[slot_index].item {
-                                    // Check if this is a consumable item
-                                    match &item.item_type {
-                                        ItemType::Consumable { effect } => {
+                                    // Check if this is food first (from detailed_data)
+                                    let is_food = item.detailed_data.as_ref().and_then(|data| {
+                                        use items::Item;
+                                        bincode::decode_from_slice::<Item, _>(
+                                            data,
+                                            bincode::config::standard()
+                                        ).ok().and_then(|(item, _)| {
+                                            match &item.kind {
+                                                items::ItemKind::Food(_) => Some(true),
+                                                _ => None,
+                                            }
+                                        })
+                                    }).unwrap_or(false);
+
+                                    if is_food {
+                                        // Handle food consumption
+                                        if let Some(ref data) = item.detailed_data {
+                                            use items::Item;
+                                            if let Ok((mut food_item, _)) = bincode::decode_from_slice::<Item, _>(
+                                                data,
+                                                bincode::config::standard()
+                                            ) {
+                                                if let items::ItemKind::Food(mut food) = food_item.kind {
+                                                    // Get energy/satiety from food
+                                                    let satiety_restored = (food.eat() / 35).min(10) as u8; // Convert energy to satiety (350 energy = 10 satiety)
+                                                    
+                                                    // Apply food effect to hunger
+                                                    if let Ok(mut hunger) = world.get::<&mut Hunger>(player_entity) {
+                                                        hunger.feed(satiety_restored);
+                                                        
+                                                        let message = format!(
+                                                            "You eat the {}, restoring {} satiety.",
+                                                            item.name, satiety_restored
+                                                        );
+                                                        resources.game_state.message_log.push(message);
+                                                        if resources.game_state.message_log.len() > 10 {
+                                                            resources.game_state.message_log.remove(0);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        
+                                        // Remove consumed food
+                                        inventory.items.remove(slot_index);
+                                    } else {
+                                        // Check if this is a consumable item (potion/scroll)
+                                        match &item.item_type {
+                                            ItemType::Consumable { effect } => {
                                             match effect {
                                                 ConsumableEffect::Healing { amount } => {
                                                     // Apply healing to player
@@ -2260,6 +2306,7 @@ impl System for InventorySystem {
                                             }
                                         }
                                     }
+                                    } // end of else (non-food consumable handling)
                                 } else {
                                     let message = "No item in this slot.".to_string();
 
@@ -3349,17 +3396,39 @@ impl System for InteractionSystem {
 // ========== 新增：HungerSystem（饱食度系统）==========
 
 /// 饥饿系统：处理玩家的饱食度变化
-/// 遵循 SPD 标准：每20回合减少1点饱食度
-/// 饱食度为0时每回合掉血
+/// 
+/// 饥饿衰减规则：
+/// - 标准动作（移动、攻击、使用物品等）：每10次动作减少1点饱食度
+/// - 等待动作：每20次减少1点饱食度（消耗更少）
+/// - 饱食度为0时：每回合造成1点饥饿伤害
+///
+/// 阈值：
+/// - 饱食度 <= 2：饥饿警告（发送PlayerHungry事件）
+/// - 饱食度 = 0：挨饿状态（发送PlayerStarving事件并造成伤害）
 pub struct HungerSystem;
 
 impl HungerSystem {
+    /// 标准动作的饥饿阈值（每10次动作减少1点饱食度）
+    const HUNGER_DECAY_INTERVAL: u32 = 10;
+    
+    /// 等待动作的饥饿阈值（每20次等待减少1点饱食度）
+    const HUNGER_DECAY_INTERVAL_WAIT: u32 = 20;
+    
+    /// 饥饿伤害（每回合）
+    const STARVATION_DAMAGE: u32 = 1;
+    
     /// 带事件总线的运行方法
     pub fn run_with_events(ecs_world: &mut ECSWorld) -> SystemResult {
         use crate::event_bus::GameEvent;
 
         // 获取当前总回合数
         let current_turn = ecs_world.resources.clock.turn_count;
+
+        // 检查是否有已完成的动作（用于判断是否触发饥饿衰减）
+        let has_completed_actions = !ecs_world.resources.input_buffer.completed_actions.is_empty();
+        let is_wait_action = ecs_world.resources.input_buffer.completed_actions
+            .iter()
+            .any(|action| matches!(action, PlayerAction::Wait));
 
         // 收集需要处理的实体信息（避免借用冲突）
         let mut entities_to_process = Vec::new();
@@ -3371,59 +3440,86 @@ impl HungerSystem {
 
         // 处理每个实体
         for (entity, mut hunger, mut stats, is_player) in entities_to_process {
-            // 每20回合减少1点饱食度
-            if current_turn > 0 && (current_turn - hunger.last_hunger_turn) >= 20 {
-                let old_satiety = hunger.satiety;
-                hunger.satiety = hunger.satiety.saturating_sub(1);
-                hunger.last_hunger_turn = current_turn;
+            // 饥饿衰减逻辑：只在玩家执行了动作时才触发
+            if has_completed_actions && is_player {
+                // 累加回合数
+                hunger.turn_accumulator += 1;
+                
+                // 根据动作类型选择不同的衰减间隔
+                let decay_interval = if is_wait_action {
+                    Self::HUNGER_DECAY_INTERVAL_WAIT
+                } else {
+                    Self::HUNGER_DECAY_INTERVAL
+                };
+                
+                // 检查是否达到饥饿衰减阈值
+                if hunger.turn_accumulator >= decay_interval {
+                    let old_satiety = hunger.satiety;
+                    hunger.satiety = hunger.satiety.saturating_sub(1);
+                    hunger.turn_accumulator = 0; // 重置累加器
+                    hunger.last_hunger_turn = current_turn;
 
-                // 发布饥饿度变化事件
-                ecs_world.publish_event(GameEvent::HungerChanged {
-                    entity: entity.id() as u32,
-                    old_satiety,
-                    new_satiety: hunger.satiety,
-                });
-
-                // 饥饿状态处理
-                if hunger.is_starving() {
-                    // 发布挨饿事件
-                    ecs_world.publish_event(GameEvent::PlayerStarving {
+                    // 发布饥饿度变化事件
+                    ecs_world.publish_event(GameEvent::HungerChanged {
                         entity: entity.id() as u32,
+                        old_satiety,
+                        new_satiety: hunger.satiety,
                     });
-
-                    // 饥饿致死：每回合掉1血
-                    let damage = 1;
-                    stats.hp = stats.hp.saturating_sub(damage);
-
-                    // 发布饥饿伤害事件
-                    ecs_world.publish_event(GameEvent::StarvationDamage {
-                        entity: entity.id() as u32,
-                        damage,
-                    });
-
-                    // 检查玩家是否死亡
-                    if stats.hp == 0 && is_player {
-                        ecs_world.publish_event(GameEvent::GameOver {
-                            reason: "死于饥饿".to_string(),
-                        });
-
-                        // 更新组件
-                        let _ = ecs_world.world.insert(entity, (hunger, stats));
-                        return SystemResult::Stop;
-                    }
-                } else if hunger.is_hungry() {
-                    // 发布饥饿警告事件（每40回合一次，避免刷屏）
-                    if current_turn % 40 == 0 {
+                    
+                    // 检查饥饿状态并发送警告事件
+                    if hunger.is_hungry() && !hunger.is_starving() {
                         ecs_world.publish_event(GameEvent::PlayerHungry {
                             entity: entity.id() as u32,
                             satiety: hunger.satiety,
                         });
                     }
                 }
-
-                // 更新组件
-                let _ = ecs_world.world.insert(entity, (hunger, stats));
             }
+
+            // 饥饿伤害处理（在aftermath阶段，每回合检查）
+            if hunger.is_starving() {
+                // 发布挨饿事件
+                ecs_world.publish_event(GameEvent::PlayerStarving {
+                    entity: entity.id() as u32,
+                });
+
+                // 饥饿致死：每回合掉1血
+                let damage = Self::STARVATION_DAMAGE;
+                stats.hp = stats.hp.saturating_sub(damage);
+
+                // 发布饥饿伤害事件
+                ecs_world.publish_event(GameEvent::StarvationDamage {
+                    entity: entity.id() as u32,
+                    damage,
+                });
+
+                // 检查玩家是否死亡
+                if stats.hp == 0 && is_player {
+                    // 使用专门的饿死游戏结束原因
+                    ecs_world.resources.game_state.game_state = GameStatus::GameOver {
+                        reason: GameOverReason::Starved,
+                    };
+                    
+                    ecs_world.publish_event(GameEvent::GameOver {
+                        reason: "你死于饥饿".to_string(),
+                    });
+
+                    // 将死亡加入aftermath队列
+                    ecs_world.resources.aftermath_queue.push(AftermathEvent::Death {
+                        entity,
+                        entity_id: entity.id() as u32,
+                        entity_name: "玩家".to_string(),
+                        killer: None,
+                    });
+
+                    // 更新组件
+                    let _ = ecs_world.world.insert(entity, (hunger, stats));
+                    return SystemResult::Stop;
+                }
+            }
+
+            // 更新组件
+            let _ = ecs_world.world.insert(entity, (hunger, stats));
         }
 
         SystemResult::Continue

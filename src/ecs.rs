@@ -241,6 +241,13 @@ impl ECSWorld {
                     .push(format!("饥饿造成了 {} 点伤害", damage));
             }
 
+            GameEvent::FoodEaten { food_name, satiety_restored, .. } => {
+                self.resources
+                    .game_state
+                    .message_log
+                    .push(format!("你吃了{}，恢复了{}点饱食度", food_name, satiety_restored));
+            }
+
             // ===== 新增事件处理 =====
 
             // 职业技能事件
@@ -1330,6 +1337,8 @@ pub struct Effects {
 pub struct Hunger {
     pub satiety: u8,           // 饱食度（0-10，SPD标准）
     pub last_hunger_turn: u32, // 上次饥饿减少的回合数
+    #[serde(default)]
+    pub turn_accumulator: u32, // 累积的回合数（用于更精确的饥饿计算）
 }
 
 impl Default for Hunger {
@@ -1337,6 +1346,7 @@ impl Default for Hunger {
         Self {
             satiety: 5, // 默认半饱状态
             last_hunger_turn: 0,
+            turn_accumulator: 0,
         }
     }
 }
@@ -1346,6 +1356,7 @@ impl Hunger {
         Self {
             satiety: satiety.min(10),
             last_hunger_turn: 0,
+            turn_accumulator: 0,
         }
     }
 
@@ -1517,6 +1528,7 @@ impl From<&Hero> for Hunger {
         Self {
             satiety: hero.satiety,
             last_hunger_turn: 0,
+            turn_accumulator: 0,
         }
     }
 }

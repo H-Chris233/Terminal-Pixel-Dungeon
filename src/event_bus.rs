@@ -429,6 +429,12 @@ pub enum GameEvent {
     PlayerStarving { entity: u32 },
     /// 饥饿造成伤害
     StarvationDamage { entity: u32, damage: u32 },
+    /// 食用食物
+    FoodEaten {
+        entity: u32,
+        food_name: String,
+        satiety_restored: u8,
+    },
 
     // ===== 游戏状态事件 =====
     /// 回合结束（AI 结算完成并且状态重新切换到玩家）
@@ -1058,6 +1064,7 @@ impl GameEvent {
             GameEvent::PlayerHungry { .. } => "PlayerHungry",
             GameEvent::PlayerStarving { .. } => "PlayerStarving",
             GameEvent::StarvationDamage { .. } => "StarvationDamage",
+            GameEvent::FoodEaten { .. } => "FoodEaten",
             GameEvent::BossEncountered { .. } => "BossEncountered",
             GameEvent::BossRoomEntered { .. } => "BossRoomEntered",
             GameEvent::BossPhaseChanged { .. } => "BossPhaseChanged",
@@ -1207,7 +1214,8 @@ impl GameEvent {
             GameEvent::HungerChanged { .. }
             | GameEvent::PlayerHungry { .. }
             | GameEvent::PlayerStarving { .. }
-            | GameEvent::StarvationDamage { .. } => EventCategory::Status,
+            | GameEvent::StarvationDamage { .. }
+            | GameEvent::FoodEaten { .. } => EventCategory::Status,
         }
     }
 }
