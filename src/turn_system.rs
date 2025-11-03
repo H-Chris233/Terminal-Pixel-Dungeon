@@ -42,13 +42,32 @@ pub mod energy_costs {
     /// Special terrain movement cost
     pub const TERRAIN_SPECIAL: u32 = FULL_ACTION;
     
+    // Inventory interaction costs
+    /// Cost to pick up an item from the ground
+    pub const PICKUP_ITEM: u32 = FULL_ACTION;
+    /// Cost to drop an item to the ground
+    pub const DROP_ITEM: u32 = FULL_ACTION;
+    /// Cost to use/consume an item (potion, scroll, food)
+    pub const USE_ITEM: u32 = FULL_ACTION;
+    /// Cost to equip or unequip an item
+    pub const EQUIP_ITEM: u32 = FULL_ACTION;
+    /// Cost to throw an item
+    pub const THROW_ITEM: u32 = FULL_ACTION;
+    /// Cost for quick item swap (when implemented)
+    pub const QUICK_SWAP: u32 = 50;
+    
     /// Get the energy cost for a player action
     pub fn player_action_cost(action: &PlayerAction) -> u32 {
         match action {
+            // Basic actions
             PlayerAction::Move(_)
-            | PlayerAction::Attack(_)
-            | PlayerAction::UseItem(_)
-            | PlayerAction::DropItem(_) => FULL_ACTION,
+            | PlayerAction::Attack(_) => FULL_ACTION,
+            
+            // Inventory actions
+            PlayerAction::UseItem(_) => USE_ITEM,
+            PlayerAction::DropItem(_) => DROP_ITEM,
+            PlayerAction::EquipItem(_) | PlayerAction::UnequipItem(_) => EQUIP_ITEM,
+            PlayerAction::ThrowItem(_, _) => THROW_ITEM,
             
             // Environment interactions have explicit costs
             PlayerAction::Descend | PlayerAction::Ascend => STAIR_USE,
