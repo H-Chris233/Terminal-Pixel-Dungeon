@@ -2827,6 +2827,8 @@ impl InventorySystem {
             
             if is_food {
                 return Self::handle_food_consumption(ecs_world, player_entity, slot_index, &item);
+            } else if matches!(item.item_type, ItemType::Wand { .. }) {
+                return Self::handle_wand_use(ecs_world, player_entity, slot_index, &item);
             } else {
                 return Self::handle_consumable(ecs_world, player_entity, slot_index, &item);
             }
@@ -2834,6 +2836,129 @@ impl InventorySystem {
         
         ecs_world.resources.game_state.message_log.push("No item in this slot.".to_string());
         false
+    }
+    
+    /// Handle wand use: fire at nearest enemy, consume a charge
+    fn handle_wand_use(ecs_world: &mut ECSWorld, player_entity: Entity, slot_index: usize, item: &ECSItem) -> bool {
+        use crate::event_bus::GameEvent;
+        
+        // Check charges
+        let charges = match &item.item_type {
+            ItemType::Wand { charges, .. } => *charges,
+            _ => return false,
+        };
+        
+        if charges == 0 {
+            ecs_world.resources.game_state.message_log.push("法杖已耗尽充能！".to_string());
+            return false;
+        }
+        
+        let damage = match &item.item_type {
+            ItemType::Wand { damage, .. } => *damage,
+            _ => 5,
+        };
+        
+        // Collect target data (owned values, no borrows)
+        let player_pos = match ecs_world.world.get::<&Position>(player_entity) {
+            Ok(pos) => (pos.x, pos.y, pos.z),
+            Err(_) => return false,
+        };
+        
+        let target_data: Vec<(hecs::Entity, i32, i32)> = ecs_world.world.query::<(&Position, &Actor)>().iter()
+            .filter(|(_, (pos, actor))| {
+                pos.z == player_pos.2 && actor.faction == Faction::Enemy
+            })
+            .map(|(e, (pos, _))| (e, pos.x, pos.y))
+            .collect();
+        
+        // Find nearest
+        let nearest = target_data.into_iter()
+            .min_by_key(|(_, x, y)| (x - player_pos.0).abs() + (y - player_pos.1).abs());
+        
+        if let Some((enemy_entity, ex, ey)) = nearest {
+            let enemy_name: String;
+            let died: bool;
+            let entity_name: String;
+            
+            // Apply damage
+            {
+                let mut stats_opt = ecs_world.world.get::<&mut Stats>(enemy_entity);
+                if let Ok(ref mut stats) = stats_opt {
+                    stats.hp = stats.hp.saturating_sub(damage);
+                    died = stats.hp == 0;
+                } else {
+                    return false;
+                }
+            }
+            
+            // Get enemy name
+            {
+                let actor_opt = ecs_world.world.get::<&Actor>(enemy_entity);
+                entity_name = actor_opt
+                    .map(|a| a.name.clone())
+                    .unwrap_or_else(|_| "Unknown".to_string());
+                enemy_name = entity_name.clone();
+            }
+            
+            let msg = format!("🔮 法杖击中{}，造成{}点伤害！", enemy_name, damage);
+            ecs_world.resources.game_state.message_log.push(msg);
+            
+            // Publish hit event
+            ecs_world.publish_event(GameEvent::CombatHit {
+                attacker: player_entity.id(),
+                defender: enemy_entity.id(),
+                damage,
+                is_critical: false,
+                is_ambush: false,
+            });
+            
+            // Check death & queue aftermath
+            if died {
+                ecs_world.resources.aftermath_queue.push(AftermathEvent::Death {
+                    entity: enemy_entity,
+                    entity_id: enemy_entity.id(),
+                    entity_name: entity_name.clone(),
+                    killer: Some(player_entity),
+                });
+                ecs_world.resources.aftermath_queue.push(AftermathEvent::LootDrop {
+                    entity: enemy_entity,
+                    position: Position::new(ex, ey, player_pos.2),
+                    entity_name,
+                    entity_level: 1.max((player_pos.2 + 1) as u32),
+                });
+                ecs_world.resources.aftermath_queue.push(AftermathEvent::ExperienceGain {
+                    entity: player_entity,
+                    amount: damage / 2 + 5,
+                });
+            }
+            
+            // Consume a charge: update the item in inventory (separate borrow scope)
+            {
+                if let Ok(mut inventory) = ecs_world.world.get::<&mut Inventory>(player_entity) {
+                    if slot_index < inventory.items.len() {
+                        if let Some(ref mut slot_item) = inventory.items[slot_index].item {
+                            if let ItemType::Wand { ref mut charges, .. } = slot_item.item_type {
+                                *charges = charges.saturating_sub(1);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Mark action as completed
+            ecs_world.resources.input_buffer.completed_actions.push(PlayerAction::UseItem(slot_index));
+            
+            ecs_world.publish_event(GameEvent::ItemUsed {
+                entity: player_entity.id(),
+                item_name: item.name.clone(),
+                effect: format!("wand damage {}", damage),
+            });
+            
+            true
+        } else {
+            ecs_world.resources.game_state.message_log.push("视野内没有敌人！".to_string());
+            false
+        }
     }
     
     /// Handle food consumption

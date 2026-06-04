@@ -1044,6 +1044,7 @@ pub enum ItemType {
     Weapon { damage: u32 },
     Armor { defense: u32 },
     Ring { defense_bonus: u32, crit_bonus: f32 },
+    Wand { damage: u32, kind: String, charges: u8, max_charges: u8 },
     Consumable { effect: ConsumableEffect },
     Throwable { damage: (u32, u32), range: u8 },
     Key,
@@ -1164,6 +1165,12 @@ impl ECSItem {
             items::ItemKind::Ring(r) => ItemType::Ring {
                 defense_bonus: r.defense_bonus() as u32,
                 crit_bonus: r.crit_bonus(),
+            },
+            items::ItemKind::Wand(w) => ItemType::Wand {
+                damage: w.base_damage(),
+                kind: format!("{:?}", w.kind),
+                charges: w.charges,
+                max_charges: w.max_charges,
             },
             items::ItemKind::Herb(_) => ItemType::Consumable {
                 effect: ConsumableEffect::Healing { amount: 8 },
@@ -1926,6 +1933,9 @@ impl From<&Inventory> for Bag {
                     ),
                     ItemType::Throwable { .. } => game_items::ItemKind::Throwable(
                         game_items::Throwable::new(game_items::ThrowableKind::Dart),
+                    ),
+                    ItemType::Wand { .. } => game_items::ItemKind::Wand(
+                        game_items::Wand::new(items::wand::WandKind::MagicMissile, 1),
                     ),
                     ItemType::Ring { .. } => game_items::ItemKind::Ring(game_items::Ring::new(
                         game_items::ring::RingKind::Accuracy, 1,

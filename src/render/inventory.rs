@@ -147,6 +147,9 @@ impl InventoryRenderer {
         // 根据类型生成默认描述
         use crate::ecs::ItemType;
         match &item.item_type {
+            ItemType::Wand { charges, max_charges, .. } => {
+                format!("🔮 充能: {}/{}", charges, max_charges)
+            }
             ItemType::Weapon { damage } => {
                 format!("⚔️ 攻击力: +{}", damage)
             }
@@ -338,6 +341,7 @@ impl InventoryRenderer {
         match &item.item_type {
             ItemType::Weapon { .. } => Color::Red,
             ItemType::Armor { .. } => Color::Blue,
+            ItemType::Wand { .. } => Color::Cyan,
             ItemType::Ring { .. } => Color::Magenta,
             ItemType::Consumable { .. } => Color::Green,
             ItemType::Throwable { .. } => Color::LightMagenta,
@@ -353,6 +357,7 @@ impl InventoryRenderer {
         match &item.item_type {
             ItemType::Weapon { .. } => "⚔️",
             ItemType::Armor { .. } => "🛡️",
+            ItemType::Wand { .. } => "🔮",
             ItemType::Ring { .. } => "💍",
             ItemType::Consumable { .. } => "🧪",
             ItemType::Throwable { .. } => "🎯",
