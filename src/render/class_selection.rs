@@ -3,14 +3,13 @@
 //! 处理职业选择界面的渲染，展示职业描述、属性预览、初始装备和技能提示
 
 use crate::ecs::{GameStatus, Resources};
-use hecs::World;
 use hero::class::Class;
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
 };
 
 /// 职业选择渲染器

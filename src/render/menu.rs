@@ -4,7 +4,6 @@
 //! 支持中文界面和键盘导航。
 
 use crate::ecs::{GameStatus, Resources};
-use hecs::World;
 use ratatui::text::Text;
 use ratatui::{
     Frame,

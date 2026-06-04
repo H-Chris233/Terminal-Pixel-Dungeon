@@ -506,12 +506,12 @@ pub enum Priority {
 pub trait EventMiddleware: Send + Sync {
     /// 在事件处理之前调用，可以修改事件或阻止处理
     /// 返回 true 表示继续处理，false 表示阻止处理
-    fn before_handle(&mut self, event: &GameEvent) -> bool {
+    fn before_handle(&mut self, _event: &GameEvent) -> bool {
         true // 默认允许处理
     }
 
     /// 在事件处理之后调用
-    fn after_handle(&mut self, event: &GameEvent) {
+    fn after_handle(&mut self, _event: &GameEvent) {
         // 默认不执行任何操作
     }
 
@@ -538,7 +538,7 @@ pub trait EventHandler: Send + Sync {
     }
 
     /// 是否应该处理此事件（事件过滤）
-    fn should_handle(&self, event: &GameEvent) -> bool {
+    fn should_handle(&self, _event: &GameEvent) -> bool {
         true
     }
 

@@ -16,7 +16,7 @@ use crate::input::*;
 use crate::renderer::*;
 use crate::systems::*;
 use crate::systems::EffectPhase;
-use crate::turn_system::{TurnPhase, TurnState, TurnSystem};
+use crate::turn_system::{TurnState, TurnSystem};
 use anyhow;
 use save::{AutoSave, SaveSystem};
 use std::time::{Duration, Instant};
@@ -186,6 +186,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
             // ========== 新增：玩家专属组件 ==========
             crate::ecs::Hunger::new(5), // 初始饱食度为5（半饱）
             crate::ecs::Wealth::new(0), // 初始金币为0
+            crate::ecs::EquippedItems::new(), // 装备槽跟踪
             crate::ecs::PlayerProgress::new(
                 10,
                 hero::class::Class::Warrior,
@@ -435,6 +436,18 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
             if let Some(class) = self.ecs_world.resources.game_state.selected_class.take() {
                 // 清理旧的游戏世界
                 self.reinitialize_with_class(class)?;
+            }
+        }
+
+        // 检查是否需要从存档加载游戏
+        if self.ecs_world.resources.game_state.pending_load_save {
+            self.ecs_world.resources.game_state.pending_load_save = false;
+            if let Err(e) = self.load_saved_game() {
+                self.ecs_world
+                    .resources
+                    .game_state
+                    .message_log
+                    .push(format!("加载存档失败：{}", e));
             }
         }
 
@@ -798,6 +811,47 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
         // 生成一些敌人
         factory.create_monster(&mut self.ecs_world.world, start_x + 5, start_y, "goblin");
         factory.create_monster(&mut self.ecs_world.world, start_x - 5, start_y, "rat");
+
+        Ok(())
+    }
+
+    /// 从存档加载游戏
+    fn load_saved_game(&mut self) -> anyhow::Result<()> {
+        let save_dir = self.ecs_world.resources.config.save_directory.clone();
+        let save_sys = save::SaveSystem::new(&save_dir, 10)
+            .map_err(|e| anyhow::anyhow!("存档系统初始化失败：{}", e))?;
+
+        let saves = save_sys
+            .list_saves()
+            .map_err(|e| anyhow::anyhow!("无法列出存档：{}", e))?;
+
+        if saves.is_empty() {
+            return Err(anyhow::anyhow!("没有可用的存档"));
+        }
+
+        // 加载最近的存档（slot 0 是最新的）
+        let save_data = save_sys
+            .load_game(0)
+            .map_err(|e| anyhow::anyhow!("加载存档失败：{}", e))?;
+
+        // 恢复游戏状态
+        let (turn_state, player_action_taken) = self
+            .ecs_world
+            .from_save_data(save_data)
+            .map_err(|e| anyhow::anyhow!("恢复游戏状态失败：{}", e))?;
+
+        // 恢复回合系统状态
+        self.turn_system
+            .set_state(turn_state, player_action_taken);
+
+        // 设置游戏状态为运行中
+        self.ecs_world.resources.game_state.game_state = GameStatus::Running;
+
+        self.ecs_world
+            .resources
+            .game_state
+            .message_log
+            .push("存档加载成功！".to_string());
 
         Ok(())
     }

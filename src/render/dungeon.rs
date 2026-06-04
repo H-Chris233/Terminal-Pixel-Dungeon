@@ -7,7 +7,6 @@ use crate::ecs::{Actor, Color, Player, Position, Renderable, TerrainType, Tile, 
 use hecs::World;
 use ratatui::{
     Frame,
-    backend::Backend,
     buffer::Buffer,
     layout::Rect,
     style::{Color as TuiColor, Style},

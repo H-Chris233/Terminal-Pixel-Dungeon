@@ -4,13 +4,12 @@
 //! 支持显示死亡原因、统计信息等。
 
 use crate::ecs::{GameOverReason, GameStatus, Resources};
-use hecs::World;
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Gauge, Paragraph},
+    widgets::{Block, Borders, Paragraph},
 };
 
 /// 游戏结束界面渲染器
@@ -204,7 +203,7 @@ impl GameOverRenderer {
     }
 
     /// 获取游戏统计信息
-    fn get_game_statistics(&self, resources: &Resources) -> Vec<Line> {
+    fn get_game_statistics(&self, resources: &Resources) -> Vec<Line<'_>> {
         vec![
             Line::from(vec![
                 Span::styled("游戏时长: ", Style::default().fg(Color::Gray)),

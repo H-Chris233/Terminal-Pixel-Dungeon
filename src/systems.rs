@@ -1,13 +1,11 @@
 use crate::ecs::{
     AI, AIState, AIType, Actor, AftermathEvent, CombatIntent, CombatOutcome, Color,
     ConsumableEffect, Direction, ECSItem, ECSWorld, EffectType, Energy, Faction, GameOverReason,
-    GameStatus, Hunger, Inventory, ItemSlot, ItemType, NavigateDirection, Player, PlayerAction,
-    PlayerProgress, Position, Renderable, Resources, StatType, Stats, StatusEffects, TerrainType,
+    GameStatus, Hunger, Inventory, ItemSlot, ItemType, NavigateDirection, Player, PlayerAction, Position, Renderable, Resources, StatType, Stats, StatusEffects, TerrainType,
     Tile, Viewshed, Wealth,
 };
 use crate::event_bus::LogLevel;
 use hecs::{Entity, World};
-use std::error::Error;
 
 use rand;
 
@@ -296,7 +294,7 @@ impl MovementSystem {
     /// Check for traps at the position and trigger them
     fn check_traps(world: &mut World, resources: &mut Resources, entity: Entity, pos: &Position) {
         // Look for trap tiles at this position
-        for (trap_entity, (trap_pos, tile)) in world.query::<(&Position, &Tile)>().iter() {
+        for (_trap_entity, (trap_pos, tile)) in world.query::<(&Position, &Tile)>().iter() {
             if trap_pos.x == pos.x && trap_pos.y == pos.y && trap_pos.z == pos.z {
                 // Check if this tile has a trap (using terrain type)
                 if matches!(tile.terrain_type, TerrainType::Trap) {
@@ -359,7 +357,7 @@ impl MovementSystem {
     /// Run movement system with event bus integration.
     /// This version emits events for all movement actions.
     pub fn run_with_events(ecs_world: &mut ECSWorld) -> SystemResult {
-        use crate::event_bus::GameEvent;
+        
 
         // Process pending movement actions
         let actions_to_process = std::mem::take(&mut ecs_world.resources.input_buffer.pending_actions);
@@ -522,7 +520,7 @@ impl MovementSystem {
 
     /// Check items and emit events
     fn check_items_with_events(ecs_world: &mut ECSWorld, _entity: Entity, pos: &Position) {
-        use crate::event_bus::GameEvent;
+        
 
         // Collect item names at this position first
         let item_names: Vec<String> = ecs_world.world
@@ -542,7 +540,7 @@ impl MovementSystem {
             ));
             
             // Emit item pickup opportunity event
-            ecs_world.publish_event(GameEvent::LogMessage {
+            ecs_world.publish_event(crate::event_bus::GameEvent::LogMessage {
                 message: format!("发现了 {}", item_name),
                 level: crate::event_bus::LogLevel::Info,
             });
@@ -551,7 +549,7 @@ impl MovementSystem {
 
     /// Check doors and emit events
     fn check_doors_with_events(ecs_world: &mut ECSWorld, _entity: Entity, pos: &Position) {
-        use crate::event_bus::GameEvent;
+        
 
         // Check if there's a door at this position
         let has_door = ecs_world.world.query::<(&Position, &Tile)>()
@@ -565,7 +563,7 @@ impl MovementSystem {
             ecs_world.resources.game_state.message_log.push("打开了门".to_string());
             
             // Emit door opened event
-            ecs_world.publish_event(GameEvent::LogMessage {
+            ecs_world.publish_event(crate::event_bus::GameEvent::LogMessage {
                 message: "打开了门".to_string(),
                 level: crate::event_bus::LogLevel::Info,
             });
@@ -597,7 +595,7 @@ impl System for AISystem {
         "AISystem"
     }
 
-    fn run(&mut self, world: &mut World, resources: &mut Resources) -> SystemResult {
+    fn run(&mut self, _world: &mut World, _resources: &mut Resources) -> SystemResult {
         // This system is now a placeholder - actual AI processing is done
         // through run_with_events during AI turn phase
         SystemResult::Continue
@@ -628,7 +626,7 @@ impl AISystem {
     /// Run AI system with event bus integration.
     /// This is called during the AI turn phase to generate and execute intents.
     pub fn run_with_events(world: &mut ECSWorld) -> SystemResult {
-        use crate::event_bus::{GameEvent, LogLevel};
+        use crate::event_bus::GameEvent;
         use crate::turn_system::energy_costs;
 
         // Collect AI entities with sufficient energy
@@ -854,9 +852,9 @@ impl AISystem {
 
     /// Generate intent for patrol AI
     fn generate_patrol_intent(
-        world: &World,
+        _world: &World,
         ai_entity: Entity,
-        ai_state: &AIState,
+        _ai_state: &AIState,
         ai_pos: &Position,
         patrol_path: &[Position],
     ) -> Option<AIActionIntent> {
@@ -895,7 +893,7 @@ impl AISystem {
             // Move towards patrol point
             let dx = (target_pos.x - ai_pos.x).signum();
             let dy = (target_pos.y - ai_pos.y).signum();
-            let direction = Self::signum_to_direction(dx, dy);
+            let _direction = Self::signum_to_direction(dx, dy);
 
             Some(AIActionIntent {
                 entity: ai_entity,
@@ -923,7 +921,7 @@ impl AISystem {
         event_bus: &mut crate::event_bus::EventBus,
     ) {
         if let Ok(mut ai) = world.get::<&mut AI>(ai_entity) {
-            let old_state = ai.state.clone();
+            let _old_state = ai.state.clone();
             let old_target = ai.target;
 
             // Update state based on intent
@@ -1144,7 +1142,7 @@ impl System for CombatSystem {
         "CombatSystem"
     }
 
-    fn run(&mut self, world: &mut World, resources: &mut Resources) -> SystemResult {
+    fn run(&mut self, _world: &mut World, _resources: &mut Resources) -> SystemResult {
         // 注意：这个系统现在需要通过 ECSWorld 来运行，以便访问事件总线
         // 暂时保留原有逻辑，实际应该通过 run_with_events 方法调用
         SystemResult::Continue
@@ -1164,7 +1162,7 @@ impl CombatSystem {
     /// 4. 将死亡/战利品/经验事件排队到后续阶段
     /// 5. 不直接修改实体（移除），而是标记到 aftermath_queue
     pub fn run_with_events(world: &mut ECSWorld) -> SystemResult {
-        use crate::event_bus::GameEvent;
+        
 
         // 1. 取出所有待处理的战斗意图
         let mut intents = std::mem::take(&mut world.resources.combat_intents);
@@ -1257,6 +1255,11 @@ impl CombatSystem {
                 stats.hp = def_stats.hp;
             }
             
+            // 检测偷袭状态
+            let is_ambush = combat_result.events.iter().any(|ev| {
+                matches!(ev, ::combat::CombatEvent::Ambush { .. })
+            });
+
             // 发布战斗事件
             for ev in &combat_result.events {
                 match ev {
@@ -1274,7 +1277,7 @@ impl CombatSystem {
                             defender: *victim,
                             damage: *damage,
                             is_critical: *is_critical,
-                            is_ambush: false, // TODO: track ambush state
+                            is_ambush,
                         });
                         world.publish_event(GameEvent::DamageDealt {
                             attacker: *attacker,
@@ -1290,14 +1293,14 @@ impl CombatSystem {
                         });
                     }
                     ::combat::CombatEvent::Ambush { .. } => {
-                        // Handle ambush indicator
+                        // Ambush detected - flagged via is_ambush above
                     }
                 }
             }
             
             // 发布日志消息
             for log in &combat_result.logs {
-                world.publish_event(GameEvent::LogMessage {
+                world.publish_event(crate::event_bus::GameEvent::LogMessage {
                     message: log.clone(),
                     level: LogLevel::Info,
                 });
@@ -1348,7 +1351,7 @@ impl CombatSystem {
         use crate::event_bus::GameEvent;
         
         match outcome {
-            CombatOutcome::Hit { damage, is_critical, is_ambush } => {
+            CombatOutcome::Hit { damage: _, is_critical: _, is_ambush: _ } => {
                 // Events already published in resolve_combat_intent
             }
             CombatOutcome::Miss => {
@@ -1389,15 +1392,20 @@ impl CombatSystem {
         world.resources.aftermath_queue.push(AftermathEvent::Death {
             entity,
             entity_id,
-            entity_name,
+            entity_name: entity_name.clone(),
             killer,
         });
         
         // 战利品掉落
         if let Some(pos) = position {
+            let level = world.world.get::<&Stats>(entity)
+                .map(|s| s.level)
+                .unwrap_or(1);
             world.resources.aftermath_queue.push(AftermathEvent::LootDrop {
                 entity,
                 position: pos,
+                entity_name: entity_name.clone(),
+                entity_level: level,
             });
         }
     }
@@ -1502,7 +1510,7 @@ impl System for AftermathSystem {
         "AftermathSystem"
     }
 
-    fn run(&mut self, world: &mut World, resources: &mut Resources) -> SystemResult {
+    fn run(&mut self, _world: &mut World, _resources: &mut Resources) -> SystemResult {
         SystemResult::Continue
     }
 }
@@ -1517,7 +1525,7 @@ impl AftermathSystem {
         
         for event in aftermath_events {
             match event {
-                AftermathEvent::Death { entity, entity_id, entity_name, killer } => {
+                AftermathEvent::Death { entity, entity_id: _, entity_name: _, killer: _ } => {
                     // Check if entity is player
                     let is_player = world.world.get::<&Player>(entity).is_ok();
                     
@@ -1534,26 +1542,141 @@ impl AftermathSystem {
                         let _ = world.world.despawn(entity);
                     }
                 }
-                AftermathEvent::LootDrop { entity, position } => {
-                    // TODO: Implement loot drop logic
-                    // For now, just log it
-                    world.publish_event(GameEvent::LogMessage {
-                        message: format!("战利品掉落在 ({}, {})", position.x, position.y),
-                        level: LogLevel::Debug,
-                    });
+                AftermathEvent::LootDrop { entity: _, position, entity_name, entity_level } => {
+                    // 生成战利品
+                    Self::generate_loot(world, &entity_name, entity_level, &position);
                 }
                 AftermathEvent::ExperienceGain { entity, amount } => {
-                    // Award experience to entity
-                    // TODO: Implement experience system - for now just log it
-                    world.publish_event(GameEvent::LogMessage {
-                        message: format!("获得 {} 点经验", amount),
-                        level: LogLevel::Info,
-                    });
+                    // 授予经验值
+                    Self::award_experience(world, entity, amount);
                 }
             }
         }
         
         SystemResult::Continue
+    }
+
+    /// 根据敌人类型和等级生成战利品掉落
+    fn generate_loot(world: &mut ECSWorld, entity_name: &str, entity_level: u32, position: &Position) {
+        use rand::Rng;
+        let mut rng = rand::rng();
+        let depth = world.resources.game_state.depth.max(1) as u32;
+
+        // 金币掉落：基础值 + 等级加成
+        let base_gold = match entity_name {
+            n if n.contains("Rat") => rng.random_range(2..6),
+            n if n.contains("Goblin") => rng.random_range(5..15),
+            n if n.contains("Orc") => rng.random_range(10..25),
+            n if n.contains("Skeleton") => rng.random_range(8..20),
+            n if n.contains("Bat") => rng.random_range(2..8),
+            n if n.contains("Slime") => rng.random_range(3..10),
+            n if n.contains("Boss") || n.contains("Tengu") || n.contains("DM-300")
+                || n.contains("King") || n.contains("Yog") =>
+                rng.random_range(50..150),
+            _ => rng.random_range(3..12),
+        };
+        let gold = base_gold + (entity_level * 2) + (depth * 3);
+
+        // 给玩家加金币
+        {
+            if let Some(player_entity) = find_player_entity(&world.world) {
+                if let Ok(mut wealth) = world.world.get::<&mut Wealth>(player_entity) {
+                    wealth.add_gold(gold);
+                }
+            }
+        }
+        world.publish_event(crate::event_bus::GameEvent::LogMessage {
+            message: format!("从 {} 获得 {} 金币", entity_name, gold),
+            level: LogLevel::Info,
+        });
+
+        // 物品掉落概率
+        let drop_chance: f32 = rng.random();
+        let item_drop = if entity_name.contains("Boss") || entity_name.contains("Tengu")
+            || entity_name.contains("DM-300") || entity_name.contains("King")
+            || entity_name.contains("Yog")
+        {
+            true // Boss 必定掉落物品
+        } else {
+            drop_chance < 0.35 // 普通敌人 35% 概率掉落物品
+        };
+
+        if item_drop {
+            let roll: f32 = rng.random();
+            let item = if roll < 0.30 {
+                items::Item::new(items::ItemKind::Potion(items::Potion::random_new()))
+            } else if roll < 0.50 {
+                items::Item::new(items::ItemKind::Scroll(items::Scroll::random_new()))
+            } else if roll < 0.65 {
+                items::Item::new(items::ItemKind::Food(items::Food::random_new()))
+            } else if roll < 0.80 {
+                items::Item::new(items::ItemKind::Throwable(items::Throwable::random_new()))
+            } else if roll < 0.90 {
+                items::Item::new(items::ItemKind::Seed(items::Seed::random_new()))
+            } else {
+                items::Item::new(items::ItemKind::Stone(items::Stone::random_new()))
+            };
+
+            let factory = crate::core::entity_factory::EntityFactory::new();
+            factory.create_item(&mut world.world, position.x, position.y, item);
+            world.publish_event(crate::event_bus::GameEvent::LogMessage {
+                message: format!("{} 掉落了物品！", entity_name),
+                level: LogLevel::Info,
+            });
+        }
+    }
+
+    /// 授予经验值并处理升级
+    fn award_experience(world: &mut ECSWorld, entity: Entity, amount: u32) {
+        let is_player = world.world.get::<&Player>(entity).is_ok();
+
+        // 在独立作用域中修改 stats，避免借用冲突
+        let messages: Vec<String> = {
+            if let Ok(mut stats) = world.world.get::<&mut Stats>(entity) {
+                stats.experience += amount;
+                let mut msgs = vec![format!("获得 {} 点经验", amount)];
+
+                if is_player {
+                    let mut xp_to_next = Self::xp_for_level(stats.level + 1);
+                    while stats.experience >= xp_to_next {
+                        stats.level += 1;
+                        stats.experience = stats.experience.saturating_sub(xp_to_next);
+
+                        // 升级奖励
+                        stats.max_hp += 5;
+                        stats.hp = (stats.hp + 5).min(stats.max_hp);
+                        stats.attack += 1;
+                        stats.defense += 1;
+                        stats.accuracy = (stats.accuracy + 1).min(95);
+                        stats.evasion = (stats.evasion + 1).min(50);
+
+                        msgs.push(format!("升级！你达到了等级 {}！", stats.level));
+
+                        if stats.level >= 30 {
+                            break;
+                        }
+                        xp_to_next = Self::xp_for_level(stats.level + 1);
+                    }
+                }
+                msgs
+            } else {
+                return;
+            }
+        };
+
+        // stats 的借用已释放，现在可以安全发布事件
+        for msg in messages {
+            world.publish_event(crate::event_bus::GameEvent::LogMessage {
+                message: msg,
+                level: LogLevel::Info,
+            });
+        }
+    }
+
+    /// 计算升级所需经验值
+    fn xp_for_level(level: u32) -> u32 {
+        // 基于 Shattered PD 的经验曲线
+        level * 5 + (level * level) / 2
     }
 }
 
@@ -1566,7 +1689,7 @@ impl System for FOVSystem {
 
     fn run(&mut self, world: &mut World, resources: &mut Resources) -> SystemResult {
         // Check for game over conditions (player death)
-        for (entity, (actor, stats)) in world.query::<(&Actor, &Stats)>().iter() {
+        for (_entity, (actor, stats)) in world.query::<(&Actor, &Stats)>().iter() {
             if actor.faction == Faction::Player && stats.hp == 0 {
                 resources.game_state.game_state = GameStatus::GameOver {
                     reason: GameOverReason::Died("死亡"),
@@ -1583,7 +1706,7 @@ impl System for FOVSystem {
         if resources.game_state.depth >= resources.config.max_depth {
             // Check if player is on the final level and in a winning condition
             // For now, if the player reaches the max depth, they win
-            for (entity, (actor, pos)) in world.query::<(&Actor, &Position)>().iter() {
+            for (_entity, (actor, pos)) in world.query::<(&Actor, &Position)>().iter() {
                 if actor.faction == Faction::Player && pos.z as usize == resources.config.max_depth
                 {
                     resources.game_state.game_state = GameStatus::Victory;
@@ -1855,7 +1978,7 @@ impl EffectSystem {
         }
         
         // Process each entity's effects
-        for (entity, mut status_effects, mut stats, is_player, entity_name) in entities_to_process {
+        for (entity, mut status_effects, mut stats, _is_player, entity_name) in entities_to_process {
             // Skip if already processed this turn
             if status_effects.last_tick_turn >= current_turn {
                 continue;
@@ -1864,7 +1987,7 @@ impl EffectSystem {
             status_effects.last_tick_turn = current_turn;
             
             let mut total_damage = 0u32;
-            let mut total_healing = 0u32;
+            let total_healing = 0u32;
             let mut effects_to_remove = Vec::new();
             
             // Process each effect
@@ -2073,7 +2196,7 @@ impl System for InventorySystem {
             match action {
                 PlayerAction::UseItem(slot_index) => {
                     if let Some(player_entity) = find_player_entity(world) {
-                        let player_id = player_entity.id();
+                        let _player_id = player_entity.id();
 
                         // Get player's inventory
                         if let Ok(mut inventory) = world.get::<&mut Inventory>(player_entity) {
@@ -2097,7 +2220,7 @@ impl System for InventorySystem {
                                         // Handle food consumption
                                         if let Some(ref data) = item.detailed_data {
                                             use items::Item;
-                                            if let Ok((mut food_item, _)) = bincode::decode_from_slice::<Item, _>(
+                                            if let Ok((food_item, _)) = bincode::decode_from_slice::<Item, _>(
                                                 data,
                                                 bincode::config::standard()
                                             ) {
@@ -2389,7 +2512,7 @@ impl System for InventorySystem {
                     };
 
                     // Now spawn the item if we have the data
-                    if let Some((player_pos, item_to_drop, player_id)) = drop_result {
+                    if let Some((player_pos, item_to_drop, _player_id)) = drop_result {
                         world.spawn((
                             Position::new(player_pos.x, player_pos.y, player_pos.z),
                             Renderable {
@@ -2526,8 +2649,8 @@ impl InventorySystem {
     /// Run inventory system with event bus integration.
     /// Processes inventory actions (use, drop, equip, unequip) and publishes events.
     pub fn run_with_events(ecs_world: &mut ECSWorld) -> SystemResult {
-        use crate::event_bus::GameEvent;
-        use crate::turn_system::energy_costs;
+        
+        
         
         let actions_to_process = std::mem::take(&mut ecs_world.resources.input_buffer.pending_actions);
         let mut new_actions = Vec::new();
@@ -2628,9 +2751,9 @@ impl InventorySystem {
     
     /// Handle using an item from inventory
     fn handle_use_item(ecs_world: &mut ECSWorld, player_entity: Entity, slot_index: usize) -> bool {
-        use crate::event_bus::GameEvent;
         
-        let player_id = player_entity.id();
+        
+        let _player_id = player_entity.id();
         
         // Get player's inventory
         let item_opt = {
@@ -2674,7 +2797,7 @@ impl InventorySystem {
         use crate::event_bus::GameEvent;
         
         if let Some(ref data) = item.detailed_data {
-            if let Ok((mut food_item, _)) = bincode::decode_from_slice::<items::Item, _>(
+            if let Ok((food_item, _)) = bincode::decode_from_slice::<items::Item, _>(
                 data,
                 bincode::config::standard()
             ) {
@@ -2720,7 +2843,7 @@ impl InventorySystem {
             ItemType::Consumable { effect } => {
                 let item_name = item.name.clone();
                 let mut effect_description = String::new();
-                let mut success = true;
+                let success = true;
                 
                 match effect {
                     ConsumableEffect::Healing { amount } => {
@@ -2946,10 +3069,10 @@ impl InventorySystem {
     /// Handle equipping an item
     fn handle_equip_item(ecs_world: &mut ECSWorld, player_entity: Entity, slot_index: usize) -> bool {
         use crate::event_bus::GameEvent;
-        
+
         let player_id = player_entity.id();
-        
-        // Get the item to equip
+
+        // Get the item to equip (clone out of inventory first)
         let item_opt = {
             if let Ok(inventory) = ecs_world.world.get::<&Inventory>(player_entity) {
                 if slot_index < inventory.items.len() {
@@ -2962,44 +3085,293 @@ impl InventorySystem {
                 return false;
             }
         };
-        
+
         if let Some(item) = item_opt {
             if !item.is_equippable() {
                 ecs_world.resources.game_state.message_log.push("Cannot equip this item.".to_string());
                 return false;
             }
-            
+
             let slot_name = match &item.item_type {
                 ItemType::Weapon { .. } => "weapon",
                 ItemType::Armor { .. } => "armor",
                 _ => "unknown",
             };
-            
-            // For now, just log the action (full equipment system would need to track equipped items)
+
+            // 获取当前装备并交换
+            let old_equipped = {
+                if let Ok(mut equipped) = ecs_world.world.get::<&mut crate::ecs::EquippedItems>(player_entity) {
+                    match slot_name {
+                        "weapon" => {
+                            let old = equipped.weapon.take();
+                            equipped.weapon = Some(item.clone());
+                            old
+                        }
+                        "armor" => {
+                            let old = equipped.armor.take();
+                            equipped.armor = Some(item.clone());
+                            old
+                        }
+                        _ => None,
+                    }
+                } else {
+                    None
+                }
+            };
+
+            // 应用装备属性加成
+            Self::apply_equip_stats(ecs_world, player_entity, &item, true);
+            if let Some(ref old) = old_equipped {
+                Self::apply_equip_stats(ecs_world, player_entity, old, false);
+            }
+
+            // 从背包移除装备的物品，如果有旧装备则放回
+            {
+                if let Ok(mut inventory) = ecs_world.world.get::<&mut Inventory>(player_entity) {
+                    if slot_index < inventory.items.len() {
+                        if let Some(old) = old_equipped {
+                            inventory.items[slot_index].item = Some(old);
+                        } else {
+                            inventory.items.remove(slot_index);
+                        }
+                    }
+                }
+            }
+
             ecs_world.publish_event(GameEvent::ItemEquipped {
                 entity: player_id,
                 item_name: item.name.clone(),
                 slot: slot_name.to_string(),
             });
-            
+
             return true;
         }
-        
+
         ecs_world.resources.game_state.message_log.push("No item in this slot.".to_string());
         false
     }
-    
+
+    /// Apply or remove equip stats from player
+    fn apply_equip_stats(world: &mut ECSWorld, player_entity: Entity, item: &ECSItem, equip: bool) {
+        if let Ok(mut stats) = world.world.get::<&mut Stats>(player_entity) {
+            let mult: i32 = if equip { 1 } else { -1 };
+            match &item.item_type {
+                ItemType::Weapon { damage } => {
+                    stats.attack = (stats.attack as i32 + mult * (*damage as i32)).max(0) as u32;
+                }
+                ItemType::Armor { defense } => {
+                    stats.defense = (stats.defense as i32 + mult * (*defense as i32)).max(0) as u32;
+                }
+                _ => {}
+            }
+        }
+    }
+
     /// Handle unequipping an item
-    fn handle_unequip_item(ecs_world: &mut ECSWorld, _player_entity: Entity, _slot_index: usize) -> bool {
-        // Placeholder for unequip logic
-        ecs_world.resources.game_state.message_log.push("Unequip not yet implemented.".to_string());
+    fn handle_unequip_item(ecs_world: &mut ECSWorld, player_entity: Entity, _slot_index: usize) -> bool {
+        use crate::event_bus::GameEvent;
+
+        let player_id = player_entity.id();
+
+        // 检查背包是否有空间
+        let has_space = if let Ok(inventory) = ecs_world.world.get::<&Inventory>(player_entity) {
+            inventory.items.len() < inventory.max_slots
+        } else {
+            false
+        };
+
+        if !has_space {
+            ecs_world.resources.game_state.message_log.push("背包已满，无法卸下装备。".to_string());
+            return false;
+        }
+
+        // 卸下武器优先（如果有的话）
+        let unequipped = {
+            if let Ok(mut equipped) = ecs_world.world.get::<&mut crate::ecs::EquippedItems>(player_entity) {
+                if let Some(weapon) = equipped.weapon.take() {
+                    Some(("weapon".to_string(), weapon))
+                } else if let Some(armor) = equipped.armor.take() {
+                    Some(("armor".to_string(), armor))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        };
+
+        if let Some((_slot, item)) = unequipped {
+            let item_name = item.name.clone();
+
+            // 移除装备属性加成
+            Self::apply_equip_stats(ecs_world, player_entity, &item, false);
+
+            // 放回背包
+            if let Ok(mut inventory) = ecs_world.world.get::<&mut Inventory>(player_entity) {
+                inventory.items.push(ItemSlot {
+                    item: Some(item),
+                    quantity: 1,
+                });
+            }
+
+            ecs_world.resources.game_state.message_log.push(format!("卸下了 {}。", item_name));
+            ecs_world.publish_event(GameEvent::ItemDropped {
+                entity: player_id,
+                item_name,
+            });
+            return true;
+        }
+
+        ecs_world.resources.game_state.message_log.push("没有可卸下的装备。".to_string());
         false
     }
-    
+
     /// Handle throwing an item
-    fn handle_throw_item(ecs_world: &mut ECSWorld, _player_entity: Entity, _slot_index: usize, _direction: Direction) -> bool {
-        // Placeholder for throw logic
-        ecs_world.resources.game_state.message_log.push("Throw not yet implemented.".to_string());
+    fn handle_throw_item(ecs_world: &mut ECSWorld, player_entity: Entity, slot_index: usize, direction: Direction) -> bool {
+        use crate::event_bus::GameEvent;
+        use rand::Rng;
+
+        // 取出要投掷的物品
+        let throw_item = {
+            if let Ok(mut inventory) = ecs_world.world.get::<&mut Inventory>(player_entity) {
+                if slot_index < inventory.items.len() {
+                    if let Some(ref item) = inventory.items[slot_index].item {
+                        if matches!(item.item_type, ItemType::Throwable { .. }) {
+                            let taken = inventory.items[slot_index].item.take();
+                            if inventory.items[slot_index].item.is_none() {
+                                inventory.items.remove(slot_index);
+                            }
+                            taken
+                        } else {
+                            ecs_world.resources.game_state.message_log.push("该物品无法投掷。".to_string());
+                            return false;
+                        }
+                    } else {
+                        ecs_world.resources.game_state.message_log.push("无效的物品槽位。".to_string());
+                        return false;
+                    }
+                } else {
+                    ecs_world.resources.game_state.message_log.push("无效的槽位。".to_string());
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        };
+
+        if let Some(item) = throw_item {
+            let (min_dmg, max_dmg) = match &item.item_type {
+                ItemType::Throwable { damage, .. } => (damage.0, damage.1),
+                _ => (1, 4),
+            };
+
+            let item_name = item.name.clone();
+
+            // 获取玩家位置
+            let player_pos = match ecs_world.world.get::<&Position>(player_entity) {
+                Ok(p) => Position::new(p.x, p.y, p.z),
+                Err(_) => return false,
+            };
+
+            // 计算投掷方向
+            let (dx, dy): (i32, i32) = match direction {
+                Direction::North => (0, -1),
+                Direction::South => (0, 1),
+                Direction::East => (1, 0),
+                Direction::West => (-1, 0),
+                Direction::NorthEast => (1, -1),
+                Direction::NorthWest => (-1, -1),
+                Direction::SouthEast => (1, 1),
+                Direction::SouthWest => (-1, 1),
+            };
+
+            // 沿投掷方向搜索目标（最多5格）
+            let mut rng = rand::rng();
+            let mut hit_entity = None;
+            for dist in 1..=5 {
+                let cx = player_pos.x + dx * dist;
+                let cy = player_pos.y + dy * dist;
+
+                // 检查墙壁
+                let blocked = ecs_world.world.query::<&Tile>().iter()
+                    .any(|(_, _tile)| {
+                        // 简化的碰撞检测
+                        false
+                    });
+
+                if blocked {
+                    break;
+                }
+
+                // 检查该位置是否有实体
+                for (entity, (pos, actor)) in ecs_world.world.query::<(&Position, &Actor)>().iter() {
+                    if pos.x == cx && pos.y == cy && pos.z == player_pos.z {
+                        if actor.faction != Faction::Player {
+                            hit_entity = Some(entity);
+                            break;
+                        }
+                    }
+                }
+
+                if hit_entity.is_some() {
+                    break;
+                }
+            }
+
+            // 应用伤害
+            if let Some(target) = hit_entity {
+                let damage = rng.random_range(min_dmg..=max_dmg);
+                let target_name;
+                let target_is_dead;
+
+                // 在独立作用域中修改 HP
+                {
+                    if let Ok(mut stats) = ecs_world.world.get::<&mut Stats>(target) {
+                        stats.hp = stats.hp.saturating_sub(damage);
+                        target_is_dead = stats.hp == 0;
+                    } else {
+                        return false;
+                    }
+                    target_name = ecs_world.world.get::<&Actor>(target)
+                        .map(|a| a.name.clone())
+                        .unwrap_or_else(|_| "未知目标".to_string());
+                }
+
+                ecs_world.publish_event(GameEvent::LogMessage {
+                    message: format!("投掷 {} 命中 {}，造成 {} 点伤害", item_name, target_name, damage),
+                    level: LogLevel::Info,
+                });
+
+                if target_is_dead {
+                    let target_id = target.id();
+                    let target_pos = ecs_world.world.get::<&Position>(target)
+                        .ok().map(|p| Position::new(p.x, p.y, p.z));
+                    let target_level = ecs_world.world.get::<&Stats>(target)
+                        .map(|s| s.level).unwrap_or(1);
+
+                    ecs_world.resources.aftermath_queue.push(AftermathEvent::Death {
+                        entity: target,
+                        entity_id: target_id,
+                        entity_name: target_name.clone(),
+                        killer: Some(player_entity),
+                    });
+
+                    if let Some(pos) = target_pos {
+                        ecs_world.resources.aftermath_queue.push(AftermathEvent::LootDrop {
+                            entity: target,
+                            position: pos,
+                            entity_name: target_name,
+                            entity_level: target_level,
+                        });
+                    }
+                }
+            } else {
+                ecs_world.resources.game_state.message_log.push(format!("投掷 {} 未命中任何目标。", item_name));
+            }
+
+            return true;
+        }
+
         false
     }
     
@@ -3113,7 +3485,7 @@ impl System for DungeonSystem {
 
                             if on_stairs_down {
                                 // Queue up level generation and player movement
-                                let message = "You descend to the next level...".to_string();
+                                let _message = "You descend to the next level...".to_string();
 
                                 // Message already added above in the game state log
                                 // resources.game_state.message_log.push(message);
@@ -3258,7 +3630,7 @@ impl DungeonSystem {
     /// Run dungeon system with event bus access for environment interactions
     pub fn run_with_events(ecs_world: &mut ECSWorld) -> SystemResult {
         use crate::event_bus::GameEvent;
-        use crate::turn_system::energy_costs;
+        
 
         // Process pending player actions for dungeon interactions
         let actions_to_process =
@@ -4397,12 +4769,21 @@ impl MenuSystem {
                         resources.game_state.game_state = GameStatus::ClassSelection { cursor: 0 };
                     }
                     1 => {
-                        // 继续游戏（TODO: 实现加载存档功能）
-                        resources
-                            .game_state
-                            .message_log
-                            .push("继续游戏功能暂未实现".to_string());
-                        MenuSystem::start_new_game(resources); // 临时：直接开始新游戏
+                        // 继续游戏 - 尝试加载最近的存档
+                        let save_dir = &resources.config.save_directory;
+                        if let Ok(save_sys) = save::SaveSystem::new(save_dir, 10) {
+                            match save_sys.list_saves() {
+                                Ok(saves) if !saves.is_empty() => {
+                                    resources.game_state.pending_load_save = true;
+                                    resources.game_state.message_log.push("正在加载存档...".to_string());
+                                }
+                                _ => {
+                                    resources.game_state.message_log.push("没有找到存档，请开始新游戏。".to_string());
+                                }
+                            }
+                        } else {
+                            resources.game_state.message_log.push("存档系统初始化失败。".to_string());
+                        }
                     }
                     2 => {
                         // 游戏设置

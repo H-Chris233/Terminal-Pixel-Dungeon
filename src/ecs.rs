@@ -693,6 +693,7 @@ pub struct GameState {
     pub terminal_height: u16,
     pub frame_count: u64,              // 渲染帧计数器，用于动画和缓存管理
     pub selected_class: Option<Class>, // 临时存储选中的职业，用于初始化游戏
+    pub pending_load_save: bool,       // 标记需要从存档加载游戏
 }
 
 #[derive(Default, Clone, Copy, PartialEq, Debug)]
@@ -866,6 +867,8 @@ pub enum AftermathEvent {
     LootDrop {
         entity: Entity,
         position: Position,
+        entity_name: String,
+        entity_level: u32,
     },
     ExperienceGain {
         entity: Entity,
@@ -997,6 +1000,19 @@ pub struct Inventory {
 pub struct ItemSlot {
     pub item: Option<ECSItem>,
     pub quantity: u32,
+}
+
+/// 装备槽跟踪组件 - 记录玩家当前装备的物品
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+pub struct EquippedItems {
+    pub weapon: Option<ECSItem>,
+    pub armor: Option<ECSItem>,
+}
+
+impl EquippedItems {
+    pub fn new() -> Self {
+        Self::default()
+    }
 }
 
 /// 增强的 ECS 物品组件（支持 items 模块的完整功能）
@@ -1210,7 +1226,7 @@ impl StatusEffects {
     }
 
     pub fn add_effect(&mut self, new_effect: combat::effect::Effect) {
-        use combat::effect::EffectType;
+        
 
         // Check for conflicts (mutually exclusive effects)
         if self.has_conflicting_effect(new_effect.effect_type()) {

@@ -84,6 +84,7 @@ impl EntityFactory {
             },
             crate::ecs::Hunger::new(5), // 初始饱食度为5（半饱）
             crate::ecs::Wealth::new(0), // 初始金币为0
+            crate::ecs::EquippedItems::new(), // 装备槽跟踪
             crate::ecs::PlayerProgress::new(10, class.clone(), hero::class::SkillState::default()), // 使用选中的职业
             crate::ecs::Player, // Player marker component
         ))
@@ -91,18 +92,36 @@ impl EntityFactory {
 
     /// 创建怪物实体
     pub fn create_monster(&self, world: &mut World, x: i32, y: i32, monster_type: &str) -> Entity {
-        let (symbol, name, hp, attack, defense) = match monster_type {
-            "goblin" => ('g', "Goblin", 30, 8, 2),
-            "orc" => ('o', "Orc", 50, 12, 4),
-            "rat" => ('r', "Rat", 15, 5, 1),
-            _ => ('m', "Monster", 25, 7, 2), // 默认怪物
+        let (symbol, name, hp, attack, defense, accuracy, evasion, exp) = match monster_type {
+            "rat" => ('r', "Rat", 15, 5, 1, 60, 30, 5),
+            "goblin" => ('g', "Goblin", 30, 8, 2, 70, 20, 10),
+            "skeleton" => ('s', "Skeleton", 35, 10, 3, 65, 15, 12),
+            "orc" => ('o', "Orc", 50, 12, 4, 75, 15, 20),
+            "bat" => ('b', "Giant Bat", 20, 6, 1, 70, 40, 8),
+            "slime" => ('j', "Slime", 25, 4, 0, 80, 5, 6),
+            "snake" => ('n', "Snake", 28, 9, 2, 80, 25, 12),
+            "wraith" => ('w', "Wraith", 22, 14, 1, 75, 45, 18),
+            "crab" => ('c', "Giant Crab", 45, 7, 8, 65, 10, 15),
+            "thief" => ('t', "Thief", 30, 8, 3, 75, 25, 15),
+            "gnoll" => ('h', "Gnoll", 55, 14, 5, 70, 12, 25),
+            _ => ('m', "Monster", 25, 7, 2, 65, 15, 8), // 默认怪物
         };
 
         world.spawn((
             Position { x, y, z: 0 },
             Renderable {
                 symbol,
-                fg_color: crate::ecs::Color::Gray,
+                fg_color: match monster_type {
+                    "skeleton" => crate::ecs::Color::White,
+                    "bat" => crate::ecs::Color::Magenta,
+                    "slime" => crate::ecs::Color::Green,
+                    "snake" => crate::ecs::Color::Yellow,
+                    "wraith" => crate::ecs::Color::Cyan,
+                    "crab" => crate::ecs::Color::Red,
+                    "thief" => crate::ecs::Color::Blue,
+                    "gnoll" => crate::ecs::Color::Yellow,
+                    _ => crate::ecs::Color::Gray,
+                },
                 bg_color: Some(crate::ecs::Color::Black),
                 order: 5,
             },
@@ -115,10 +134,17 @@ impl EntityFactory {
                 max_hp: hp,
                 attack,
                 defense,
-                accuracy: 10,
-                evasion: 10,
-                level: 1,
-                experience: 10,
+                accuracy,
+                evasion,
+                level: match monster_type {
+                    "rat" | "bat" | "slime" => 1,
+                    "goblin" | "snake" => 2,
+                    "skeleton" | "wraith" | "thief" => 3,
+                    "orc" | "crab" => 4,
+                    "gnoll" => 5,
+                    _ => 1,
+                },
+                experience: exp,
                 class: None,
             },
             Energy {
@@ -127,14 +153,21 @@ impl EntityFactory {
                 regeneration_rate: 10,
             },
             Viewshed {
-                range: 5,
+                range: match monster_type {
+                    "bat" | "wraith" => 8,
+                    _ => 5,
+                },
                 visible_tiles: vec![],
                 memory: vec![],
                 dirty: true,
                 algorithm: crate::ecs::FovAlgorithm::default(),
             },
             AI {
-                ai_type: crate::ecs::AIType::Aggressive,
+                ai_type: match monster_type {
+                    "rat" | "bat" => crate::ecs::AIType::Passive,
+                    "thief" => crate::ecs::AIType::Neutral,
+                    _ => crate::ecs::AIType::Aggressive,
+                },
                 target: None,
                 state: crate::ecs::AIState::Idle,
             },
@@ -144,7 +177,7 @@ impl EntityFactory {
     /// 创建物品实体
     pub fn create_item(&self, world: &mut World, x: i32, y: i32, item: Item) -> Entity {
         let symbol = '!';
-        let name = item.name();
+        let _name = item.name();
         world.spawn((
             Position { x, y, z: 0 },
             Renderable {

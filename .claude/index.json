@@ -1,0 +1,186 @@
+{
+  "timestamp": "2026-05-28T11:34:53+08:00",
+  "version": "1.0.0",
+  "truncated": false,
+  "total_file_count": 95,
+  "scanned_file_count": 95,
+  "coverage_percentage": 100,
+  "root_claude_md": "updated",
+  "modules": [
+    {
+      "path": "src/combat",
+      "name": "combat",
+      "language": "Rust",
+      "entry": "src/combat/src/lib.rs",
+      "interfaces": [
+        "src/combat/src/combatant.rs",
+        "src/combat/src/combat_manager.rs",
+        "src/combat/src/vision.rs"
+      ],
+      "tests": [
+        "src/combat/src/tests.rs"
+      ],
+      "config": "src/combat/Cargo.toml",
+      "data_model": [
+        "src/combat/src/combatant.rs",
+        "src/combat/src/status_effect.rs",
+        "src/combat/src/effect.rs"
+      ],
+      "coverage_summary": "full",
+      "gaps": []
+    },
+    {
+      "path": "src/dungeon",
+      "name": "dungeon",
+      "language": "Rust",
+      "entry": "src/dungeon/src/lib.rs",
+      "interfaces": [
+        "src/dungeon/src/level.rs",
+        "src/dungeon/src/boss_room.rs",
+        "src/dungeon/src/trap.rs"
+      ],
+      "tests": [],
+      "config": "src/dungeon/Cargo.toml",
+      "data_model": [
+        "src/dungeon/src/lib.rs",
+        "src/dungeon/src/level.rs",
+        "src/dungeon/src/level/tiles.rs",
+        "src/dungeon/src/level/rooms.rs"
+      ],
+      "coverage_summary": "partial",
+      "gaps": [
+        "missing dedicated test file"
+      ]
+    },
+    {
+      "path": "src/hero",
+      "name": "hero",
+      "language": "Rust",
+      "entry": "src/hero/src/lib.rs",
+      "interfaces": [
+        "src/hero/src/core.rs",
+        "src/hero/src/class.rs",
+        "src/hero/src/bag.rs"
+      ],
+      "tests": [],
+      "config": "src/hero/Cargo.toml",
+      "data_model": [
+        "src/hero/src/core.rs",
+        "src/hero/src/bag.rs",
+        "src/hero/src/effects.rs"
+      ],
+      "coverage_summary": "partial",
+      "gaps": [
+        "missing dedicated test file"
+      ]
+    },
+    {
+      "path": "src/items",
+      "name": "items",
+      "language": "Rust",
+      "entry": "src/items/src/lib.rs",
+      "interfaces": [
+        "src/items/src/weapon.rs",
+        "src/items/src/armor.rs",
+        "src/items/src/potion.rs",
+        "src/items/src/scroll.rs",
+        "src/items/src/wand.rs",
+        "src/items/src/ring.rs",
+        "src/items/src/food.rs"
+      ],
+      "tests": [],
+      "config": "src/items/Cargo.toml",
+      "data_model": [
+        "src/items/src/lib.rs"
+      ],
+      "coverage_summary": "partial",
+      "gaps": [
+        "missing dedicated test file"
+      ]
+    },
+    {
+      "path": "src/save",
+      "name": "save",
+      "language": "Rust",
+      "entry": "src/save/src/lib.rs",
+      "interfaces": [],
+      "tests": [
+        "src/save/src/lib.rs (inline tests)"
+      ],
+      "config": "src/save/Cargo.toml",
+      "data_model": [
+        "src/save/src/lib.rs"
+      ],
+      "coverage_summary": "full",
+      "gaps": []
+    },
+    {
+      "path": "src/error",
+      "name": "error",
+      "language": "Rust",
+      "entry": "src/error/src/lib.rs",
+      "interfaces": [],
+      "tests": [],
+      "config": "src/error/Cargo.toml",
+      "data_model": [
+        "src/error/src/lib.rs"
+      ],
+      "coverage_summary": "partial",
+      "gaps": [
+        "missing dedicated test file"
+      ]
+    },
+    {
+      "path": "src/achievements",
+      "name": "achievements",
+      "language": "Rust",
+      "entry": "src/achievements/src/lib.rs",
+      "interfaces": [
+        "src/achievements/src/achievement.rs",
+        "src/achievements/src/criteria.rs"
+      ],
+      "tests": [
+        "src/achievements/src/tests.rs"
+      ],
+      "config": "src/achievements/Cargo.toml",
+      "data_model": [
+        "src/achievements/src/achievement.rs",
+        "src/achievements/src/criteria.rs"
+      ],
+      "coverage_summary": "full",
+      "gaps": []
+    },
+    {
+      "path": "src/render",
+      "name": "render",
+      "language": "Rust",
+      "entry": "src/render/mod.rs",
+      "interfaces": [
+        "src/render/dungeon.rs",
+        "src/render/hud.rs",
+        "src/render/inventory.rs",
+        "src/render/menu.rs",
+        "src/render/boss.rs",
+        "src/render/class_selection.rs",
+        "src/render/game_over.rs"
+      ],
+      "tests": [],
+      "config": "N/A (part of main crate)",
+      "data_model": [],
+      "coverage_summary": "partial",
+      "gaps": [
+        "missing dedicated test file"
+      ]
+    }
+  ],
+  "ignored_directories": [
+    { "path": ".git", "reason": "git directory" },
+    { "path": "target", "reason": "build artifacts" },
+    { "path": "benches", "reason": "not scanned (benchmark only)" }
+  ],
+  "next_step_recommendations": [
+    "Add unit tests for dungeon, hero, items, error, and render modules",
+    "Add integration tests for module interactions",
+    "Consider expanding the combat test suite to cover more edge cases"
+  ]
+}
