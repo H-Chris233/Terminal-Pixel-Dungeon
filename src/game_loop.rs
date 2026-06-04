@@ -90,7 +90,9 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
             Box::new(InventorySystem),
             Box::new(HungerSystem),
             Box::new(DungeonSystem),
-        ];
+            Box::new(BossSystem),
+        ]; 
+
         
         let post_turn_upkeep_systems: Vec<Box<dyn System>> = vec![
             Box::new(EnergySystem),
@@ -635,6 +637,19 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                 }
                 "AftermathSystem" => {
                     match AftermathSystem::run_with_events(&mut self.ecs_world) {
+                        SystemResult::Continue => continue,
+                        SystemResult::Stop => {
+                            self.is_running = false;
+                            return Ok(());
+                        }
+                        SystemResult::Error(msg) => {
+                            eprintln!("System error: {}", msg);
+                            return Err(anyhow::anyhow!(msg));
+                        }
+                    }
+                }
+                "BossSystem" => {
+                    match BossSystem::run_with_events(&mut self.ecs_world) {
                         SystemResult::Continue => continue,
                         SystemResult::Stop => {
                             self.is_running = false;

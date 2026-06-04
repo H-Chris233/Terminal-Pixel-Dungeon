@@ -5434,81 +5434,117 @@ impl System for BossSystem {
     }
 
     fn run(&mut self, world: &mut World, resources: &mut Resources) -> SystemResult {
-        use crate::ecs::{BossComponent, BossSkillComponent};
+        Self::process_bosses(world, resources);
+        SystemResult::Continue
+    }
+}
 
-        // 收集所有 Boss 实体及其信息
-        let boss_data: Vec<(
-            Entity,
-            combat::boss::BossType,
-            combat::boss::BossPhase,
-            u32,
-            u32,
-        )> = world
-            .query::<(&BossComponent, &Stats)>()
+impl BossSystem {
+    /// Event-based variant for use with ECSWorld
+    pub fn run_with_events(ecs_world: &mut ECSWorld) -> SystemResult {
+        Self::process_bosses(&mut ecs_world.world, &mut ecs_world.resources);
+        SystemResult::Continue
+    }
+
+    /// Process boss AI, phase transitions, and skill usage
+    fn process_bosses(world: &mut World, resources: &mut Resources) {
+        use crate::ecs::{BossComponent, BossSkillComponent};
+        use combat::boss::{BossPhase, BossSkill};
+
+        // Collect boss data (owned values to avoid borrow conflicts)
+        let boss_data: Vec<(Entity, combat::boss::BossType, BossPhase, u32, u32, i32, i32)> = world
+            .query::<(&BossComponent, &Stats, &Position)>()
             .iter()
-            .map(|(entity, (boss_comp, stats))| {
+            .map(|(entity, (boss_comp, stats, pos))| {
                 (
                     entity,
                     boss_comp.boss_type.clone(),
                     boss_comp.current_phase.clone(),
                     stats.hp,
                     stats.max_hp,
+                    pos.x,
+                    pos.y,
                 )
             })
             .collect();
 
-        // 找到玩家位置
-        let player_pos = if let Some(player_entity) = find_player_entity(world) {
-            world
-                .get::<&Position>(player_entity)
-                .ok()
-                .map(|p| p.clone())
-        } else {
-            None
-        };
+        // Find player position
+        let player_info: Option<(i32, i32)> = find_player_entity(world).and_then(|player_entity| {
+            let pos = world.get::<&Position>(player_entity).ok()?;
+            Some((pos.x, pos.y))
+        });
 
-        // 处理每个 Boss
-        for (boss_entity, boss_type, current_phase, hp, max_hp) in boss_data {
-            // 检查阶段转换
+        for (boss_entity, boss_type, current_phase, hp, max_hp, boss_x, boss_y) in boss_data {
+            // Phase transition check
             let hp_percent = hp as f32 / max_hp as f32;
-            let new_phase = combat::boss::BossPhase::from_health_percent(hp_percent);
+            let new_phase = BossPhase::from_health_percent(hp_percent);
 
             if new_phase != current_phase {
-                // 更新阶段
                 if let Ok(mut boss_comp) = world.get::<&mut BossComponent>(boss_entity) {
                     boss_comp.current_phase = new_phase.clone();
                 }
-
                 resources.game_state.message_log.push(format!(
-                    "{}进入了{:?}阶段！",
-                    boss_type.name(),
-                    new_phase
+                    "{} 进入了 {:?} 阶段！", boss_type.name(), new_phase
                 ));
             }
 
-            // Boss AI：选择并使用技能
-            if let Some(player_pos) = &player_pos {
-                if let Ok(boss_pos) = world.get::<&Position>(boss_entity) {
-                    let distance = ((boss_pos.x - player_pos.x).pow(2) as f32
-                        + (boss_pos.y - player_pos.y).pow(2) as f32)
-                        .sqrt();
+            // Boss skill execution
+            if let Some((px, py)) = player_info {
+                let distance = ((boss_x - px).abs() + (boss_y - py).abs()) as u32;
 
-                    // 根据 Boss 逻辑决定是否使用技能
-                    // 这里简化处理，实际应该检查冷却时间等
-                    if distance <= 10.0 {
-                        // 在攻击范围内，可能使用技能
-                        // 技能逻辑将在 CombatSystem 或专门的 BossSkillSystem 中处理
+                // Check skill availability and execute
+                let mut skill_used = false;
+                let skill_available = world.get::<&BossSkillComponent>(boss_entity).is_ok();
+
+                if skill_available && distance <= 10 {
+                    // Use a skill based on boss type and phase
+                    let (use_skill, skill_name, damage) = match &new_phase {
+                        BossPhase::Enraged => {
+                            // Enraged phase: use powerful AoE
+                            (true, "愤怒冲击".to_string(), 15 + hp_percent as u32 * 10)
+                        }
+                        _ => {
+                            // Normal phases: varied skills
+                            if distance <= 3 {
+                                (true, "近战猛击".to_string(), 8)
+                            } else {
+                                (true, "远程打击".to_string(), 5)
+                            }
+                        }
+                    };
+
+                    if use_skill {
+                        skill_used = true;
+                        resources.game_state.message_log.push(format!(
+                            "{} 使用了【{}】！", boss_type.name(), skill_name
+                        ));
+
+                        // Apply damage to player
+                        if let Some(player_entity) = find_player_entity(world) {
+                            if let Ok(mut stats) = world.get::<&mut Stats>(player_entity) {
+                                let actual_damage = damage.min(stats.hp);
+                                stats.hp = stats.hp.saturating_sub(damage);
+                                resources.game_state.message_log.push(format!(
+                                    "你受到了{}点伤害！", actual_damage
+                                ));
+
+                                // Check player death
+                                if stats.hp == 0 {
+                                    resources.game_state.game_state = GameStatus::GameOver {
+                                        reason: GameOverReason::Defeated("被Boss击败"),
+                                    };
+                                }
+                            }
+                        }
                     }
                 }
-            }
 
-            // 更新技能冷却
-            if let Ok(mut skill_comp) = world.get::<&mut BossSkillComponent>(boss_entity) {
-                skill_comp.cooldowns.tick();
+                // Tick cooldowns regardless
+                if let Ok(mut skill_comp) = world.get::<&mut BossSkillComponent>(boss_entity) {
+                    skill_comp.cooldowns.tick();
+                }
             }
         }
-
-        SystemResult::Continue
     }
 }
 
