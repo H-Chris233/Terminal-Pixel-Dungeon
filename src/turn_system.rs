@@ -274,6 +274,7 @@ pub struct TurnSystem {
     pub state: TurnState,
     /// Turn metadata
     pub meta: TurnMeta,
+    #[allow(dead_code)]
     /// Intent queue for action resolution
     intent_queue: BinaryHeap<ActionIntent>,
     /// Whether the player has taken an action this turn
@@ -324,6 +325,7 @@ impl TurnSystem {
         !resources.input_buffer.pending_actions.is_empty()
     }
 
+    #[allow(dead_code)]
     /// Build intent queue from all entities with sufficient energy
     fn build_intent_queue(&mut self, world: &World) {
         self.intent_queue.clear();
@@ -356,6 +358,7 @@ impl TurnSystem {
         }
     }
 
+    #[allow(dead_code)]
     /// Process the intent queue and resolve actions
     fn resolve_intents(&mut self, world: &mut World) -> Result<(), anyhow::Error> {
         while let Some(intent) = self.intent_queue.pop() {
@@ -563,6 +566,7 @@ fn find_player(world: &World) -> Option<Entity> {
     None
 }
 
+#[allow(dead_code)]
 /// Helper function to check if an entity is the player
 fn is_player(world: &World, entity: Entity) -> bool {
     if let Ok(actor) = world.get::<&Actor>(entity) {

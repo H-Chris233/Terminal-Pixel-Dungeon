@@ -1412,6 +1412,7 @@ impl CombatSystem {
 }
 
 // Helper struct to implement the Combatant trait for ECS entities
+#[allow(dead_code)]
 struct SimpleCombatant<'a> {
     stats: &'a mut Stats,
     name: String,
@@ -2383,8 +2384,8 @@ impl System for InventorySystem {
                                                     {
                                                         use rand::Rng;
                                                         // Use proper RNG for random position
-                                                        pos.x = 5 + resources.rng.gen_range(0..15); // Random position between 5-19
-                                                        pos.y = 5 + resources.rng.gen_range(0..15); // Random position between 5-19
+                                                        pos.x = 5 + resources.rng.random_range(0..15); // Random position between 5-19
+                                                        pos.y = 5 + resources.rng.random_range(0..15); // Random position between 5-19
                                                         let message =
                                                             "You teleport randomly!".to_string();
 
@@ -2842,7 +2843,6 @@ impl InventorySystem {
         match &item.item_type {
             ItemType::Consumable { effect } => {
                 let item_name = item.name.clone();
-                let mut effect_description = String::new();
                 let success = true;
                 
                 match effect {
@@ -2856,13 +2856,13 @@ impl InventorySystem {
                                 0
                             }
                         };
-                        effect_description = format!("healing {} HP", healed);
+                        let effect_desc = format!("healing {} HP", healed);
                         
                         // Publish ItemUsed event
                         ecs_world.publish_event(GameEvent::ItemUsed {
                             entity: player_entity.id(),
                             item_name: item_name.clone(),
-                            effect: effect_description.clone(),
+                            effect: effect_desc,
                         });
                     }
                     ConsumableEffect::Damage { amount } => {
@@ -2874,12 +2874,12 @@ impl InventorySystem {
                                 false
                             }
                         };
-                        effect_description = format!("taking {} damage", amount);
+                        let effect_desc = format!("taking {} damage", amount);
                         
                         ecs_world.publish_event(GameEvent::ItemUsed {
                             entity: player_entity.id(),
                             item_name: item_name.clone(),
-                            effect: effect_description.clone(),
+                            effect: effect_desc,
                         });
                         
                         // Check for death
@@ -2919,12 +2919,12 @@ impl InventorySystem {
                                 "unknown"
                             }
                         };
-                        effect_description = format!("{} {} for {} turns", stat_name, if *value > 0 { "increased" } else { "decreased" }, duration);
+                        let effect_desc = format!("{} {} for {} turns", stat_name, if *value > 0 { "increased" } else { "decreased" }, duration);
                         
                         ecs_world.publish_event(GameEvent::ItemUsed {
                             entity: player_entity.id(),
                             item_name: item_name.clone(),
-                            effect: effect_description.clone(),
+                            effect: effect_desc,
                         });
                     }
                     ConsumableEffect::Teleport => {
@@ -2933,8 +2933,8 @@ impl InventorySystem {
                                 use rand::Rng;
                                 let old_x = pos.x;
                                 let old_y = pos.y;
-                                pos.x = 5 + ecs_world.resources.rng.gen_range(0..15);
-                                pos.y = 5 + ecs_world.resources.rng.gen_range(0..15);
+                                pos.x = 5 + ecs_world.resources.rng.random_range(0..15);
+                                pos.y = 5 + ecs_world.resources.rng.random_range(0..15);
                                 let new_x = pos.x;
                                 let new_y = pos.y;
                                 
@@ -2949,12 +2949,10 @@ impl InventorySystem {
                             }
                         };
                         
-                        effect_description = "teleporting randomly".to_string();
-                        
                         ecs_world.publish_event(GameEvent::ItemUsed {
                             entity: player_entity.id(),
                             item_name: item_name.clone(),
-                            effect: effect_description.clone(),
+                            effect: "teleporting randomly".to_string(),
                         });
                         
                         ecs_world.publish_event(GameEvent::EntityMoved {
@@ -2966,12 +2964,10 @@ impl InventorySystem {
                         });
                     }
                     ConsumableEffect::Identify => {
-                        effect_description = "feeling more perceptive".to_string();
-                        
                         ecs_world.publish_event(GameEvent::ItemUsed {
                             entity: player_entity.id(),
                             item_name: item_name.clone(),
-                            effect: effect_description.clone(),
+                            effect: "feeling more perceptive".to_string(),
                         });
                     }
                 }
@@ -3675,14 +3671,26 @@ impl DungeonSystem {
 
                         if on_stairs_down {
                             let old_level = player_pos_z as usize;
-                            let new_level = (player_pos_z + 1) as usize;
+                            let new_z = player_pos_z + 1;
+                            let new_level = new_z as usize;
 
-                            // Move player to new level
+                            // Get stair-up position before mutating world
+                            let stair_pos = get_stairs_up_position(&ecs_world.world, new_z)
+                                .unwrap_or((10, 10));
+
+                            // Populate the new level (removes old + spawns tiles/enemies/items)
+                            populate_level_from_dungeon(
+                                &mut ecs_world.world,
+                                &mut ecs_world.resources,
+                                new_z,
+                            );
+
+                            // Move player to new level, placed on stairs-up
                             if let Ok(mut pos) = ecs_world.world.get::<&mut Position>(player_entity)
                             {
-                                pos.z += 1;
-                                pos.x = 10;
-                                pos.y = 10;
+                                pos.z = new_z;
+                                pos.x = stair_pos.0;
+                                pos.y = stair_pos.1;
                             }
 
                             // Reset player's viewshed to trigger FOV recalculation
@@ -3783,15 +3791,27 @@ impl DungeonSystem {
                         if on_stairs_up {
                             if player_pos_z > 0 {
                                 let old_level = player_pos_z as usize;
-                                let new_level = (player_pos_z - 1) as usize;
+                                let new_z = player_pos_z - 1;
+                                let new_level = new_z as usize;
 
-                                // Move player to new level
+                                // Get stair-down position before mutating world
+                                let stair_pos = get_stairs_down_position(&ecs_world.world, new_z)
+                                    .unwrap_or((10, 10));
+
+                                // Populate the level (restores tiles/enemies/items)
+                                populate_level_from_dungeon(
+                                    &mut ecs_world.world,
+                                    &mut ecs_world.resources,
+                                    new_z,
+                                );
+
+                                // Move player to previous level, placed on stairs-down
                                 if let Ok(mut pos) =
                                     ecs_world.world.get::<&mut Position>(player_entity)
                                 {
-                                    pos.z -= 1;
-                                    pos.x = 10;
-                                    pos.y = 10;
+                                    pos.z = new_z;
+                                    pos.x = stair_pos.0;
+                                    pos.y = stair_pos.1;
                                 }
 
                                 // Reset player's viewshed to trigger FOV recalculation
@@ -4008,249 +4028,108 @@ impl DungeonSystem {
             }
         }
     }
+}
 
-    /// Generate a basic dungeon level
-    fn generate_level(&mut self, world: &mut World, resources: &mut Resources, level: i32) {
-        // Prefer using dungeon::Dungeon if present
-        if let Some(dungeon) = crate::ecs::get_dungeon_clone(world) {
-            // Remove all tiles for the level being generated
-            let tiles_to_remove: Vec<_> = world
-                .query::<(&Position, &Tile)>()
-                .iter()
-                .filter(|(_, (pos, _))| pos.z == level)
-                .map(|(e, _)| e)
-                .collect();
-            for entity in tiles_to_remove {
-                let _ = world.despawn(entity);
-            }
+/// Populate a dungeon level in the ECS world from the DungeonComponent data.
+/// Spawns tiles, enemies (with AI/Viewshed/Energy), and items.
+pub fn populate_level_from_dungeon(world: &mut World, _resources: &mut Resources, z_level: i32) {
+    // Remove ALL existing entities at this z-level (tiles, enemies, items, etc.)
+    let entities_to_remove: Vec<Entity> = world
+        .query::<&Position>()
+        .iter()
+        .filter(|(_, pos)| pos.z == z_level)
+        .map(|(e, _)| e)
+        .collect();
+    for entity in entities_to_remove {
+        let _ = world.despawn(entity);
+    }
 
-            // Populate tiles from dungeon level data
-            let lvl = &dungeon.levels[dungeon.depth - 1];
-            for tile in &lvl.tiles {
-                let terrain = match &tile.info.terrain_type {
-                    dungeon::level::tiles::TerrainType::Floor => TerrainType::Floor,
-                    dungeon::level::tiles::TerrainType::Wall => TerrainType::Wall,
-                    dungeon::level::tiles::TerrainType::Door(_) => TerrainType::Door,
-                    dungeon::level::tiles::TerrainType::Stair(dir) => match dir {
-                        dungeon::level::tiles::StairDirection::Up => TerrainType::StairsUp,
-                        dungeon::level::tiles::StairDirection::Down => TerrainType::StairsDown,
-                    },
-                    dungeon::level::tiles::TerrainType::Water => TerrainType::Water,
-                    dungeon::level::tiles::TerrainType::Trap(_) => TerrainType::Trap,
-                    dungeon::level::tiles::TerrainType::Special => TerrainType::Empty,
-                    dungeon::level::tiles::TerrainType::Grass => TerrainType::Floor,
-                };
-
-                world.spawn((
-                    Position::new(tile.x, tile.y, level),
-                    Tile {
-                        terrain_type: terrain.clone(),
-                        is_passable: tile.info.passable,
-                        blocks_sight: tile.info.blocks_sight,
-                        has_items: lvl.items.iter().any(|i| i.x == tile.x && i.y == tile.y),
-                        has_monster: lvl.enemies.iter().any(|e| e.x == tile.x && e.y == tile.y),
-                    },
-                    Renderable {
-                        symbol: match terrain {
-                            TerrainType::Floor => '.',
-                            TerrainType::Wall => '#',
-                            TerrainType::Door => '+',
-                            TerrainType::StairsDown => '>',
-                            TerrainType::Water => '~',
-                            TerrainType::Trap => '^',
-                            _ => ' ',
-                        },
-                        fg_color: Color::White,
-                        bg_color: Some(Color::Black),
-                        order: 0,
-                    },
-                ));
-            }
-
-            // Spawn enemies and items from level
-            for enemy in &lvl.enemies {
-                world.spawn((
-                    Position::new(enemy.x, enemy.y, level),
-                    Actor {
-                        name: enemy.name().to_string(),
-                        faction: Faction::Enemy,
-                    },
-                    Renderable {
-                        symbol: enemy.symbol,
-                        fg_color: Color::Green,
-                        bg_color: Some(Color::Black),
-                        order: 5,
-                    },
-                    Stats {
-                        hp: enemy.hp,
-                        max_hp: enemy.max_hp,
-                        attack: enemy.attack,
-                        defense: enemy.defense,
-                        accuracy: 70,
-                        evasion: 10,
-                        level: enemy.attack_range as u32,
-                        experience: enemy.exp_value,
-                        class: None,
-                    },
-                    Energy {
-                        current: 100,
-                        max: 100,
-                        regeneration_rate: 1,
-                    },
-                ));
-            }
-
-            for item in &lvl.items {
-                world.spawn((
-                    Position::new(item.x, item.y, level),
-                    Renderable {
-                        symbol: '!',
-                        fg_color: Color::Red,
-                        bg_color: Some(Color::Black),
-                        order: 1,
-                    },
-                    ECSItem {
-                        name: item.name.clone(),
-                        item_type: ItemType::Consumable {
-                            effect: ConsumableEffect::Healing { amount: 10 },
-                        },
-                        value: 5,
-                        identified: true,
-                        quantity: 1,
-                        level: 0,
-                        cursed: false,
-                        charges: None,
-                        detailed_data: None,
-                    },
-                    Tile {
-                        terrain_type: TerrainType::Empty,
-                        is_passable: true,
-                        blocks_sight: false,
-                        has_items: true,
-                        has_monster: false,
-                    },
-                ));
-            }
-            return;
+    // Try to use dungeon::Dungeon generation data
+    if let Some(dungeon) = crate::ecs::get_dungeon_clone(world) {
+        if (z_level as usize) >= dungeon.levels.len() {
+            return; // Out of bounds, nothing to generate
         }
 
-        // Remove all tiles for the level being generated
-        let tiles_to_remove: Vec<_> = world
-            .query::<(&Position, &Tile)>()
-            .iter()
-            .filter(|(_, (pos, _))| pos.z == level)
-            .map(|(e, _)| e)
-            .collect();
+        let lvl = &dungeon.levels[z_level as usize];
 
-        for entity in tiles_to_remove {
-            let _ = world.despawn(entity);
-        }
+        // --- Spawn tiles ---
+        for tile in &lvl.tiles {
+            let terrain = match &tile.info.terrain_type {
+                dungeon::level::tiles::TerrainType::Floor => TerrainType::Floor,
+                dungeon::level::tiles::TerrainType::Wall => TerrainType::Wall,
+                dungeon::level::tiles::TerrainType::Door(_) => TerrainType::Door,
+                dungeon::level::tiles::TerrainType::Stair(dir) => match dir {
+                    dungeon::level::tiles::StairDirection::Up => TerrainType::StairsUp,
+                    dungeon::level::tiles::StairDirection::Down => TerrainType::StairsDown,
+                },
+                dungeon::level::tiles::TerrainType::Water => TerrainType::Water,
+                dungeon::level::tiles::TerrainType::Trap(_) => TerrainType::Trap,
+                dungeon::level::tiles::TerrainType::Special => TerrainType::Empty,
+                dungeon::level::tiles::TerrainType::Grass => TerrainType::Floor,
+            };
 
-        // Generate a basic 20x20 room layout for the level
-        for x in 5..25 {
-            for y in 5..25 {
-                let terrain_type = if x == 5 || x == 24 || y == 5 || y == 24 {
-                    TerrainType::Wall
-                } else {
-                    TerrainType::Floor
-                };
-
-                let renderable = Renderable {
-                    symbol: if x == 5 || x == 24 || y == 5 || y == 24 {
-                        '#'
-                    } else {
-                        '.'
+            world.spawn((
+                Position::new(tile.x, tile.y, z_level),
+                Tile {
+                    terrain_type: terrain.clone(),
+                    is_passable: tile.info.passable,
+                    blocks_sight: tile.info.blocks_sight,
+                    has_items: lvl.items.iter().any(|i| i.x == tile.x && i.y == tile.y),
+                    has_monster: lvl.enemies.iter().any(|e| e.x == tile.x && e.y == tile.y),
+                },
+                Renderable {
+                    symbol: match terrain {
+                        TerrainType::Floor => '.',
+                        TerrainType::Wall => '#',
+                        TerrainType::Door => '+',
+                        TerrainType::StairsDown => '>',
+                        TerrainType::StairsUp => '<',
+                        TerrainType::Water => '~',
+                        TerrainType::Trap => '^',
+                        _ => ' ',
                     },
-                    fg_color: if x == 5 || x == 24 || y == 5 || y == 24 {
-                        Color::Gray
-                    } else {
-                        Color::White
+                    fg_color: match terrain {
+                        TerrainType::Wall => Color::Gray,
+                        TerrainType::Door => Color::Yellow,
+                        TerrainType::StairsDown | TerrainType::StairsUp => Color::Cyan,
+                        TerrainType::Water => Color::Blue,
+                        TerrainType::Trap => Color::Red,
+                        _ => Color::White,
                     },
                     bg_color: Some(Color::Black),
                     order: 0,
-                };
-
-                world.spawn((
-                    Position::new(x, y, level),
-                    Tile {
-                        terrain_type,
-                        is_passable: x != 5 && x != 24 && y != 5 && y != 24,
-                        blocks_sight: x == 5 || x == 24 || y == 5 || y == 24,
-                        has_items: false,
-                        has_monster: false,
-                    },
-                    renderable,
-                ));
-            }
-        }
-
-        // Place stairs based on current level for connections
-        if level > 0 {
-            // Place stairs up (going down to the previous level)
-            world.spawn((
-                Position::new(9, 9, level),
-                Tile {
-                    terrain_type: TerrainType::StairsUp,
-                    is_passable: true,
-                    blocks_sight: false,
-                    has_items: false,
-                    has_monster: false,
-                },
-                Renderable {
-                    symbol: '<',
-                    fg_color: Color::Cyan,
-                    bg_color: Some(Color::Black),
-                    order: 1,
                 },
             ));
         }
 
-        // Place stairs down if not the deepest level
-        if level < (resources.config.max_depth as i32 - 1) {
-            world.spawn((
-                Position::new(15, 15, level),
-                Tile {
-                    terrain_type: TerrainType::StairsDown,
-                    is_passable: true,
-                    blocks_sight: false,
-                    has_items: false,
-                    has_monster: false,
-                },
-                Renderable {
-                    symbol: '>',
-                    fg_color: Color::Cyan,
-                    bg_color: Some(Color::Black),
-                    order: 1,
-                },
-            ));
-        }
+        // --- Spawn enemies with full ECS components ---
+        for enemy in &lvl.enemies {
+            let ai_type = match enemy.kind {
+                combat::enemy::EnemyKind::Rat | combat::enemy::EnemyKind::Bat => AIType::Passive,
+                _ => AIType::Aggressive,
+            };
 
-        // Add some simple monsters and items to the level
-        if level > 0 {
-            // Add content to levels other than 0
-            // Add a simple enemy
-            let enemy_pos = Position::new(12, 12, level);
             world.spawn((
-                enemy_pos,
+                Position::new(enemy.x, enemy.y, z_level),
                 Actor {
-                    name: format!("Goblin {}", level),
+                    name: enemy.name().to_string(),
                     faction: Faction::Enemy,
                 },
                 Renderable {
-                    symbol: 'g',
+                    symbol: enemy.symbol,
                     fg_color: Color::Green,
                     bg_color: Some(Color::Black),
                     order: 5,
                 },
                 Stats {
-                    hp: 30,
-                    max_hp: 30,
-                    attack: 5 + (level as u32 * 2),
-                    defense: 2 + (level as u32),
+                    hp: enemy.hp,
+                    max_hp: enemy.max_hp,
+                    attack: enemy.attack,
+                    defense: enemy.defense,
                     accuracy: 70,
                     evasion: 10,
-                    level: level as u32,
-                    experience: 10 + (level as u32 * 5),
+                    level: 1.max(enemy.attack_range),
+                    experience: enemy.exp_value,
                     class: None,
                 },
                 Energy {
@@ -4258,40 +4137,136 @@ impl DungeonSystem {
                     max: 100,
                     regeneration_rate: 1,
                 },
+                Viewshed {
+                    range: enemy.detection_range as u8,
+                    visible_tiles: Vec::new(),
+                    memory: Vec::new(),
+                    dirty: true,
+                    algorithm: crate::ecs::FovAlgorithm::default(),
+                },
+                AI {
+                    ai_type,
+                    target: None,
+                    state: AIState::Idle,
+                },
             ));
+        }
 
-            // Add a healing potion
-            world.spawn((
-                Position::new(14, 10, level),
-                Renderable {
-                    symbol: '!',
-                    fg_color: Color::Red,
-                    bg_color: Some(Color::Black),
-                    order: 1,
-                },
-                ECSItem {
-                    name: "Health Potion".to_string(),
-                    item_type: ItemType::Consumable {
-                        effect: ConsumableEffect::Healing { amount: 20 },
+        // --- Spawn items ---
+        for item in &lvl.items {
+            if let Ok(ecs_item) = ECSItem::from_items_item(item) {
+                let (symbol, fg_color) = match &item.kind {
+                    items::ItemKind::Weapon(_) => ('(', Color::Yellow),
+                    items::ItemKind::Armor(_) => ('[', Color::Blue),
+                    items::ItemKind::Potion(_) => ('!', Color::Red),
+                    items::ItemKind::Scroll(_) => ('?', Color::White),
+                    items::ItemKind::Food(_) => ('%', Color::Magenta),
+                    items::ItemKind::Wand(_) => ('/', Color::Cyan),
+                    items::ItemKind::Ring(_) => ('=', Color::Green),
+                    items::ItemKind::Seed(_) => (':', Color::Yellow),
+                    items::ItemKind::Stone(_) => ('*', Color::Gray),
+                    items::ItemKind::Throwable(_) => (')', Color::Yellow),
+                    items::ItemKind::Misc(_) => ('$', Color::Magenta),
+                    items::ItemKind::Herb(_) => (':', Color::Green),
+                };
+
+                world.spawn((
+                    Position::new(item.x, item.y, z_level),
+                    Renderable {
+                        symbol,
+                        fg_color,
+                        bg_color: Some(Color::Black),
+                        order: 1,
                     },
-                    value: 10,
-                    identified: true,
-                    quantity: 1,
-                    level: 0,
-                    cursed: false,
-                    charges: None,
-                    detailed_data: None,
-                },
+                    ecs_item,
+                ));
+            }
+        }
+        return;
+    }
+
+    // Fallback: generate a simple 20x20 room if no dungeon data
+    for x in 5..25 {
+        for y in 5..25 {
+            let is_wall = x == 5 || x == 24 || y == 5 || y == 24;
+            world.spawn((
+                Position::new(x, y, z_level),
                 Tile {
-                    terrain_type: TerrainType::Empty,
-                    is_passable: true,
-                    blocks_sight: false,
-                    has_items: true,
+                    terrain_type: if is_wall { TerrainType::Wall } else { TerrainType::Floor },
+                    is_passable: !is_wall,
+                    blocks_sight: is_wall,
+                    has_items: false,
                     has_monster: false,
+                },
+                Renderable {
+                    symbol: if is_wall { '#' } else { '.' },
+                    fg_color: if is_wall { Color::Gray } else { Color::White },
+                    bg_color: Some(Color::Black),
+                    order: 0,
                 },
             ));
         }
     }
+
+    // Place stairs up if above level 0
+    if z_level > 0 {
+        world.spawn((
+            Position::new(9, 9, z_level),
+            Tile {
+                terrain_type: TerrainType::StairsUp,
+                is_passable: true,
+                blocks_sight: false,
+                has_items: false,
+                has_monster: false,
+            },
+            Renderable {
+                symbol: '<',
+                fg_color: Color::Cyan,
+                bg_color: Some(Color::Black),
+                order: 1,
+            },
+        ));
+    }
+
+    // Place stairs down
+    world.spawn((
+        Position::new(15, 15, z_level),
+        Tile {
+            terrain_type: TerrainType::StairsDown,
+            is_passable: true,
+            blocks_sight: false,
+            has_items: false,
+            has_monster: false,
+        },
+        Renderable {
+            symbol: '>',
+            fg_color: Color::Cyan,
+            bg_color: Some(Color::Black),
+            order: 1,
+        },
+    ));
+}
+
+/// Get the stair-up position for a given z-level from dungeon data.
+pub fn get_stairs_up_position(world: &World, z_level: i32) -> Option<(i32, i32)> {
+    if let Some(dungeon) = crate::ecs::get_dungeon_clone(world) {
+        if (z_level as usize) < dungeon.levels.len() {
+            let lvl = &dungeon.levels[z_level as usize];
+            return Some(lvl.stair_up);
+        }
+    }
+    None
+}
+
+/// Get the stair-down position for a given z-level from dungeon data.
+pub fn get_stairs_down_position(world: &World, z_level: i32) -> Option<(i32, i32)> {
+    if let Some(dungeon) = crate::ecs::get_dungeon_clone(world) {
+        if (z_level as usize) < dungeon.levels.len() {
+            let lvl = &dungeon.levels[z_level as usize];
+            return Some(lvl.stair_down);
+        }
+    }
+    None
 }
 
 pub struct InteractionSystem;

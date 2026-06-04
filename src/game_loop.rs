@@ -752,6 +752,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
         }
     }
 
+    #[allow(dead_code)]
     /// Update game state by running all systems
     fn update(&mut self) -> anyhow::Result<()> {
         for system in &mut self.pre_input_systems {
@@ -787,16 +788,23 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
         // 清空当前世界
         self.ecs_world.clear();
 
-        // 重新生成地牢
+        // 重新生成地牢（5层，种子42）
         self.ecs_world.generate_and_set_dungeon(5, 42)?;
 
-        // 获取起始位置
-        let (start_x, start_y, _start_z) =
+        // 先填充第0层的地牢（tiles + enemies + items）
+        crate::systems::populate_level_from_dungeon(
+            &mut self.ecs_world.world,
+            &mut self.ecs_world.resources,
+            0,
+        );
+
+        // 获取起始位置（stairs_up位置）
+        let (start_x, start_y) =
             if let Some(dungeon) = crate::ecs::get_dungeon_clone(&self.ecs_world.world) {
-                let lvl = dungeon.current_level();
-                (lvl.stair_up.0, lvl.stair_up.1, dungeon.depth as i32 - 1)
+                let lvl = &dungeon.levels[0];
+                (lvl.stair_up.0, lvl.stair_up.1)
             } else {
-                (10, 10, 0)
+                (10, 10)
             };
 
         // 创建基于职业的玩家实体
@@ -807,10 +815,6 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
             start_y,
             class,
         );
-
-        // 生成一些敌人
-        factory.create_monster(&mut self.ecs_world.world, start_x + 5, start_y, "goblin");
-        factory.create_monster(&mut self.ecs_world.world, start_x - 5, start_y, "rat");
 
         Ok(())
     }

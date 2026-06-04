@@ -55,6 +55,7 @@ pub trait Clock {
 }
 
 /// Ratatui terminal renderer implementation
+#[allow(dead_code)]
 pub struct RatatuiRenderer {
     terminal: Terminal<ratatui::backend::CrosstermBackend<Stdout>>,
     last_render_time: std::time::Instant,
@@ -68,6 +69,7 @@ pub struct RatatuiRenderer {
     class_selection_renderer: ClassSelectionRenderer,
 }
 
+#[allow(dead_code)]
 /// Cached rendering data for optimization
 struct RenderCacheEntry {
     symbol: char,
@@ -471,6 +473,7 @@ impl Renderer for RatatuiRenderer {
 }
 
 /// Helper function to format messages for display
+#[allow(dead_code)]
 fn format_messages(messages: &[String]) -> String {
     if messages.is_empty() {
         "Welcome to Pixel Dungeon!".to_string()
@@ -488,6 +491,7 @@ fn format_messages(messages: &[String]) -> String {
 }
 
 /// Clock implementation for time management
+#[allow(dead_code)]
 pub struct GameClock {
     tick_rate: Duration,
     start_time: std::time::SystemTime,

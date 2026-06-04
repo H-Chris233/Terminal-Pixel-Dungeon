@@ -15,4 +15,5 @@ pub use error::*;
 pub use event_bus::*;
 pub use hero::*;
 pub use items::*;
-pub use save::*;
+// Re-export specific items (not glob to avoid TurnPhase ambiguity)
+pub use save::{AutoSave, SaveData, SaveMetadata, SaveSystem, TurnStateData};

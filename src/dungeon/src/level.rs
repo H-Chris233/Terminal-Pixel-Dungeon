@@ -15,7 +15,7 @@ use crate::TrapEffect;
 use crate::boss_room::BossRoom;
 use crate::level::tiles::{DoorState, StairDirection, TerrainType, Tile, TileInfo};
 use crate::trap::{Trap, TrapKind};
-use combat::boss::{Boss, BossType};
+use combat::boss::BossType;
 use combat::enemy::{Enemy, EnemyKind};
 use items::{
     Armor, Food, Herb, Item, ItemKind, MiscItem, Potion, Ring, Scroll, Seed, Stone, Throwable,

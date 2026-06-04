@@ -11,12 +11,12 @@ pub fn affect_adjacent_enemies(_x: i32, _y: i32, _f: impl Fn(&mut Enemy)) {}
 pub fn reveal_current_level(_x: i32, _y: i32) {}
 pub fn alert_nearby_enemies(_x: i32, _y: i32) {}
 
-use crate::boss_room::{BossRoom, Hazard};
+use crate::boss_room::{BossRoom};
 use crate::level::Level;
 pub use crate::level::tiles::{TerrainType, TileInfo};
 use crate::trap::TrapEffect;
 
-use combat::boss::{Boss, BossType};
+use combat::boss::Boss; // Used in BossRoom generation
 use combat::enemy::Enemy;
 use items::Item;
 
