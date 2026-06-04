@@ -201,7 +201,22 @@ impl Hero {
             PerkEffect::Regeneration { amount } => {
                 self.heal(*amount);
             }
-            _ => {}
+            PerkEffect::DamageBonus { percent } => {
+                self.base_attack = self.base_attack.saturating_add(*percent as u32);
+            }
+            PerkEffect::DodgeBonus { percent: _ } => {
+                // 闪避增强 - 暂不实现
+            }
+            PerkEffect::DamageReduction { percent: _ } => {
+                // 减伤效果 - 暂不实现
+            }
+            PerkEffect::CritBonus { percent } => {
+                // 暴击加成 - 简单增加基础攻击
+                self.base_attack = self.base_attack.saturating_add(*percent as u32 / 2);
+            }
+            PerkEffect::TriggerBuff { .. } => {
+                // 触发式增益 - 暂不实现
+            }
         }
     }
 

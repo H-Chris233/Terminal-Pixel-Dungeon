@@ -345,6 +345,12 @@ fn match_key_for_game_context(key: CrosstermKeyEvent) -> Option<PlayerAction> {
         (CrosstermKeyCode::Char('e'), _) => Some(PlayerAction::EquipItem(0)),
         (CrosstermKeyCode::Char('E'), _) => Some(PlayerAction::UnequipItem(0)),
 
+        // 职业技能快捷键
+        (CrosstermKeyCode::F(1), _) => Some(PlayerAction::UseSkill(0)),
+        (CrosstermKeyCode::F(2), _) => Some(PlayerAction::UseSkill(1)),
+        (CrosstermKeyCode::F(3), _) => Some(PlayerAction::UseSkill(2)),
+        (CrosstermKeyCode::F(4), _) => Some(PlayerAction::UseSkill(3)),
+
         // 游戏中的快捷键
         (CrosstermKeyCode::Char('i'), _) => Some(PlayerAction::OpenInventory),
         (CrosstermKeyCode::Char('o'), _) => Some(PlayerAction::OpenOptions),

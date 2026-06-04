@@ -69,6 +69,9 @@ pub mod energy_costs {
             PlayerAction::EquipItem(_) | PlayerAction::UnequipItem(_) => EQUIP_ITEM,
             PlayerAction::ThrowItem(_, _) => THROW_ITEM,
             
+            // Class skills cost a full action
+            PlayerAction::UseSkill(_) => FULL_ACTION,
+            
             // Environment interactions have explicit costs
             PlayerAction::Descend | PlayerAction::Ascend => STAIR_USE,
             

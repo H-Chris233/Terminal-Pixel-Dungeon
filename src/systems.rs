@@ -2767,7 +2767,19 @@ impl InventorySystem {
                         let result = Self::handle_throw_item(ecs_world, player_entity, slot_index, direction);
                         
                         if result {
-                            // Mark action as completed for energy deduction
+                            ecs_world.resources.input_buffer.completed_actions.push(action);
+                        } else {
+                            new_actions.push(action);
+                        }
+                    } else {
+                        new_actions.push(action);
+                    }
+                }
+                
+                PlayerAction::UseSkill(skill_idx) => {
+                    if let Some(player_entity) = find_player_entity(&ecs_world.world) {
+                        let result = Self::handle_use_skill(ecs_world, player_entity, skill_idx);
+                        if result {
                             ecs_world.resources.input_buffer.completed_actions.push(action);
                         } else {
                             new_actions.push(action);
@@ -2961,6 +2973,108 @@ impl InventorySystem {
         }
     }
     
+    /// Handle class skill usage
+    fn handle_use_skill(ecs_world: &mut ECSWorld, player_entity: Entity, skill_idx: u8) -> bool {
+        use hero::abilities::ClassAbilitySet;
+
+        // Get player's class from PlayerProgress
+        let class = match ecs_world.world.get::<&crate::ecs::PlayerProgress>(player_entity) {
+            Ok(progress) => progress.class.clone(),
+            Err(_) => {
+                ecs_world.resources.game_state.message_log.push("无法获取职业信息！".to_string());
+                return false;
+            }
+        };
+
+        let ability_set = ClassAbilitySet::for_class(class);
+        let active_skills = ability_set.active_skills;
+
+        if (skill_idx as usize) >= active_skills.len() {
+            ecs_world.resources.game_state.message_log.push("无效的技能索引！".to_string());
+            return false;
+        }
+
+        let skill = &active_skills[skill_idx as usize];
+
+        // Check energy
+        if let Ok(energy) = ecs_world.world.get::<&Energy>(player_entity) {
+            if energy.current < skill.energy_cost {
+                ecs_world.resources.game_state.message_log.push(format!("能量不足，需要{}！", skill.energy_cost));
+                return false;
+            }
+        }
+
+        // Deduct energy
+        if let Ok(mut energy) = ecs_world.world.get::<&mut Energy>(player_entity) {
+            energy.current = energy.current.saturating_sub(skill.energy_cost);
+        }
+
+        ecs_world.resources.game_state.message_log.push(format!("✨ {}！", skill.name));
+
+        // Apply skill effects
+        for effect in &skill.effects {
+            match effect {
+                hero::abilities::SkillEffect::Damage { amount, ignore_armor } => {
+                    let dmg = *amount;
+                    let player_pos = match ecs_world.world.get::<&Position>(player_entity) {
+                        Ok(p) => (p.x, p.y, p.z),
+                        Err(_) => continue,
+                    };
+
+                    let targets: Vec<(hecs::Entity, i32, i32)> = ecs_world.world.query::<(&Position, &Actor, &Stats)>().iter()
+                        .filter(|(_, (pos, actor, _))| pos.z == player_pos.2 && actor.faction == Faction::Enemy)
+                        .map(|(e, (pos, _, _))| (e, pos.x, pos.y))
+                        .collect();
+
+                    if let Some((enemy, ex, ey)) = targets.into_iter().min_by_key(|(_, x, y)| (x - player_pos.0).abs() + (y - player_pos.1).abs()) {
+                        let actual_damage = if *ignore_armor { dmg } else { dmg / 2 + 2 };
+
+                        if let Ok(mut stats) = ecs_world.world.get::<&mut Stats>(enemy) {
+                            stats.hp = stats.hp.saturating_sub(actual_damage);
+                            let enemy_name = match ecs_world.world.get::<&Actor>(enemy) {
+                                Ok(a) => a.name.clone(),
+                                Err(_) => "敌人".to_string(),
+                            };
+                            let msg = format!("🗡️ 技能击中{}，造成{}点伤害！", enemy_name, actual_damage);
+                            ecs_world.resources.game_state.message_log.push(msg);
+
+                            if stats.hp == 0 {
+                                ecs_world.resources.aftermath_queue.push(AftermathEvent::Death {
+                                    entity: enemy,
+                                    entity_id: enemy.id(),
+                                    entity_name: enemy_name.clone(),
+                                    killer: Some(player_entity),
+                                });
+                                ecs_world.resources.aftermath_queue.push(AftermathEvent::LootDrop {
+                                    entity: enemy,
+                                    position: Position::new(ex, ey, player_pos.2),
+                                    entity_name: enemy_name,
+                                    entity_level: 1 + player_pos.2 as u32,
+                                });
+                                ecs_world.resources.aftermath_queue.push(AftermathEvent::ExperienceGain {
+                                    entity: player_entity,
+                                    amount: actual_damage / 2 + 10,
+                                });
+                            }
+                        }
+                    } else {
+                        ecs_world.resources.game_state.message_log.push("视野内没有敌人！".to_string());
+                    }
+                }
+                hero::abilities::SkillEffect::Heal { amount } => {
+                    let heal_amt = *amount;
+                    if let Ok(mut stats) = ecs_world.world.get::<&mut Stats>(player_entity) {
+                        let healed = heal_amt.min(stats.max_hp - stats.hp);
+                        stats.hp += healed;
+                        ecs_world.resources.game_state.message_log.push(format!("💚 恢复了{}点生命值！", healed));
+                    }
+                }
+                _ => {}
+            }
+        }
+        true
+    }
+
     /// Handle food consumption
     fn handle_food_consumption(ecs_world: &mut ECSWorld, player_entity: Entity, slot_index: usize, item: &ECSItem) -> bool {
         use crate::event_bus::GameEvent;

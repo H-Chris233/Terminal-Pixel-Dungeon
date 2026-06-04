@@ -770,6 +770,7 @@ pub enum PlayerAction {
     Ascend,
     Wait,
     Quit,
+    UseSkill(u8),
 
     // 菜单相关动作
     OpenInventory,
