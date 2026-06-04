@@ -1007,11 +1007,16 @@ pub struct ItemSlot {
 pub struct EquippedItems {
     pub weapon: Option<ECSItem>,
     pub armor: Option<ECSItem>,
+    pub rings: [Option<ECSItem>; 2],
 }
 
 impl EquippedItems {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            weapon: None,
+            armor: None,
+            rings: [None, None],
+        }
     }
 }
 
@@ -1038,6 +1043,7 @@ pub struct ECSItem {
 pub enum ItemType {
     Weapon { damage: u32 },
     Armor { defense: u32 },
+    Ring { defense_bonus: u32, crit_bonus: f32 },
     Consumable { effect: ConsumableEffect },
     Throwable { damage: (u32, u32), range: u8 },
     Key,
@@ -1059,6 +1065,9 @@ pub enum ConsumableEffect {
     },
     Teleport,
     Identify,
+    Upgrade,        // 强化卷轴：升级装备
+    RemoveCurse,    // 祛咒卷轴：解除诅咒
+    MagicMapping,   // 地图卷轴：揭示地图
 }
 
 impl ECSItem {
@@ -1113,12 +1122,23 @@ impl ECSItem {
             items::ItemKind::Food(_) => ItemType::Consumable {
                 effect: ConsumableEffect::Healing { amount: 5 },
             },
-            items::ItemKind::Scroll(_) => ItemType::Consumable {
-                effect: ConsumableEffect::Identify,
+            items::ItemKind::Scroll(s) => ItemType::Consumable {
+                effect: match s.kind {
+                    items::scroll::ScrollKind::Upgrade => ConsumableEffect::Upgrade,
+                    items::scroll::ScrollKind::RemoveCurse => ConsumableEffect::RemoveCurse,
+                    items::scroll::ScrollKind::MagicMapping => ConsumableEffect::MagicMapping,
+                    items::scroll::ScrollKind::Identify => ConsumableEffect::Identify,
+                    items::scroll::ScrollKind::Teleportation => ConsumableEffect::Teleport,
+                    _ => ConsumableEffect::Identify,
+                },
             },
             items::ItemKind::Throwable(t) => ItemType::Throwable {
                 damage: t.damage,
                 range: t.range,
+            },
+            items::ItemKind::Ring(r) => ItemType::Ring {
+                defense_bonus: r.defense_bonus() as u32,
+                crit_bonus: r.crit_bonus(),
             },
             items::ItemKind::Herb(_) => ItemType::Consumable {
                 effect: ConsumableEffect::Healing { amount: 8 },
@@ -1158,7 +1178,7 @@ impl ECSItem {
     pub fn is_equippable(&self) -> bool {
         matches!(
             self.item_type,
-            ItemType::Weapon { .. } | ItemType::Armor { .. }
+            ItemType::Weapon { .. } | ItemType::Armor { .. } | ItemType::Ring { .. }
         )
     }
 }
@@ -1882,6 +1902,9 @@ impl From<&Inventory> for Bag {
                     ItemType::Throwable { .. } => game_items::ItemKind::Throwable(
                         game_items::Throwable::new(game_items::ThrowableKind::Dart),
                     ),
+                    ItemType::Ring { .. } => game_items::ItemKind::Ring(game_items::Ring::new(
+                        game_items::ring::RingKind::Accuracy, 1,
+                    )),
                     ItemType::Key => game_items::ItemKind::Misc(game_items::MiscItem::new(
                         game_items::misc::MiscKind::Torch,
                     )),

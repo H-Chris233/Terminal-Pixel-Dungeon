@@ -51,6 +51,7 @@ impl DungeonRenderer {
         let dungeon_widget = DungeonWidget {
             world,
             show_all: self.show_all,
+            depth,
         };
 
         frame.render_widget(dungeon_widget, inner_area);
@@ -72,6 +73,7 @@ impl DungeonRenderer {
 struct DungeonWidget<'a> {
     world: &'a World,
     show_all: bool,
+    depth: i32,
 }
 
 impl<'a> Widget for DungeonWidget<'a> {
@@ -123,7 +125,7 @@ impl<'a> Widget for DungeonWidget<'a> {
             let cell = &mut buf[(screen_x as u16, screen_y as u16)];
 
             // 渲染 Tile
-            let (symbol, mut color) = self.get_tile_appearance(tile);
+            let (symbol, mut color) = self.get_tile_appearance(tile, self.depth);
 
             // 如果是记忆区域（不可见），使用暗色
             if !is_visible {
@@ -198,10 +200,24 @@ impl<'a> DungeonWidget<'a> {
     }
 
     /// 获取 Tile 的外观（符号和颜色）- 使用Unicode字符提升视觉效果
-    fn get_tile_appearance(&self, tile: &Tile) -> (char, TuiColor) {
+    /// 根据深度获取地牢主题调色板
+    fn theme_palette(&self, depth: i32) -> (TuiColor, TuiColor) {
+        match depth {
+            0..=2 => (TuiColor::Rgb(80, 70, 60), TuiColor::Rgb(140, 130, 110)),    // 灰褐色（地表）
+            3..=5 => (TuiColor::Rgb(60, 70, 70), TuiColor::Rgb(100, 120, 110)),    // 灰绿色（洞穴上层）
+            6..=10 => (TuiColor::Rgb(50, 60, 70), TuiColor::Rgb(90, 110, 130)),   // 暗蓝色（深层）
+            11..=15 => (TuiColor::Rgb(70, 50, 60), TuiColor::Rgb(130, 90, 100)),  // 红褐色（矿层）
+            16..=20 => (TuiColor::Rgb(60, 40, 70), TuiColor::Rgb(110, 80, 130)),  // 紫色（幽暗层）
+            _ => (TuiColor::Rgb(80, 30, 30), TuiColor::Rgb(140, 60, 50)),         // 深红色（深渊）
+        }
+    }
+
+    /// 获取 Tile 的外观（符号和颜色）- 根据深度主题变化
+    fn get_tile_appearance(&self, tile: &Tile, depth: i32) -> (char, TuiColor) {
+        let (wall_color, floor_color) = self.theme_palette(depth);
         match tile.terrain_type {
-            TerrainType::Wall => ('█', TuiColor::Rgb(80, 80, 80)),
-            TerrainType::Floor => ('·', TuiColor::Rgb(120, 120, 120)),
+            TerrainType::Wall => ('█', wall_color),
+            TerrainType::Floor => ('·', floor_color),
             TerrainType::Door => ('▒', TuiColor::Rgb(139, 69, 19)),
             TerrainType::StairsDown => ('▼', TuiColor::Cyan),
             TerrainType::StairsUp => ('▲', TuiColor::Magenta),

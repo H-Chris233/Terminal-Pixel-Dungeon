@@ -174,7 +174,13 @@ impl InventoryRenderer {
                     }
                     ConsumableEffect::Teleport => "🌀 随机传送".to_string(),
                     ConsumableEffect::Identify => "🔍 鉴定物品".to_string(),
+                    ConsumableEffect::Upgrade => "⬆️ 强化已装备的武器或护甲".to_string(),
+                    ConsumableEffect::RemoveCurse => "✨ 解除装备上的诅咒".to_string(),
+                    ConsumableEffect::MagicMapping => "🗺️ 揭示当前层全部地图".to_string(),
                 }
+            }
+            ItemType::Ring { defense_bonus, crit_bonus } => {
+                format!("💍 防御+{} 暴击+{}%", defense_bonus, (crit_bonus * 100.0) as u32)
             }
             ItemType::Throwable { damage, range } => {
                 format!("🎯 伤害: {}-{} (射程:{})", damage.0, damage.1, range)
@@ -197,25 +203,38 @@ impl InventoryRenderer {
         frame.render_widget(block, area);
 
         // 读取真实装备数据（克隆避免借用问题）
-        let equipped_data: Option<(Option<ECSItem>, Option<ECSItem>)> = world
+        let equipped_data: Option<(Option<ECSItem>, Option<ECSItem>, [Option<ECSItem>; 2])> = world
             .query::<(&EquippedItems, &Player)>()
             .iter()
             .next()
-            .map(|(_, (eq, _))| (eq.weapon.clone(), eq.armor.clone()));
+            .map(|(_, (eq, _))| (eq.weapon.clone(), eq.armor.clone(), eq.rings.clone()));
 
         let (weapon_name, has_weapon) = equipped_data
             .as_ref()
-            .and_then(|(w, _)| w.as_ref())
+            .and_then(|(w, _, _)| w.as_ref())
             .map(|w| (w.name.as_str(), true))
             .unwrap_or(("空", false));
         let weapon_color = if has_weapon { Color::Yellow } else { Color::DarkGray };
 
         let (armor_name, has_armor) = equipped_data
             .as_ref()
-            .and_then(|(_, a)| a.as_ref())
+            .and_then(|(_, a, _)| a.as_ref())
             .map(|a| (a.name.as_str(), true))
             .unwrap_or(("空", false));
         let armor_color = if has_armor { Color::Yellow } else { Color::DarkGray };
+
+        let ring1_name = equipped_data
+            .as_ref()
+            .and_then(|(_, _, r)| r[0].as_ref())
+            .map(|r| r.name.as_str())
+            .unwrap_or("空");
+        let ring1_color = if ring1_name != "空" { Color::Magenta } else { Color::DarkGray };
+        let ring2_name = equipped_data
+            .as_ref()
+            .and_then(|(_, _, r)| r[1].as_ref())
+            .map(|r| r.name.as_str())
+            .unwrap_or("空");
+        let ring2_color = if ring2_name != "空" { Color::Magenta } else { Color::DarkGray };
 
         let equipment_lines = vec![
             Line::from(vec![
@@ -228,15 +247,16 @@ impl InventoryRenderer {
                 Span::styled("护甲: ", Style::default().fg(Color::Gray)),
                 Span::styled(armor_name, Style::default().fg(armor_color)),
             ]),
-            Line::from(""),
-            Line::from(Span::styled(
-                "💍 戒指: 空",
-                Style::default().fg(Color::DarkGray),
-            )),
-            Line::from(Span::styled(
-                "📿 饰品: 空",
-                Style::default().fg(Color::DarkGray),
-            )),
+            Line::from(vec![
+                Span::styled("💍 ", Style::default().fg(Color::Magenta)),
+                Span::styled("戒指1: ", Style::default().fg(Color::Gray)),
+                Span::styled(ring1_name, Style::default().fg(ring1_color)),
+            ]),
+            Line::from(vec![
+                Span::styled("💍 ", Style::default().fg(Color::Magenta)),
+                Span::styled("戒指2: ", Style::default().fg(Color::Gray)),
+                Span::styled(ring2_name, Style::default().fg(ring2_color)),
+            ]),
         ];
 
         let equipment_paragraph = Paragraph::new(equipment_lines);
@@ -307,6 +327,7 @@ impl InventoryRenderer {
         match &item.item_type {
             ItemType::Weapon { .. } => Color::Red,
             ItemType::Armor { .. } => Color::Blue,
+            ItemType::Ring { .. } => Color::Magenta,
             ItemType::Consumable { .. } => Color::Green,
             ItemType::Throwable { .. } => Color::LightMagenta,
             ItemType::Key => Color::LightYellow,
@@ -321,6 +342,7 @@ impl InventoryRenderer {
         match &item.item_type {
             ItemType::Weapon { .. } => "⚔️",
             ItemType::Armor { .. } => "🛡️",
+            ItemType::Ring { .. } => "💍",
             ItemType::Consumable { .. } => "🧪",
             ItemType::Throwable { .. } => "🎯",
             ItemType::Key => "🔑",

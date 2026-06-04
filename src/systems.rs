@@ -1549,6 +1549,18 @@ impl AftermathSystem {
                             reason: GameOverReason::Died("战斗中死亡"),
                         };
                     } else {
+                        // Check if this is a Boss → Victory!
+                        let is_boss = world.world.get::<&BossComponent>(entity).is_ok();
+                        if is_boss {
+                            let boss_name = world.world.get::<&Actor>(entity)
+                                .map(|a| a.name.clone())
+                                .unwrap_or_else(|_| "Boss".to_string());
+                            world.resources.game_state.message_log.push(
+                                format!("🏆 击败了 {}！", boss_name)
+                            );
+                            world.publish_event(GameEvent::Victory);
+                            world.resources.game_state.game_state = GameStatus::Victory;
+                        }
                         // Despawn enemy entity
                         let _ = world.world.despawn(entity);
                     }
@@ -2425,6 +2437,16 @@ impl System for InventorySystem {
                                                         resources.game_state.message_log.remove(0);
                                                     }
                                                 }
+                                                ConsumableEffect::Upgrade
+                                                | ConsumableEffect::RemoveCurse
+                                                | ConsumableEffect::MagicMapping => {
+                                                    // These scroll effects are handled in handle_consumable (run_with_events)
+                                                    let message = format!("Used {}.", item.name);
+                                                    resources.game_state.message_log.push(message);
+                                                    if resources.game_state.message_log.len() > 10 {
+                                                        resources.game_state.message_log.remove(0);
+                                                    }
+                                                }
                                             }
 
                                             // Remove the consumed item from inventory
@@ -2980,6 +3002,82 @@ impl InventorySystem {
                             effect: "feeling more perceptive".to_string(),
                         });
                     }
+                    ConsumableEffect::Upgrade => {
+                        // Try to upgrade weapon (priority) or armor
+                        let upgraded = {
+                            if let Ok(mut equipped) = ecs_world.world.get::<&mut crate::ecs::EquippedItems>(player_entity) {
+                                if let Some(ref mut weapon) = equipped.weapon {
+                                    if let ItemType::Weapon { ref mut damage } = weapon.item_type {
+                                        *damage += 2;
+                                        // Sync stats
+                                        if let Ok(mut stats) = ecs_world.world.get::<&mut Stats>(player_entity) {
+                                            stats.attack = stats.attack.saturating_add(2);
+                                        }
+                                        true
+                                    } else { false }
+                                } else if let Some(ref mut armor) = equipped.armor {
+                                    if let ItemType::Armor { ref mut defense } = armor.item_type {
+                                        *defense += 2;
+                                        if let Ok(mut stats) = ecs_world.world.get::<&mut Stats>(player_entity) {
+                                            stats.defense = stats.defense.saturating_add(2);
+                                        }
+                                        true
+                                    } else { false }
+                                } else { false }
+                            } else { false }
+                        };
+                        let effect_desc = if upgraded {
+                            "武器/护甲已强化！".to_string()
+                        } else {
+                            "没有可强化的装备".to_string()
+                        };
+                        ecs_world.resources.game_state.message_log.push(effect_desc.clone());
+                        ecs_world.publish_event(GameEvent::ItemUsed {
+                            entity: player_entity.id(),
+                            item_name: item_name.clone(),
+                            effect: effect_desc,
+                        });
+                    }
+                    ConsumableEffect::RemoveCurse => {
+                        let mut removed = false;
+                        if let Ok(mut equipped) = ecs_world.world.get::<&mut crate::ecs::EquippedItems>(player_entity) {
+                            if let Some(ref mut w) = equipped.weapon { if w.cursed { w.cursed = false; removed = true; } }
+                            if let Some(ref mut a) = equipped.armor { if a.cursed { a.cursed = false; removed = true; } }
+                        }
+                        let effect_desc = if removed {
+                            "装备的诅咒已被解除！".to_string()
+                        } else {
+                            "没有装备被诅咒".to_string()
+                        };
+                        ecs_world.resources.game_state.message_log.push(effect_desc.clone());
+                        ecs_world.publish_event(GameEvent::ItemUsed {
+                            entity: player_entity.id(),
+                            item_name: item_name.clone(),
+                            effect: effect_desc,
+                        });
+                    }
+                    ConsumableEffect::MagicMapping => {
+                        // Reveal map: mark all tiles on current level as visible in memory
+                        let z = ecs_world.world.get::<&Position>(player_entity)
+                            .map(|p| p.z).unwrap_or(0);
+                        if let Ok(mut viewshed) = ecs_world.world.get::<&mut Viewshed>(player_entity) {
+                            for (_, (pos, _tile)) in ecs_world.world.query::<(&Position, &Tile)>().iter() {
+                                if pos.z == z {
+                                    let pos_ref = Position::new(pos.x, pos.y, pos.z);
+                                    if !viewshed.memory.contains(&pos_ref) {
+                                        viewshed.memory.push(pos_ref);
+                                    }
+                                }
+                            }
+                            viewshed.dirty = true;
+                        }
+                        ecs_world.resources.game_state.message_log.push("地图已被揭示！".to_string());
+                        ecs_world.publish_event(GameEvent::ItemUsed {
+                            entity: player_entity.id(),
+                            item_name: item_name.clone(),
+                            effect: "revealing the map".to_string(),
+                        });
+                    }
                 }
                 
                 if success {
@@ -3098,27 +3196,33 @@ impl InventorySystem {
                 return false;
             }
 
-            let slot_name = match &item.item_type {
-                ItemType::Weapon { .. } => "weapon",
-                ItemType::Armor { .. } => "armor",
-                _ => "unknown",
-            };
-
             // 获取当前装备并交换
             let old_equipped = {
                 if let Ok(mut equipped) = ecs_world.world.get::<&mut crate::ecs::EquippedItems>(player_entity) {
-                    match slot_name {
-                        "weapon" => {
+                    match &item.item_type {
+                        ItemType::Weapon { .. } => {
                             let old = equipped.weapon.take();
                             equipped.weapon = Some(item.clone());
                             old
                         }
-                        "armor" => {
+                        ItemType::Armor { .. } => {
                             let old = equipped.armor.take();
                             equipped.armor = Some(item.clone());
                             old
                         }
-                        _ => None,
+                        ItemType::Ring { .. } => {
+                            // 尝试放入槽1，若被占则放槽2，两者都占则替换槽1
+                            let old = equipped.rings[0].take();
+                            if old.is_some() {
+                                let old2 = equipped.rings[1].take();
+                                equipped.rings[0] = Some(item.clone());
+                                old2.or(old)
+                            } else {
+                                equipped.rings[0] = Some(item.clone());
+                                None
+                            }
+                        }
+                        _ => return false,
                     }
                 } else {
                     None
@@ -3144,6 +3248,12 @@ impl InventorySystem {
                 }
             }
 
+            let slot_name = match &item.item_type {
+                ItemType::Weapon { .. } => "weapon",
+                ItemType::Armor { .. } => "armor",
+                ItemType::Ring { .. } => "ring",
+                _ => "unknown",
+            };
             ecs_world.publish_event(GameEvent::ItemEquipped {
                 entity: player_id,
                 item_name: item.name.clone(),
@@ -3168,6 +3278,9 @@ impl InventorySystem {
                 ItemType::Armor { defense } => {
                     stats.defense = (stats.defense as i32 + mult * (*defense as i32)).max(0) as u32;
                 }
+                ItemType::Ring { defense_bonus, .. } => {
+                    stats.defense = (stats.defense as i32 + mult * (*defense_bonus as i32)).max(0) as u32;
+                }
                 _ => {}
             }
         }
@@ -3191,13 +3304,17 @@ impl InventorySystem {
             return false;
         }
 
-        // 卸下武器优先（如果有的话）
+        // 卸下装备（优先武器 → 护甲 → 戒指1 → 戒指2）
         let unequipped = {
             if let Ok(mut equipped) = ecs_world.world.get::<&mut crate::ecs::EquippedItems>(player_entity) {
                 if let Some(weapon) = equipped.weapon.take() {
                     Some(("weapon".to_string(), weapon))
                 } else if let Some(armor) = equipped.armor.take() {
                     Some(("armor".to_string(), armor))
+                } else if let Some(ring) = equipped.rings[0].take() {
+                    Some(("ring1".to_string(), ring))
+                } else if let Some(ring) = equipped.rings[1].take() {
+                    Some(("ring2".to_string(), ring))
                 } else {
                     None
                 }
@@ -4113,10 +4230,31 @@ pub fn populate_level_from_dungeon(world: &mut World, _resources: &mut Resources
         }
 
         // --- Spawn enemies with full ECS components ---
+        // 根据深度缩放敌人属性
+        let hp_scale = 1.0 + z_level as f32 * 0.2;
+        let atk_scale = 1.0 + z_level as f32 * 0.15;
+        let def_scale = 1.0 + z_level as f32 * 0.1;
+        let xp_scale = 1.0 + z_level as f32 * 0.25;
+        let acc_bonus = (z_level * 2) as u32; // 每层+2命中
+        let eva_bonus = (z_level * 1) as u32; // 每层+1闪避
+
         for enemy in &lvl.enemies {
             let ai_type = match enemy.kind {
                 combat::enemy::EnemyKind::Rat | combat::enemy::EnemyKind::Bat => AIType::Passive,
                 _ => AIType::Aggressive,
+            };
+
+            let scaled_hp = (enemy.hp as f32 * hp_scale).ceil() as u32;
+            let scaled_max_hp = (enemy.max_hp as f32 * hp_scale).ceil() as u32;
+            let scaled_atk = (enemy.attack as f32 * atk_scale).ceil() as u32;
+            let scaled_def = (enemy.defense as f32 * def_scale).ceil() as u32;
+            let scaled_xp = (enemy.exp_value as f32 * xp_scale).ceil() as u32;
+
+            // 深度越深敌人颜色越偏红（警告）
+            let enemy_color = if z_level >= 3 {
+                Color::Rgb(180, 80 - (z_level * 5) as u8, 0)
+            } else {
+                Color::Green
             };
 
             world.spawn((
@@ -4127,19 +4265,19 @@ pub fn populate_level_from_dungeon(world: &mut World, _resources: &mut Resources
                 },
                 Renderable {
                     symbol: enemy.symbol,
-                    fg_color: Color::Green,
+                    fg_color: enemy_color,
                     bg_color: Some(Color::Black),
                     order: 5,
                 },
                 Stats {
-                    hp: enemy.hp,
-                    max_hp: enemy.max_hp,
-                    attack: enemy.attack,
-                    defense: enemy.defense,
-                    accuracy: 70,
-                    evasion: 10,
-                    level: 1.max(enemy.attack_range),
-                    experience: enemy.exp_value,
+                    hp: scaled_hp,
+                    max_hp: scaled_max_hp,
+                    attack: scaled_atk,
+                    defense: scaled_def,
+                    accuracy: (70 + acc_bonus).min(95),
+                    evasion: (10 + eva_bonus).min(50),
+                    level: (1.max(enemy.attack_range) + z_level as u32).min(30),
+                    experience: scaled_xp,
                     class: None,
                 },
                 Energy {
