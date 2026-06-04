@@ -177,6 +177,17 @@ impl InventoryRenderer {
                     ConsumableEffect::Upgrade => "⬆️ 强化已装备的武器或护甲".to_string(),
                     ConsumableEffect::RemoveCurse => "✨ 解除装备上的诅咒".to_string(),
                     ConsumableEffect::MagicMapping => "🗺️ 揭示当前层全部地图".to_string(),
+                    ConsumableEffect::Experience(_) => "📈 获得大量经验值".to_string(),
+                    ConsumableEffect::Invisibility => "👻 暂时隐身".to_string(),
+                    ConsumableEffect::Haste => "⚡ 暂时加速".to_string(),
+                    ConsumableEffect::Strength => "💪 永久提升力量".to_string(),
+                    ConsumableEffect::MindVision => "👁️ 查看周围敌人位置".to_string(),
+                    ConsumableEffect::Levitation => "🕊️ 暂时漂浮（无视地形）".to_string(),
+                    ConsumableEffect::Purity => "🧹 解除所有负面状态".to_string(),
+                    ConsumableEffect::Frost => "❄️ 冰冻敌人".to_string(),
+                    ConsumableEffect::LiquidFlame => "🔥 火焰伤害".to_string(),
+                    ConsumableEffect::ToxicGas => "☠️ 毒气伤害".to_string(),
+                    ConsumableEffect::ParalyticGas => "⚡ 麻痹气体".to_string(),
                 }
             }
             ItemType::Ring { defense_bonus, crit_bonus } => {

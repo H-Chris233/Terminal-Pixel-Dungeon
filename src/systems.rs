@@ -2439,8 +2439,19 @@ impl System for InventorySystem {
                                                 }
                                                 ConsumableEffect::Upgrade
                                                 | ConsumableEffect::RemoveCurse
-                                                | ConsumableEffect::MagicMapping => {
-                                                    // These scroll effects are handled in handle_consumable (run_with_events)
+                                                | ConsumableEffect::MagicMapping
+                                                | ConsumableEffect::Experience(_)
+                                                | ConsumableEffect::Invisibility
+                                                | ConsumableEffect::Haste
+                                                | ConsumableEffect::Strength
+                                                | ConsumableEffect::MindVision
+                                                | ConsumableEffect::Levitation
+                                                | ConsumableEffect::Purity
+                                                | ConsumableEffect::Frost
+                                                | ConsumableEffect::LiquidFlame
+                                                | ConsumableEffect::ToxicGas
+                                                | ConsumableEffect::ParalyticGas => {
+                                                    // Handled in handle_consumable (run_with_events)
                                                     let message = format!("Used {}.", item.name);
                                                     resources.game_state.message_log.push(message);
                                                     if resources.game_state.message_log.len() > 10 {
@@ -3076,6 +3087,151 @@ impl InventorySystem {
                             entity: player_entity.id(),
                             item_name: item_name.clone(),
                             effect: "revealing the map".to_string(),
+                        });
+                    }
+                    // === 药水效果 ===
+                    ConsumableEffect::Experience(amount) => {
+                        ecs_world.resources.aftermath_queue.push(AftermathEvent::ExperienceGain {
+                            entity: player_entity,
+                            amount: *amount,
+                        });
+                        ecs_world.publish_event(GameEvent::ItemUsed {
+                            entity: player_entity.id(),
+                            item_name: item_name.clone(),
+                            effect: format!("gaining {} XP", amount),
+                        });
+                    }
+                    ConsumableEffect::Strength => {
+                        if let Ok(mut stats) = ecs_world.world.get::<&mut Stats>(player_entity) {
+                            stats.attack = stats.attack.saturating_add(3);
+                        }
+                        ecs_world.resources.game_state.message_log.push("💪 力量提升了！攻击+3".to_string());
+                        ecs_world.publish_event(GameEvent::ItemUsed {
+                            entity: player_entity.id(),
+                            item_name: item_name.clone(),
+                            effect: "permanent strength boost".to_string(),
+                        });
+                    }
+                    ConsumableEffect::Invisibility => {
+                        if let Ok(mut effects) = ecs_world.world.get::<&mut StatusEffects>(player_entity) {
+                            effects.add_effect(combat::effect::Effect::new(combat::effect::EffectType::Invisibility, 20));
+                        }
+                        ecs_world.resources.game_state.message_log.push("👻 你变隐身了！".to_string());
+                        ecs_world.publish_event(GameEvent::ItemUsed {
+                            entity: player_entity.id(),
+                            item_name: item_name.clone(),
+                            effect: "invisibility".to_string(),
+                        });
+                    }
+                    ConsumableEffect::Haste => {
+                        if let Ok(mut effects) = ecs_world.world.get::<&mut StatusEffects>(player_entity) {
+                            effects.add_effect(combat::effect::Effect::new(combat::effect::EffectType::Haste, 15));
+                        }
+                        ecs_world.resources.game_state.message_log.push("⚡ 你感觉身轻如燕！".to_string());
+                        ecs_world.publish_event(GameEvent::ItemUsed {
+                            entity: player_entity.id(),
+                            item_name: item_name.clone(),
+                            effect: "haste".to_string(),
+                        });
+                    }
+                    ConsumableEffect::MindVision => {
+                        // 揭示当前层视野
+                        let z = ecs_world.world.get::<&Position>(player_entity)
+                            .map(|p| p.z).unwrap_or(0);
+                        if let Ok(mut viewshed) = ecs_world.world.get::<&mut Viewshed>(player_entity) {
+                            for (_, (pos, _tile)) in ecs_world.world.query::<(&Position, &Tile)>().iter() {
+                                if pos.z == z {
+                                    let pos_obj = Position::new(pos.x, pos.y, pos.z);
+                                    if !viewshed.visible_tiles.contains(&pos_obj) {
+                                        viewshed.visible_tiles.push(pos_obj);
+                                    }
+                                }
+                            }
+                            viewshed.dirty = true;
+                        }
+                        ecs_world.resources.game_state.message_log.push("👁️ 你看到了周围的一切！".to_string());
+                        ecs_world.publish_event(GameEvent::ItemUsed {
+                            entity: player_entity.id(),
+                            item_name: item_name.clone(),
+                            effect: "mind vision".to_string(),
+                        });
+                    }
+                    ConsumableEffect::Levitation => {
+                        if let Ok(mut effects) = ecs_world.world.get::<&mut StatusEffects>(player_entity) {
+                            effects.add_effect(combat::effect::Effect::new(combat::effect::EffectType::Levitation, 20));
+                        }
+                        ecs_world.resources.game_state.message_log.push("🕊️ 你漂浮起来了！".to_string());
+                        ecs_world.publish_event(GameEvent::ItemUsed {
+                            entity: player_entity.id(),
+                            item_name: item_name.clone(),
+                            effect: "levitation".to_string(),
+                        });
+                    }
+                    ConsumableEffect::Purity => {
+                        if let Ok(mut effects) = ecs_world.world.get::<&mut StatusEffects>(player_entity) {
+                            effects.clear();
+                        }
+                        ecs_world.resources.game_state.message_log.push("🧹 所有状态效果已清除！".to_string());
+                        ecs_world.publish_event(GameEvent::ItemUsed {
+                            entity: player_entity.id(),
+                            item_name: item_name.clone(),
+                            effect: "purity".to_string(),
+                        });
+                    }
+                    ConsumableEffect::Frost => {
+                        if let Ok(mut stats) = ecs_world.world.get::<&mut Stats>(player_entity) {
+                            stats.hp = stats.hp.saturating_sub(5);
+                        }
+                        if let Ok(mut effects) = ecs_world.world.get::<&mut StatusEffects>(player_entity) {
+                            effects.add_effect(combat::effect::Effect::new(combat::effect::EffectType::Frost, 5));
+                        }
+                        ecs_world.resources.game_state.message_log.push("❄️ 你被冰冻了！".to_string());
+                        ecs_world.publish_event(GameEvent::ItemUsed {
+                            entity: player_entity.id(),
+                            item_name: item_name.clone(),
+                            effect: "frost damage".to_string(),
+                        });
+                    }
+                    ConsumableEffect::LiquidFlame => {
+                        if let Ok(mut stats) = ecs_world.world.get::<&mut Stats>(player_entity) {
+                            stats.hp = stats.hp.saturating_sub(8);
+                        }
+                        if let Ok(mut effects) = ecs_world.world.get::<&mut StatusEffects>(player_entity) {
+                            effects.add_effect(combat::effect::Effect::new(combat::effect::EffectType::Burning, 10));
+                        }
+                        ecs_world.resources.game_state.message_log.push("🔥 火焰吞噬了你！".to_string());
+                        ecs_world.publish_event(GameEvent::ItemUsed {
+                            entity: player_entity.id(),
+                            item_name: item_name.clone(),
+                            effect: "liquid flame".to_string(),
+                        });
+                    }
+                    ConsumableEffect::ToxicGas => {
+                        if let Ok(mut stats) = ecs_world.world.get::<&mut Stats>(player_entity) {
+                            stats.hp = stats.hp.saturating_sub(6);
+                        }
+                        if let Ok(mut effects) = ecs_world.world.get::<&mut StatusEffects>(player_entity) {
+                            effects.add_effect(combat::effect::Effect::new(combat::effect::EffectType::Poison, 10));
+                        }
+                        ecs_world.resources.game_state.message_log.push("☠️ 你吸入了毒气！".to_string());
+                        ecs_world.publish_event(GameEvent::ItemUsed {
+                            entity: player_entity.id(),
+                            item_name: item_name.clone(),
+                            effect: "toxic gas".to_string(),
+                        });
+                    }
+                    ConsumableEffect::ParalyticGas => {
+                        if let Ok(mut stats) = ecs_world.world.get::<&mut Stats>(player_entity) {
+                            stats.hp = stats.hp.saturating_sub(3);
+                        }
+                        if let Ok(mut effects) = ecs_world.world.get::<&mut StatusEffects>(player_entity) {
+                            effects.add_effect(combat::effect::Effect::new(combat::effect::EffectType::Paralysis, 8));
+                        }
+                        ecs_world.resources.game_state.message_log.push("⚡ 你被麻痹了！".to_string());
+                        ecs_world.publish_event(GameEvent::ItemUsed {
+                            entity: player_entity.id(),
+                            item_name: item_name.clone(),
+                            effect: "paralytic gas".to_string(),
                         });
                     }
                 }

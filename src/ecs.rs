@@ -1065,9 +1065,21 @@ pub enum ConsumableEffect {
     },
     Teleport,
     Identify,
-    Upgrade,        // 强化卷轴：升级装备
-    RemoveCurse,    // 祛咒卷轴：解除诅咒
-    MagicMapping,   // 地图卷轴：揭示地图
+    Upgrade,        // 强化卷轴
+    RemoveCurse,    // 祛咒卷轴
+    MagicMapping,   // 地图卷轴
+    // 药水效果
+    Experience(u32),  // 经验药水：获得经验
+    Invisibility,     // 隐身药水
+    Haste,            // 急速药水
+    Strength,         // 力量药水：永久+攻击
+    MindVision,       // 心灵视界
+    Levitation,       // 漂浮药水
+    Purity,           // 净化药水
+    Frost,            // 霜冻药水：伤害+冰冻
+    LiquidFlame,      // 液态火焰：伤害+燃烧
+    ToxicGas,         // 毒气药水
+    ParalyticGas,     // 麻痹药水
 }
 
 impl ECSItem {
@@ -1116,8 +1128,21 @@ impl ECSItem {
             items::ItemKind::Armor(a) => ItemType::Armor {
                 defense: a.defense as u32,
             },
-            items::ItemKind::Potion(_) => ItemType::Consumable {
-                effect: ConsumableEffect::Healing { amount: 10 }, // 简化处理
+            items::ItemKind::Potion(p) => ItemType::Consumable {
+                effect: match p.kind {
+                    items::potion::PotionKind::Healing => ConsumableEffect::Healing { amount: 20 },
+                    items::potion::PotionKind::Experience => ConsumableEffect::Experience(50),
+                    items::potion::PotionKind::Strength => ConsumableEffect::Strength,
+                    items::potion::PotionKind::Invisibility => ConsumableEffect::Invisibility,
+                    items::potion::PotionKind::Haste => ConsumableEffect::Haste,
+                    items::potion::PotionKind::MindVision => ConsumableEffect::MindVision,
+                    items::potion::PotionKind::Levitation => ConsumableEffect::Levitation,
+                    items::potion::PotionKind::Purity => ConsumableEffect::Purity,
+                    items::potion::PotionKind::Frost => ConsumableEffect::Frost,
+                    items::potion::PotionKind::LiquidFlame => ConsumableEffect::LiquidFlame,
+                    items::potion::PotionKind::ToxicGas => ConsumableEffect::ToxicGas,
+                    items::potion::PotionKind::ParalyticGas => ConsumableEffect::ParalyticGas,
+                },
             },
             items::ItemKind::Food(_) => ItemType::Consumable {
                 effect: ConsumableEffect::Healing { amount: 5 },
