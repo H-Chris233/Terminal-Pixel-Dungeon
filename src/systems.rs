@@ -1,5 +1,5 @@
 use crate::ecs::{
-    AI, AIState, AIType, Actor, AftermathEvent, CombatIntent, CombatOutcome, Color,
+    AI, AIState, AIType, Actor, AftermathEvent, BossComponent, CombatIntent, CombatOutcome, Color,
     ConsumableEffect, Direction, ECSItem, ECSWorld, EffectType, Energy, Faction, GameOverReason,
     GameStatus, Hunger, Inventory, ItemSlot, ItemType, NavigateDirection, Player, PlayerAction, Position, Renderable, Resources, StatType, Stats, StatusEffects, TerrainType,
     Tile, Viewshed, Wealth,
@@ -1298,11 +1298,21 @@ impl CombatSystem {
                 }
             }
             
-            // 发布日志消息
+            // 发布日志消息（增强：暴击/潜行攻击添加醒目前缀）
+            let has_crit = combat_result.events.iter().any(|ev| {
+                matches!(ev, ::combat::CombatEvent::DamageDealt { is_critical: true, .. })
+            });
             for log in &combat_result.logs {
+                let enhanced_msg = if has_crit {
+                    format!("💥 暴击！{}", log)
+                } else if is_ambush {
+                    format!("🗡️ 潜行攻击！{}", log)
+                } else {
+                    log.clone()
+                };
                 world.publish_event(crate::event_bus::GameEvent::LogMessage {
-                    message: log.clone(),
-                    level: LogLevel::Info,
+                    message: enhanced_msg,
+                    level: if has_crit { LogLevel::Warning } else { LogLevel::Info },
                 });
             }
             
@@ -4180,6 +4190,66 @@ pub fn populate_level_from_dungeon(world: &mut World, _resources: &mut Resources
                     },
                     ecs_item,
                 ));
+            }
+
+            // --- Spawn Boss (if this is a boss level) ---
+            if let Some(boss_room) = &lvl.boss_room {
+                let (bx, by) = boss_room.arena_center;
+                let b_type = boss_room.boss.boss_type.clone();
+
+                let boss_color = b_type.color();
+                let ecs_boss_color = crate::ecs::Color::Rgb(boss_color.0, boss_color.1, boss_color.2);
+
+                let boss_entity = world.spawn((
+                    Position::new(bx, by, z_level),
+                    Actor {
+                        name: format!("[BOSS] {}", b_type.name()),
+                        faction: Faction::Enemy,
+                    },
+                    Renderable {
+                        symbol: b_type.symbol(),
+                        fg_color: ecs_boss_color,
+                        bg_color: Some(Color::Black),
+                        order: 10,
+                    },
+                    Stats {
+                        hp: boss_room.boss.hp,
+                        max_hp: boss_room.boss.max_hp,
+                        attack: boss_room.boss.attack,
+                        defense: boss_room.boss.defense,
+                        accuracy: 80,
+                        evasion: 15,
+                        level: 10,
+                        experience: boss_room.boss.exp_value,
+                        class: None,
+                    },
+                    Energy {
+                        current: 150,
+                        max: 150,
+                        regeneration_rate: 15,
+                    },
+                    Viewshed {
+                        range: 12,
+                        visible_tiles: Vec::new(),
+                        memory: Vec::new(),
+                        dirty: true,
+                        algorithm: crate::ecs::FovAlgorithm::default(),
+                    },
+                    AI {
+                        ai_type: AIType::Aggressive,
+                        target: None,
+                        state: AIState::Idle,
+                    },
+                    BossComponent {
+                        boss_type: b_type,
+                        current_phase: combat::boss::BossPhase::Phase1,
+                        shield: boss_room.boss.shield,
+                    },
+                ));
+
+                // Publish boss encounter event
+                // (event bus not available in this function scope)
+                let _ = boss_entity;
             }
         }
         return;

@@ -1,9 +1,8 @@
 //!    物品栏渲染器
 //!
-//!    渲染玩家的背包和装备栏。
-//!    直接从    ECS    World    读取    Player    的    Inventory    组件。
+//!    渲染玩家的背包和装备栏，显示物品描述和真实装备数据。
 
-use crate::ecs::{ECSItem, Inventory, ItemSlot, Player};
+use crate::ecs::{ECSItem, EquippedItems, Inventory, ItemSlot, Player};
 use hecs::World;
 use ratatui::{
     Frame,
@@ -44,11 +43,12 @@ impl InventoryRenderer {
 
         let inventory = inventory.unwrap();
 
-        // 主布局：上部内容 + 底部提示
+        // 主布局：上部内容 + 底部描述 + 底部提示
         let main_chunks = Layout::default()
             .direction(ratatui::layout::Direction::Vertical)
             .constraints([
-                Constraint::Min(10),   // 主内容区
+                Constraint::Min(10),   // 主内容区（装备栏 + 物品栏）
+                Constraint::Length(4), // 物品描述区
                 Constraint::Length(3), // 底部提示
             ])
             .split(area);
@@ -62,7 +62,7 @@ impl InventoryRenderer {
             ])
             .split(main_chunks[0]);
 
-        // 渲染装备栏
+        // 渲染装备栏（读取真实装备数据）
         self.render_equipment(frame, main_layout[0], world);
 
         // 渲染物品栏
@@ -97,21 +97,95 @@ impl InventoryRenderer {
             self.render_items(frame, inner_area, &inventory.items);
         }
 
-        // 渲染底部提示
-        let hints = Paragraph::new("按数字键使用物品 | D: 丢弃 | E: 装备 | Esc: 关闭")
-            .style(Style::default().fg(Color::Gray))
+        // 渲染选中物品的描述（默认显示第一个物品的描述）
+        let desc_text = if let Some(first_slot) = inventory.items.first() {
+            if let Some(item) = &first_slot.item {
+                self.get_item_description(item)
+            } else {
+                String::new()
+            }
+        } else {
+            String::new()
+        };
+
+        let desc_paragraph = Paragraph::new(desc_text)
+            .style(Style::default().fg(Color::Rgb(180, 180, 180)))
             .block(
                 Block::default()
+                    .title("📖 物品描述")
+                    .title_alignment(Alignment::Left)
                     .borders(Borders::ALL)
                     .border_type(ratatui::widgets::BorderType::Rounded)
-                    .border_style(Style::default().fg(Color::Rgb(80, 80, 80))),
-            )
-            .alignment(Alignment::Center);
-        frame.render_widget(hints, main_chunks[1]);
+                    .border_style(Style::default().fg(Color::Rgb(100, 100, 100))),
+            );
+        frame.render_widget(desc_paragraph, main_chunks[1]);
+
+        // 渲染底部提示
+        let hints = Paragraph::new(
+            "数字键: 使用 | E: 装备 | Shift+E: 卸下 | Del: 丢弃 | Esc: 关闭",
+        )
+        .style(Style::default().fg(Color::Gray))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(ratatui::widgets::BorderType::Rounded)
+                .border_style(Style::default().fg(Color::Rgb(80, 80, 80))),
+        )
+        .alignment(Alignment::Center);
+        frame.render_widget(hints, main_chunks[2]);
     }
 
-    ///    渲染装备栏
-    fn render_equipment(&self, frame: &mut Frame, area: Rect, _world: &World) {
+    ///    获取物品描述文字
+    fn get_item_description(&self, item: &ECSItem) -> String {
+        // 尝试从 items::Item 获取完整描述
+        if let Ok(ref_item) = item.to_items_item() {
+            if !ref_item.description.is_empty() {
+                return format!("{} — {}", item.name, ref_item.description);
+            }
+        }
+
+        // 根据类型生成默认描述
+        use crate::ecs::ItemType;
+        match &item.item_type {
+            ItemType::Weapon { damage } => {
+                format!("⚔️ 攻击力: +{}", damage)
+            }
+            ItemType::Armor { defense } => {
+                format!("🛡️ 防御力: +{}", defense)
+            }
+            ItemType::Consumable { effect } => {
+                use crate::ecs::ConsumableEffect;
+                match effect {
+                    ConsumableEffect::Healing { amount } => {
+                        format!("💚 恢复 {} 点生命值", amount)
+                    }
+                    ConsumableEffect::Damage { amount } => {
+                        format!("💥 造成 {} 点伤害", amount)
+                    }
+                    ConsumableEffect::Buff { stat, value, duration } => {
+                        let stat_name = match stat {
+                            crate::ecs::StatType::Hp => "HP上限",
+                            crate::ecs::StatType::Attack => "攻击",
+                            crate::ecs::StatType::Defense => "防御",
+                            crate::ecs::StatType::Accuracy => "命中",
+                            crate::ecs::StatType::Evasion => "闪避",
+                        };
+                        format!("✨ {}点{}，持续{}回合", value, stat_name, duration)
+                    }
+                    ConsumableEffect::Teleport => "🌀 随机传送".to_string(),
+                    ConsumableEffect::Identify => "🔍 鉴定物品".to_string(),
+                }
+            }
+            ItemType::Throwable { damage, range } => {
+                format!("🎯 伤害: {}-{} (射程:{})", damage.0, damage.1, range)
+            }
+            ItemType::Key => "🔑 用于开启锁定的门或宝箱".to_string(),
+            ItemType::Quest => "📜 任务物品".to_string(),
+        }
+    }
+
+    ///    渲染装备栏（读取真实 EquippedItems 数据）
+    fn render_equipment(&self, frame: &mut Frame, area: Rect, world: &World) {
         let block = Block::default()
             .title("═══ ⚔️ 装备 ═══")
             .title_alignment(Alignment::Center)
@@ -122,25 +196,48 @@ impl InventoryRenderer {
         let inner_area = block.inner(area);
         frame.render_widget(block, area);
 
-        // 装备槽位
-        let equipment_slots = vec![
-            ("武器", "⚔️", Color::Red),
-            ("头盔", "🪖", Color::LightBlue),
-            ("护甲", "🛡️", Color::Blue),
-            ("戒指", "💍", Color::Magenta),
-            ("饰品", "📿", Color::Cyan),
-        ];
-
-        let equipment_lines: Vec<Line> = equipment_slots
+        // 读取真实装备数据（克隆避免借用问题）
+        let equipped_data: Option<(Option<ECSItem>, Option<ECSItem>)> = world
+            .query::<(&EquippedItems, &Player)>()
             .iter()
-            .map(|(slot, icon, color)| {
-                Line::from(vec![
-                    Span::styled(format!("{} ", icon), Style::default().fg(*color)),
-                    Span::styled(format!("{}: ", slot), Style::default().fg(Color::Gray)),
-                    Span::styled("空", Style::default().fg(Color::DarkGray)),
-                ])
-            })
-            .collect();
+            .next()
+            .map(|(_, (eq, _))| (eq.weapon.clone(), eq.armor.clone()));
+
+        let (weapon_name, has_weapon) = equipped_data
+            .as_ref()
+            .and_then(|(w, _)| w.as_ref())
+            .map(|w| (w.name.as_str(), true))
+            .unwrap_or(("空", false));
+        let weapon_color = if has_weapon { Color::Yellow } else { Color::DarkGray };
+
+        let (armor_name, has_armor) = equipped_data
+            .as_ref()
+            .and_then(|(_, a)| a.as_ref())
+            .map(|a| (a.name.as_str(), true))
+            .unwrap_or(("空", false));
+        let armor_color = if has_armor { Color::Yellow } else { Color::DarkGray };
+
+        let equipment_lines = vec![
+            Line::from(vec![
+                Span::styled("⚔️ ", Style::default().fg(Color::Red)),
+                Span::styled("武器: ", Style::default().fg(Color::Gray)),
+                Span::styled(weapon_name, Style::default().fg(weapon_color)),
+            ]),
+            Line::from(vec![
+                Span::styled("🛡️ ", Style::default().fg(Color::Blue)),
+                Span::styled("护甲: ", Style::default().fg(Color::Gray)),
+                Span::styled(armor_name, Style::default().fg(armor_color)),
+            ]),
+            Line::from(""),
+            Line::from(Span::styled(
+                "💍 戒指: 空",
+                Style::default().fg(Color::DarkGray),
+            )),
+            Line::from(Span::styled(
+                "📿 饰品: 空",
+                Style::default().fg(Color::DarkGray),
+            )),
+        ];
 
         let equipment_paragraph = Paragraph::new(equipment_lines);
         frame.render_widget(equipment_paragraph, inner_area);

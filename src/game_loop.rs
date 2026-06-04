@@ -85,6 +85,7 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
             Box::new(MovementSystem),
             Box::new(FOVSystem),
             Box::new(CombatSystem),
+            Box::new(AftermathSystem),
             Box::new(EffectSystem::new()),
             Box::new(InventorySystem),
             Box::new(HungerSystem),
@@ -632,6 +633,19 @@ impl<R: Renderer, I: InputSource<Event = crate::input::InputEvent>, C: Clock> Ga
                         }
                     }
                 }
+                "AftermathSystem" => {
+                    match AftermathSystem::run_with_events(&mut self.ecs_world) {
+                        SystemResult::Continue => continue,
+                        SystemResult::Stop => {
+                            self.is_running = false;
+                            return Ok(());
+                        }
+                        SystemResult::Error(msg) => {
+                            eprintln!("System error: {}", msg);
+                            return Err(anyhow::anyhow!(msg));
+                        }
+                    }
+                }
                 _ => {
                     // 运行标准系统
                     match system.run(&mut self.ecs_world.world, &mut self.ecs_world.resources) {
@@ -928,11 +942,11 @@ mod tests {
             .map(|s| s.name())
             .collect();
 
-        // 验证因果顺序：移动 → FOV → 战斗 → 效果
+        // 验证因果顺序：移动 → FOV → 战斗 → 战果处理 → 效果 → 背包 → 饥饿 → 地牢
         assert_eq!(action_systems[0], "MovementSystem");
         assert_eq!(action_systems[1], "FOVSystem");
         assert_eq!(action_systems[2], "CombatSystem");
-        assert_eq!(action_systems[3], "EffectSystem");
+        assert_eq!(action_systems[3], "AftermathSystem");
     }
 
     #[test]

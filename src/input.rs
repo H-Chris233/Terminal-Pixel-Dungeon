@@ -262,6 +262,10 @@ fn match_key_for_menu_context(key: CrosstermKeyEvent) -> Option<PlayerAction> {
         CrosstermKeyCode::Char('c') => Some(PlayerAction::OpenCharacterInfo),
         CrosstermKeyCode::Char('q') => Some(PlayerAction::Quit),
 
+        // 装备/卸下装备
+        CrosstermKeyCode::Char('e') => Some(PlayerAction::EquipItem(0)),
+        CrosstermKeyCode::Char('E') => Some(PlayerAction::UnequipItem(0)),
+
         _ => None,
     }
 }
@@ -334,8 +338,12 @@ fn match_key_for_game_context(key: CrosstermKeyEvent) -> Option<PlayerAction> {
         (CrosstermKeyCode::Char('8'), _) => Some(PlayerAction::UseItem(7)),
         (CrosstermKeyCode::Char('9'), _) => Some(PlayerAction::UseItem(8)),
 
-        // Drop item - 现在使用 Delete 键而不是 'd' 键
+        // Drop item
         (CrosstermKeyCode::Delete, _) => Some(PlayerAction::DropItem(0)), // Default to first item
+
+        // Equip / Unequip item
+        (CrosstermKeyCode::Char('e'), _) => Some(PlayerAction::EquipItem(0)),
+        (CrosstermKeyCode::Char('E'), _) => Some(PlayerAction::UnequipItem(0)),
 
         // 游戏中的快捷键
         (CrosstermKeyCode::Char('i'), _) => Some(PlayerAction::OpenInventory),
